@@ -122,7 +122,7 @@ export async function updateTenantStatus(id: string, status: string) {
 
     const { data, error } = await supabase
       .from('tenants')
-      .update({ status: status.toLowerCase() })
+      .update({ status: status.toUpperCase() })
       .eq('id', id)
       .select();
 
