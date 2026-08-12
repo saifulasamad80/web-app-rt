@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { submitMultiTenantsStrict, getOwnerPropertiesAndTenants } from '../../../src/actions/checkin-tenant';
+import { submitMultiTenantsStrict } from '../../../src/actions/checkin-tenant';
 
 interface OccupantInput {
   name: string;
@@ -16,7 +16,6 @@ export default function CheckinPage() {
   const slug = (params?.slug as string) || 'kos-melati-1';
 
   const [propertyType, setPropertyType] = useState<'kos' | 'kontrakan'>('kos');
-  const [propertyName, setPropertyName] = useState('');
   const [phone, setPhone] = useState('');
   const [entryDate, setEntryDate] = useState('');
   const [addressKtp, setAddressKtp] = useState('');
@@ -28,11 +27,10 @@ export default function CheckinPage() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const [occupants, setOccupants] = useState<OccupantInput[]>([
-    { name: '', birth_date: '', relation: 'Kepala Keluarga / Penanggung Jawab', ktp_file: null }
+    { name: '', birth_date: '', relation: 'Penanggung Jawab', ktp_file: null }
   ]);
 
   useEffect(() => {
-    // Deteksi tipe properti dari slug
     if (slug.toLowerCase().includes('kontrakan')) {
       setPropertyType('kontrakan');
     } else {
@@ -53,7 +51,7 @@ export default function CheckinPage() {
   const handleAddOccupant = () => {
     setOccupants([
       ...occupants,
-      { name: '', birth_date: '', relation: 'Anggota Penghuni', ktp_file: null }
+      { name: '', birth_date: '', relation: 'Istri', ktp_file: null }
     ]);
   };
 
@@ -77,11 +75,10 @@ export default function CheckinPage() {
       return;
     }
 
-    // Validasi Wajib KTP untuk Usia >= 17 Tahun (TANPA SUSULAN)
     for (let i = 0; i < occupants.length; i++) {
       const age = calculateAge(occupants[i].birth_date);
       if (age >= 17 && !occupants[i].ktp_file) {
-        setErrorMsg(`Penghuni ke-${i + 1} (${occupants[i].name || 'Tanpa Nama'}) berusia ${age} tahun (≥ 17 thn) WAJIB mengunggah foto KTP saat ini. Tidak menerima susulan.`);
+        setErrorMsg(`Penghuni ke-${i + 1} (${occupants[i].name || 'Tanpa Nama'}) berusia ${age} tahun (≥ 17 thn) WAJIB mengunggah foto KTP. Tidak menerima susulan.`);
         return;
       }
     }
@@ -160,7 +157,6 @@ export default function CheckinPage() {
                 />
               </div>
 
-              {/* DYNAMIC FIELD PER PROPERTI TYPE */}
               {propertyType === 'kos' ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
@@ -224,7 +220,7 @@ export default function CheckinPage() {
               </div>
             </div>
 
-            {/* SECTION 2: MULTI PENGHUNI + MANDATORY KTP */}
+            {/* SECTION 2: MULTI PENGHUNI */}
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <h2 className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
@@ -247,7 +243,7 @@ export default function CheckinPage() {
                   <div key={idx} className="p-4 border rounded-xl bg-slate-50/50 space-y-3 relative">
                     <div className="flex justify-between items-center border-b pb-2">
                       <span className="text-xs font-bold text-slate-800">
-                        Penghuni #{idx + 1} {idx === 0 && '(Penanggung Jawab Utama)'}
+                        Penghuni #{idx + 1} {idx === 0 ? '(Penanggung Jawab Utama)' : ''}
                       </span>
                       {occupants.length > 1 && (
                         <button
@@ -260,7 +256,7 @@ export default function CheckinPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className={`grid grid-cols-1 ${idx === 0 ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-3`}>
                       <div>
                         <label className="block text-[11px] font-semibold mb-1">Nama Lengkap *</label>
                         <input
@@ -273,32 +269,22 @@ export default function CheckinPage() {
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-[11px] font-semibold mb-1">Status / Hubungan *</label>
-                        <select
-                          value={occ.relation || (idx === 0 ? 'Penyewa Utama / Kepala Keluarga' : 'Anggota Keluarga')}
-                          onChange={(e) => handleOccupantChange(idx, 'relation', e.target.value)}
-                          className="w-full text-xs p-2 border rounded-md bg-white font-semibold text-gray-800"
-                        >
-                          {idx === 0 ? (
-                            <>
-                              <option value="Penyewa Utama / Kepala Keluarga">Penyewa Utama / Kepala Keluarga</option>
-                              <option value="Suami">Suami</option>
-                              <option value="Istri">Istri</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="Istri">Istri</option>
-                              <option value="Anak">Anak</option>
-                              <option value="Suami">Suami</option>
-                              <option value="Orang Tua">Orang Tua</option>
-                              <option value="Saudara Kandung">Saudara Kandung</option>
-                              <option value="Teman / Rekan Kos">Teman / Rekan Kos</option>
-                              <option value="Lainnya">Lainnya</option>
-                            </>
-                          )}
-                        </select>
-                      </div>
+                      {/* DROPDOWN HANYA UNTUK ANGGOTA TAMBAHAN (PENGHUNI #2 DST) */}
+                      {idx > 0 && (
+                        <div>
+                          <label className="block text-[11px] font-semibold mb-1">Status Hubungan *</label>
+                          <select
+                            value={occ.relation}
+                            onChange={(e) => handleOccupantChange(idx, 'relation', e.target.value)}
+                            className="w-full text-xs p-2 border rounded-md bg-white font-semibold text-gray-800"
+                          >
+                            <option value="Suami">Suami</option>
+                            <option value="Istri">Istri</option>
+                            <option value="Anak">Anak</option>
+                            <option value="Saudara">Saudara</option>
+                          </select>
+                        </div>
+                      )}
 
                       <div>
                         <label className="block text-[11px] font-semibold mb-1">Tanggal Lahir *</label>
@@ -312,13 +298,12 @@ export default function CheckinPage() {
                       </div>
                     </div>
 
-                    {/* ATURAN STRICT KTP */}
                     {occ.birth_date && (
                       <div className="pt-2 border-t">
                         {isAdult ? (
                           <div className="space-y-1.5">
                             <span className="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded block w-max">
-                              Usia {age} Thn (≥ 17 Thn): WAJIB UNGGAH FOTO KTP (TIDAK BISA SUSULAN)
+                              Usia {age} Thn (≥ 17 Thn): WAJIB UNGGAH FOTO KTP
                             </span>
                             <input
                               type="file"
@@ -340,7 +325,6 @@ export default function CheckinPage() {
               })}
             </div>
 
-            {/* CHECKBOX PDP */}
             <div className="flex items-start space-x-2 pt-2">
               <input
                 type="checkbox"
