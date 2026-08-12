@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getOwnerPropertiesAndTenants, updateTenantStatus } from '../../src/actions/checkin-tenant';
+import { getOwnerPropertiesAndTenants, updateTenantStatus, getTenantKtpUrl } from '../../src/actions/checkin-tenant';
 
 interface Tenant {
   id: string;
@@ -10,6 +10,8 @@ interface Tenant {
   address_ktp: string;
   entry_date: string;
   status: string;
+  ktp_url?: string;
+  ktp_path?: string;
   properties?: { name: string; type: string; slug: string };
 }
 
@@ -27,6 +29,11 @@ export default function OwnerDashboard() {
   const [loading, setLoading] = useState(true);
   const [copyMsg, setCopyMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'CHECKED_OUT'>('ALL');
+
+  // State Modal KTP
+  const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
+  const [selectedTenantName, setSelectedTenantName] = useState<string>('');
+  const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -61,7 +68,27 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Helper Sanitasi Nomor Telepon ke Format WhatsApp (628xx)
+  const handleViewKtp = async (tenant: Tenant) => {
+    const targetPath = tenant.ktp_url || tenant.ktp_path || tenant.address_ktp;
+    setSelectedTenantName(tenant.name);
+    setLoadingKtp(true);
+
+    if (!targetPath) {
+      alert('Berkas KTP belum diunggah oleh penyewa ini.');
+      setLoadingKtp(false);
+      return;
+    }
+
+    const res = await getTenantKtpUrl(targetPath);
+    setLoadingKtp(false);
+
+    if (res && res.success && res.url) {
+      setSelectedKtpUrl(res.url);
+    } else {
+      alert('Gagal memuat KTP: ' + (res?.error || 'Tautan privat tidak dapat diakses'));
+    }
+  };
+
   const formatPhoneToWA = (phone: string) => {
     let cleaned = (phone || '').replace(/\D/g, '');
     if (cleaned.startsWith('0')) {
@@ -70,14 +97,12 @@ export default function OwnerDashboard() {
     return cleaned;
   };
 
-  // Filter Data Berdasarkan Tab
   const filteredTenants = tenants.filter((t) => {
     const st = (t.status || '').toUpperCase();
     if (activeTab === 'ALL') return true;
     return st === activeTab;
   });
 
-  // Hitung Jumlah Statistik
   const countAll = tenants.length;
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE').length;
@@ -159,7 +184,7 @@ export default function OwnerDashboard() {
           )}
         </div>
 
-        {/* DAFTAR PENGHUNI + WA DIRECT */}
+        {/* DAFTAR PENGHUNI */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <h2 className="text-lg font-bold">Daftar Penghuni / Penyewa</h2>
@@ -219,6 +244,7 @@ export default function OwnerDashboard() {
                     <th className="p-2.5">Nama Penghuni</th>
                     <th className="p-2.5">Properti</th>
                     <th className="p-2.5">WhatsApp Direct</th>
+                    <th className="p-2.5">Dokumen KTP</th>
                     <th className="p-2.5">Tanggal Masuk</th>
                     <th className="p-2.5">Status</th>
                     <th className="p-2.5 text-right">Aksi</th>
@@ -242,11 +268,18 @@ export default function OwnerDashboard() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] rounded font-semibold hover:bg-emerald-700 transition-colors inline-flex items-center space-x-1 shadow-sm"
-                              title="Chat WhatsApp Tanpa Simpan Kontak"
                             >
                               <span>💬 Chat WA</span>
                             </a>
                           </div>
+                        </td>
+                        <td className="p-2.5 text-xs">
+                          <button
+                            onClick={() => handleViewKtp(t)}
+                            className="px-2.5 py-1 bg-slate-800 text-white text-[10px] rounded font-semibold hover:bg-slate-900 transition-colors inline-flex items-center space-x-1"
+                          >
+                            <span>🪪 Lihat KTP</span>
+                          </button>
                         </td>
                         <td className="p-2.5 text-xs">{t.entry_date}</td>
                         <td className="p-2.5">
@@ -284,6 +317,54 @@ export default function OwnerDashboard() {
         </div>
 
       </div>
+
+      {/* MODAL POPUP SECURE KTP VIEWER */}
+      {(selectedKtpUrl || loadingKtp) && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <span>🛡️ Dokumen KTP PDP Compliant:</span>
+                <span className="text-emerald-400 font-normal">{selectedTenantName}</span>
+              </h3>
+              <button
+                onClick={() => setSelectedKtpUrl(null)}
+                className="text-gray-400 hover:text-white font-bold text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 flex flex-col items-center justify-center min-h-[250px] bg-slate-50">
+              {loadingKtp ? (
+                <div className="text-center space-y-2">
+                  <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs text-gray-500 font-semibold">Membuat Signed URL Aman (60 Detik)...</p>
+                </div>
+              ) : selectedKtpUrl ? (
+                <div className="space-y-3 w-full text-center">
+                  <img
+                    src={selectedKtpUrl}
+                    alt="Dokumen KTP Penghuni"
+                    className="max-h-[350px] w-auto mx-auto rounded-lg border shadow-sm object-contain"
+                  />
+                  <p className="text-[10px] text-amber-700 bg-amber-50 p-2 rounded border border-amber-200 font-semibold">
+                    🔒 Tautan ini bersifat privat dan akan kedaluwarsa secara otomatis dalam 60 detik demi mematuhi UU PDP.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <div className="p-3 bg-gray-100 text-right">
+              <button
+                onClick={() => setSelectedKtpUrl(null)}
+                className="px-4 py-1.5 bg-gray-700 text-white text-xs font-semibold rounded hover:bg-gray-800"
+              >
+                Tutup Dokumen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

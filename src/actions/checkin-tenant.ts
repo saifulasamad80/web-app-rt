@@ -143,3 +143,30 @@ export async function updateTenantStatus(id: string, status: string) {
     return { success: false, error: 'Terjadi kesalahan pada Server Action.' };
   }
 }
+
+export async function getTenantKtpUrl(ktpPath: string) {
+  try {
+    if (!ktpPath) {
+      return { success: false, error: 'Path berkas KTP tidak ditemukan.' };
+    }
+
+    if (ktpPath.startsWith('http://') || ktpPath.startsWith('https://')) {
+      return { success: true, url: ktpPath };
+    }
+
+    // Buat Signed URL berdurasi 60 detik dari private storage bucket
+    const bucketName = 'ktp-documents';
+    const { data, error } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(ktpPath, 60);
+
+    if (error) {
+      console.error('Storage Signed URL Error:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, url: data.signedUrl };
+  } catch (err: any) {
+    return { success: false, error: 'Gagal membuat tautan aman KTP.' };
+  }
+}
