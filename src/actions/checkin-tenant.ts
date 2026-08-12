@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
@@ -116,6 +117,8 @@ export async function updateTenantStatus(tenantId: string, status: 'active' | 'c
       .eq('id', tenantId);
 
     if (error) throw new Error(error.message);
+    revalidatePath('/');
+    revalidatePath('/owner');
     return { success: true };
   } catch (err: unknown) {
     return { error: err instanceof Error ? err.message : 'Gagal memperbarui status' };
