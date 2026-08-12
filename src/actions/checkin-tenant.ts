@@ -173,3 +173,18 @@ export async function getTenantKtpUrl(ktpPath: string) {
     return { success: false, error: 'Gagal menghubungkan ke Storage.' };
   }
 }
+
+
+export async function deleteTenant(id: string) {
+  try {
+    if (!id) return { success: false, error: 'ID Penghuni tidak valid.' };
+    const { error } = await supabase.from('tenants').delete().eq('id', id);
+    if (error) {
+      console.error('Delete Error:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: 'Gagal menghapus data dari server.' };
+  }
+}

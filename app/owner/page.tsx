@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getOwnerPropertiesAndTenants, updateTenantStatus, getTenantKtpUrl } from '../../src/actions/checkin-tenant';
+import { getOwnerPropertiesAndTenants, updateTenantStatus, getTenantKtpUrl, deleteTenant } from '../../src/actions/checkin-tenant';
 
 interface Tenant {
   id: string;
@@ -69,8 +69,20 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (confirm(`Apakah Anda yakin ingin menghapus data penghuni "${name}"?`)) {
+      setTenants((prev) => prev.filter((t) => t.id !== id));
+      const res = await deleteTenant(id);
+      if (res && !res.success) {
+        alert('Gagal menghapus: ' + res.error);
+        await fetchData();
+      } else {
+        await fetchData();
+      }
+    }
+  };
+
   const handleViewKtp = async (tenant: Tenant) => {
-    // Utamakan ktp_url / ktp_path, hindari alamat KTP teks biasa
     const targetPath = tenant.ktp_url || tenant.ktp_path;
     setSelectedTenantName(tenant.name);
     setLoadingKtp(true);
@@ -114,7 +126,7 @@ export default function OwnerDashboard() {
 
   return (
     <main className="min-h-screen p-8 bg-gray-50 text-gray-900">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
 
         {/* HEADER */}
         <div className="bg-emerald-900 text-white p-6 rounded-xl shadow flex justify-between items-center">
@@ -310,6 +322,13 @@ export default function OwnerDashboard() {
                               Check-Out
                             </button>
                           )}
+                          <button
+                            onClick={() => handleDelete(t.id, t.name)}
+                            className="px-2 py-1 bg-gray-200 text-gray-700 text-[10px] rounded font-semibold hover:bg-red-100 hover:text-red-700 transition-colors"
+                            title="Hapus data duplikat atau salah"
+                          >
+                            🗑️ Hapus
+                          </button>
                         </td>
                       </tr>
                     );
