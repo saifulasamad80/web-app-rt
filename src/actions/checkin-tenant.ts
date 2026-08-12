@@ -110,20 +110,30 @@ export async function getOwnerPropertiesAndTenants() {
 
 export async function updateTenantStatus(id: string, status: string) {
   try {
-    const { error } = await supabase
+    if (!id) {
+      return { success: false, error: 'ID Penghuni tidak ditemukan (undefined)!' };
+    }
+
+    const { data, error } = await supabase
       .from('tenants')
       .update({ status: status.toLowerCase() })
-      .eq('id', id);
+      .eq('id', id)
+      .select();
 
     if (error) {
-      console.error('Update Error:', error);
+      console.error('Supabase Update Error:', error);
       return { success: false, error: error.message };
     }
 
-    revalidatePath('/owner');
-    revalidatePath('/');
-    return { success: true };
+    if (!data || data.length === 0) {
+      return { 
+        success: false, 
+        error: `Gagal memperbarui database: 0 baris terpengaruh. (ID: ${id} tidak ditemukan atau diblokir RLS)` 
+      };
+    }
+
+    return { success: true, data };
   } catch (err) {
-    return { success: false, error: 'Gagal menghubungkan ke server' };
+    return { success: false, error: 'Terjadi kesalahan pada Server Action.' };
   }
 }
