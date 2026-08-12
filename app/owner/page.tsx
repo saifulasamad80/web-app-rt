@@ -61,7 +61,16 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Filter Data Berdasarkan Tab Aktif
+  // Helper Sanitasi Nomor Telepon ke Format WhatsApp (628xx)
+  const formatPhoneToWA = (phone: string) => {
+    let cleaned = (phone || '').replace(/\D/g, '');
+    if (cleaned.startsWith('0')) {
+      cleaned = '62' + cleaned.slice(1);
+    }
+    return cleaned;
+  };
+
+  // Filter Data Berdasarkan Tab
   const filteredTenants = tenants.filter((t) => {
     const st = (t.status || '').toUpperCase();
     if (activeTab === 'ALL') return true;
@@ -94,7 +103,7 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        {/* STATS SUMMARY CARDS */}
+        {/* STATS CARDS */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
             <span className="text-xs text-gray-500 font-semibold uppercase">Total Terdaftar</span>
@@ -114,7 +123,7 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        {/* SECTION 1: PROPERTI */}
+        {/* PROPERTI */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h2 className="text-lg font-bold mb-3">Properti Milik Anda</h2>
           {properties.length === 0 ? (
@@ -150,12 +159,12 @@ export default function OwnerDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: DAFTAR PENGHUNI + TAB FILTER */}
+        {/* DAFTAR PENGHUNI + WA DIRECT */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
             <h2 className="text-lg font-bold">Daftar Penghuni / Penyewa</h2>
 
-            {/* TAB FILTER BUTTONS */}
+            {/* TAB FILTER */}
             <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg text-xs font-semibold">
               <button
                 onClick={() => setActiveTab('ALL')}
@@ -209,7 +218,7 @@ export default function OwnerDashboard() {
                   <tr className="bg-gray-100 border-b">
                     <th className="p-2.5">Nama Penghuni</th>
                     <th className="p-2.5">Properti</th>
-                    <th className="p-2.5">WhatsApp</th>
+                    <th className="p-2.5">WhatsApp Direct</th>
                     <th className="p-2.5">Tanggal Masuk</th>
                     <th className="p-2.5">Status</th>
                     <th className="p-2.5 text-right">Aksi</th>
@@ -218,11 +227,27 @@ export default function OwnerDashboard() {
                 <tbody className="divide-y divide-gray-200">
                   {filteredTenants.map((t) => {
                     const st = (t.status || '').toUpperCase();
+                    const waNumber = formatPhoneToWA(t.phone);
+                    const waMessage = encodeURIComponent(`Halo Sdr/i ${t.name}, salam dari Pengurus RT / Pemilik Kos. Mengenai pendataan hunian Anda:`);
+
                     return (
                       <tr key={t.id} className="hover:bg-gray-50">
                         <td className="p-2.5 font-medium">{t.name}</td>
                         <td className="p-2.5 text-xs text-gray-600">{t.properties?.name || 'Kos Melati 1'}</td>
-                        <td className="p-2.5 text-xs font-mono">{t.phone}</td>
+                        <td className="p-2.5 text-xs font-mono">
+                          <div className="flex items-center space-x-2">
+                            <span>{t.phone}</span>
+                            <a
+                              href={`https://wa.me/${waNumber}?text=${waMessage}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] rounded font-semibold hover:bg-emerald-700 transition-colors inline-flex items-center space-x-1 shadow-sm"
+                              title="Chat WhatsApp Tanpa Simpan Kontak"
+                            >
+                              <span>💬 Chat WA</span>
+                            </a>
+                          </div>
+                        </td>
                         <td className="p-2.5 text-xs">{t.entry_date}</td>
                         <td className="p-2.5">
                           <span className={'text-[10px] font-bold px-2 py-0.5 rounded uppercase ' + 
