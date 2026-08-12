@@ -48,20 +48,15 @@ export default function OwnerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
-    try {
-      if (!id) {
-        alert('Eror: ID penghuni tidak ditemukan!');
-        return;
-      }
-      const res = await updateTenantStatus(id, newStatus);
-      if (res && !res.success) {
-        alert('Gagal dari Server: ' + (res.error || 'Terjadi kesalahan pada database'));
-      } else {
-        alert('Berhasil! Status telah diubah menjadi: ' + newStatus);
-      }
-    } catch (err: any) {
-      alert('Eror Client JS: ' + (err?.message || err));
-    } finally {
+    // Perbarui UI secara instan (Optimistic Update)
+    setTenants((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status: newStatus.toUpperCase() } : t))
+    );
+
+    const res = await updateTenantStatus(id, newStatus);
+    if (res && !res.success) {
+      await fetchData(); // Rollback data jika backend gagal
+    } else {
       await fetchData();
     }
   };
