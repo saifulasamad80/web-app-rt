@@ -48,8 +48,19 @@ export default function OwnerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
-    await updateTenantStatus(id, newStatus);
-    fetchData();
+    // 1. Perbarui tampilan layar secara instan (Optimistic Update)
+    setTenants((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t))
+    );
+
+    // 2. Kirim perubahan ke Supabase
+    const res = await updateTenantStatus(id, newStatus);
+    if (res && res.error) {
+      alert('Gagal memperbarui database: ' + res.error);
+      await fetchData(); // Kembalikan ke data asli jika database menolak
+    } else {
+      await fetchData(); // Sinkronkan data terbaru
+    }
   };
 
   return (
@@ -128,39 +139,42 @@ export default function OwnerDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {tenants.map((t) => (
-                    <tr key={t.id} className="hover:bg-gray-50">
-                      <td className="p-2.5 font-medium">{t.name}</td>
-                      <td className="p-2.5 text-xs text-gray-600">{t.properties?.name || 'Kos Melati 1'}</td>
-                      <td className="p-2.5 text-xs font-mono">{t.phone}</td>
-                      <td className="p-2.5 text-xs">{t.entry_date}</td>
-                      <td className="p-2.5">
-                        <span className={'text-[10px] font-bold px-2 py-0.5 rounded uppercase ' + 
-                          (t.status === 'active' ? 'bg-green-100 text-green-800' : 
-                           t.status === 'checked_out' ? 'bg-gray-100 text-gray-800' : 'bg-amber-100 text-amber-800')}>
-                          {t.status}
-                        </span>
-                      </td>
-                      <td className="p-2.5 text-right space-x-1">
-                        {t.status !== 'active' && (
-                          <button
-                            onClick={() => handleStatusChange(t.id, 'active')}
-                            className="px-2 py-1 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700"
-                          >
-                            Set Active
-                          </button>
-                        )}
-                        {t.status !== 'checked_out' && (
-                          <button
-                            onClick={() => handleStatusChange(t.id, 'checked_out')}
-                            className="px-2 py-1 bg-red-600 text-white text-[10px] rounded font-semibold hover:bg-red-700"
-                          >
-                            Check-Out
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {tenants.map((t) => {
+                    const st = (t.status || '').toLowerCase();
+                    return (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-medium">{t.name}</td>
+                        <td className="p-2.5 text-xs text-gray-600">{t.properties?.name || 'Kos Melati 1'}</td>
+                        <td className="p-2.5 text-xs font-mono">{t.phone}</td>
+                        <td className="p-2.5 text-xs">{t.entry_date}</td>
+                        <td className="p-2.5">
+                          <span className={'text-[10px] font-bold px-2 py-0.5 rounded uppercase ' + 
+                            (st === 'active' ? 'bg-green-100 text-green-800' : 
+                             st === 'checked_out' ? 'bg-gray-100 text-gray-800' : 'bg-amber-100 text-amber-800')}>
+                            {st}
+                          </span>
+                        </td>
+                        <td className="p-2.5 text-right space-x-1">
+                          {st !== 'active' && (
+                            <button
+                              onClick={() => handleStatusChange(t.id, 'active')}
+                              className="px-2 py-1 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700"
+                            >
+                              Set Active
+                            </button>
+                          )}
+                          {st !== 'checked_out' && (
+                            <button
+                              onClick={() => handleStatusChange(t.id, 'checked_out')}
+                              className="px-2 py-1 bg-red-600 text-white text-[10px] rounded font-semibold hover:bg-red-700"
+                            >
+                              Check-Out
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
