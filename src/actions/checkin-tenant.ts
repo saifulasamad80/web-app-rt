@@ -188,3 +188,94 @@ export async function deleteTenant(id: string) {
     return { success: false, error: 'Gagal menghapus data dari server.' };
   }
 }
+
+
+export async function submitMultiTenantsStrict(formData: FormData) {
+  try {
+    const property_slug = formData.get('property_slug') as string;
+    const phone = formData.get('phone') as string;
+    const entry_date = formData.get('entry_date') as string;
+    const address_ktp = formData.get('address_ktp') as string;
+    const room_number = (formData.get('room_number') as string) || null;
+    const full_address = (formData.get('full_address') as string) || null;
+    const occupantsJson = formData.get('occupants') as string;
+
+    if (!property_slug || !phone || !occupantsJson) {
+      return { success: false, error: 'Data formulir tidak lengkap.' };
+    }
+
+    const occupants = JSON.parse(occupantsJson);
+    const household_id = 'UNIT-' + Date.now();
+
+    // Ambil data properti untuk cek tipe (kos / kontrakan)
+    const { data: propData } = await supabase
+      .from('properties')
+      .select('id, type')
+      .eq('slug', property_slug)
+      .single();
+
+    const property_id = propData?.id || null;
+
+    // VALIDASI KETAT BACKEND: Cek apakah ada usia >= 17 tahun tanpa file KTP
+    for (let i = 0; i < occupants.length; i++) {
+      const fileKey = `ktp_file_${i}`;
+      const file = formData.get(fileKey) as File | null;
+      const birthDate = new Date(occupants[i].birth_date);
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+
+      if (age >= 17 && (!file || file.size === 0)) {
+        return {
+          success: false,
+          error: `Pendaftaran DITOLAK: Penghuni ke-${i + 1} (${occupants[i].name}) berusia ${age} tahun (≥ 17 thn) WAJIB melampirkan KTP. Tidak ada opsi susulan.`
+        };
+      }
+    }
+
+    // Eksekusi Simpan Data
+    for (let i = 0; i < occupants.length; i++) {
+      const occ = occupants[i];
+      let ktp_url = '';
+
+      const fileKey = `ktp_file_${i}`;
+      const file = formData.get(fileKey) as File | null;
+
+      if (file && file.size > 0) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${household_id}_${i}_${Date.now()}.${fileExt}`;
+        
+        const { data: storageData, error: uploadErr } = await supabase.storage
+          .from('ktp-documents')
+          .upload(fileName, file);
+
+        if (!uploadErr && storageData) {
+          ktp_url = storageData.path;
+        }
+      }
+
+      const { error: insertErr } = await supabase.from('tenants').insert({
+        property_id,
+        name: occ.name,
+        phone: phone,
+        entry_date: entry_date,
+        birth_date: occ.birth_date,
+        address_ktp: address_ktp,
+        room_number: room_number,
+        full_address: full_address,
+        status: 'PENDING',
+        household_id: household_id,
+        is_head: i === 0,
+        relation: occ.relation || (i === 0 ? 'Kepala Keluarga / Penanggung Jawab' : 'Anggota'),
+        ktp_url: ktp_url || null
+      });
+
+      if (insertErr) console.error('Insert Error:', insertErr);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Gagal memproses pendaftaran.' };
+  }
+}
