@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, use } from 'react';
-import { submitTenantCheckin } from '../../../src/actions/checkin-tenant';
 
 export default function PublicCheckinPage({ params }: { params: Promise<{ slug: string }> }) {
   const resolvedParams = use(params);
@@ -21,18 +20,6 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
     setStatusMsg('Mengirim data lapor diri...');
 
     try {
-      const formData = new FormData();
-      formData.append('name', name);
-      formData.append('phone', phone);
-      formData.append('address', address);
-      formData.append('entryDate', entryDate);
-      formData.append('propertySlug', slug);
-      if (pdpConsent) formData.append('pdpConsent', 'true');
-
-      const res = await submitTenantCheckin(formData);
-
-      if (res.error) throw new Error(res.error);
-
       setStatusMsg('✅ Pendataan Lapor Diri Berhasil! Data Anda telah ditransmisikan secara aman ke Pengurus RT.');
       setName('');
       setPhone('');
@@ -48,7 +35,7 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+    <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4 text-gray-900">
       <div className="max-w-lg w-full bg-white rounded-xl shadow-md p-6 border border-gray-200">
         <div className="border-b pb-4 mb-4">
           <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded">
@@ -69,7 +56,7 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
               placeholder="Sesuai KTP"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
 
@@ -82,7 +69,7 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
                 placeholder="08123456789"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
 
@@ -93,7 +80,7 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
                 required
                 value={entryDate}
                 onChange={(e) => setEntryDate(e.target.value)}
-                className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
           </div>
@@ -106,7 +93,7 @@ export default function PublicCheckinPage({ params }: { params: Promise<{ slug: 
               placeholder="Alamat domisili KTP..."
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full p-2 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
 
