@@ -260,7 +260,7 @@ export default function CheckinPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       <div>
                         <label className="block text-[11px] font-semibold mb-1">Nama Lengkap *</label>
                         <input
@@ -271,6 +271,33 @@ export default function CheckinPage() {
                           onChange={(e) => handleOccupantChange(idx, 'name', e.target.value)}
                           className="w-full text-xs p-2 border rounded-md"
                         />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold mb-1">Status / Hubungan *</label>
+                        <select
+                          value={occ.relation || (idx === 0 ? 'Penyewa Utama / Kepala Keluarga' : 'Anggota Keluarga')}
+                          onChange={(e) => handleOccupantChange(idx, 'relation', e.target.value)}
+                          className="w-full text-xs p-2 border rounded-md bg-white font-semibold text-gray-800"
+                        >
+                          {idx === 0 ? (
+                            <>
+                              <option value="Penyewa Utama / Kepala Keluarga">Penyewa Utama / Kepala Keluarga</option>
+                              <option value="Suami">Suami</option>
+                              <option value="Istri">Istri</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="Istri">Istri</option>
+                              <option value="Anak">Anak</option>
+                              <option value="Suami">Suami</option>
+                              <option value="Orang Tua">Orang Tua</option>
+                              <option value="Saudara Kandung">Saudara Kandung</option>
+                              <option value="Teman / Rekan Kos">Teman / Rekan Kos</option>
+                              <option value="Lainnya">Lainnya</option>
+                            </>
+                          )}
+                        </select>
                       </div>
 
                       <div>

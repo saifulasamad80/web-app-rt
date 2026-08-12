@@ -10,6 +10,9 @@ interface Tenant {
   address_ktp: string;
   entry_date: string;
   status: string;
+  relation?: string;
+  room_number?: string;
+  full_address?: string;
   ktp_url?: string;
   ktp_path?: string;
   properties?: { name: string; type: string; slug: string };
@@ -274,7 +277,12 @@ export default function OwnerDashboard() {
 
                     return (
                       <tr key={t.id} className="hover:bg-gray-50">
-                        <td className="p-2.5 font-medium">{t.name}</td>
+                        <td className="p-2.5 font-medium">
+                          <div>{t.name}</div>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 inline-block mt-0.5">
+                            {t.relation || 'Penyewa Utama'}
+                          </span>
+                        </td>
                         <td className="p-2.5 text-xs text-gray-600">{t.properties?.name || 'Kos Melati 1'}</td>
                         <td className="p-2.5 text-xs font-mono">
                           <div className="flex items-center space-x-2">
