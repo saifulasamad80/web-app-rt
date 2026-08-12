@@ -183,7 +183,7 @@ export async function deleteTenant(id: string) {
       console.error('Delete Error:', error);
       return { success: false, error: error.message };
     }
-    return { success: true };
+    return { success: true, household_id: household_id, registered_at: new Date().toISOString() };
   } catch (err: any) {
     return { success: false, error: 'Gagal menghapus data dari server.' };
   }

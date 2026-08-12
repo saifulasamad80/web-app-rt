@@ -11,6 +11,15 @@ interface OccupantInput {
   ktp_file: File | null;
 }
 
+interface ReceiptData {
+  household_id: string;
+  registered_at: string;
+  phone: string;
+  entryDate: string;
+  locationInfo: string;
+  occupantsSummary: { name: string; relation: string; age: number }[];
+}
+
 export default function CheckinPage() {
   const params = useParams();
   const slug = (params?.slug as string) || 'kos-melati-1';
@@ -23,8 +32,9 @@ export default function CheckinPage() {
   const [fullAddress, setFullAddress] = useState('');
   const [agreedPdp, setAgreedPdp] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [successMsg, setSuccessMsg] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
 
   const [occupants, setOccupants] = useState<OccupantInput[]>([
     { name: '', birth_date: '', relation: 'Penanggung Jawab', ktp_file: null }
@@ -37,6 +47,57 @@ export default function CheckinPage() {
       setPropertyType('kos');
     }
   }, [slug]);
+
+  // Fungsi Kompresi Foto KTP (HTML5 Canvas)
+  const compressImage = (file: File): Promise<File> => {
+    return new Promise((resolve) => {
+      if (!file || !file.type.startsWith('image/')) return resolve(file);
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, ".jpg"), {
+                  type: 'image/jpeg',
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                resolve(file);
+              }
+            },
+            'image/jpeg',
+            0.7
+          );
+        };
+      };
+    });
+  };
 
   const calculateAge = (dobString: string): number => {
     if (!dobString) return 0;
@@ -75,42 +136,65 @@ export default function CheckinPage() {
       return;
     }
 
+    // Validasi Wajib KTP
     for (let i = 0; i < occupants.length; i++) {
       const age = calculateAge(occupants[i].birth_date);
       if (age >= 17 && !occupants[i].ktp_file) {
-        setErrorMsg(`Penghuni ke-${i + 1} (${occupants[i].name || 'Tanpa Nama'}) berusia ${age} tahun (≥ 17 thn) WAJIB mengunggah foto KTP. Tidak menerima susulan.`);
+        setErrorMsg(`Penghuni ke-${i + 1} (${occupants[i].name || 'Tanpa Nama'}) berusia ${age} thn (≥ 17 thn) WAJIB mengunggah KTP.`);
         return;
       }
     }
 
     setLoading(true);
+    setLoadingStatus('Mengompres foto KTP secara aman...');
 
-    const formData = new FormData();
-    formData.append('property_slug', slug);
-    formData.append('phone', phone);
-    formData.append('entry_date', entryDate);
-    formData.append('address_ktp', addressKtp);
-    formData.append('room_number', roomNumber);
-    formData.append('full_address', fullAddress);
-    formData.append('occupants', JSON.stringify(occupants.map(o => ({
-      name: o.name,
-      birth_date: o.birth_date,
-      relation: o.relation
-    }))));
+    try {
+      const formData = new FormData();
+      formData.append('property_slug', slug);
+      formData.append('phone', phone);
+      formData.append('entry_date', entryDate);
+      formData.append('address_ktp', addressKtp);
+      formData.append('room_number', roomNumber);
+      formData.append('full_address', fullAddress);
+      formData.append('occupants', JSON.stringify(occupants.map(o => ({
+        name: o.name,
+        birth_date: o.birth_date,
+        relation: o.relation
+      }))));
 
-    occupants.forEach((o, index) => {
-      if (o.ktp_file) {
-        formData.append(`ktp_file_${index}`, o.ktp_file);
+      // Kompresi Setiap Berkas KTP
+      for (let index = 0; index < occupants.length; index++) {
+        const o = occupants[index];
+        if (o.ktp_file) {
+          const compressed = await compressImage(o.ktp_file);
+          formData.append(`ktp_file_${index}`, compressed);
+        }
       }
-    });
 
-    const res = await submitMultiTenantsStrict(formData);
-    setLoading(false);
+      setLoadingStatus('Mengirim data lapor diri ke database...');
 
-    if (res && res.success) {
-      setSuccessMsg(true);
-    } else {
-      setErrorMsg(res?.error || 'Gagal mengirim data. Silakan lengkapi berkas KTP.');
+      const res = await submitMultiTenantsStrict(formData);
+      setLoading(false);
+
+      if (res && res.success) {
+        setReceipt({
+          household_id: res.household_id || 'REG-' + Date.now(),
+          registered_at: res.registered_at || new Date().toISOString(),
+          phone: phone,
+          entryDate: entryDate,
+          locationInfo: propertyType === 'kos' ? `Kamar: ${roomNumber}` : fullAddress,
+          occupantsSummary: occupants.map(o => ({
+            name: o.name,
+            relation: o.relation,
+            age: calculateAge(o.birth_date)
+          }))
+        });
+      } else {
+        setErrorMsg(res?.error || 'Gagal mengirim data. Silakan coba lagi.');
+      }
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg('Terjadi kesalahan teknis saat pemrosesan berkas.');
     }
   };
 
@@ -128,13 +212,75 @@ export default function CheckinPage() {
           </p>
         </div>
 
-        {successMsg ? (
-          <div className="p-6 bg-green-50 border border-green-300 text-green-900 rounded-xl text-center space-y-3">
-            <p className="text-3xl">✅</p>
-            <h2 className="font-bold text-lg">Pendataan Lapor Diri Berhasil!</h2>
-            <p className="text-xs text-green-700">
-              Seluruh data dan berkas KTP penghuni telah tersimpan secara resmi.
-            </p>
+        {/* TAMPILAN BUKTI LAPOR DIRI DIGITAL (RECEIPT) */}
+        {receipt ? (
+          <div className="space-y-6 print:p-0">
+            <div className="p-6 bg-slate-900 text-white rounded-2xl shadow-lg border border-slate-800 space-y-4">
+              <div className="flex justify-between items-start border-b border-slate-700 pb-3">
+                <div>
+                  <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-500 text-slate-950 rounded uppercase">
+                    BUKTI RESMI LAPOR DIRI
+                  </span>
+                  <h2 className="text-lg font-bold mt-1 text-emerald-400">Pendaftaran Terverifikasi</h2>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-gray-400 block">ID Registrasi</span>
+                  <span className="text-xs font-mono font-bold text-gray-200">{receipt.household_id}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Nomor WhatsApp</span>
+                  <span className="font-semibold">{receipt.phone}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Tanggal Menetap</span>
+                  <span className="font-semibold">{receipt.entryDate}</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-gray-400 block text-[10px]">Lokasi Unit / Properti</span>
+                  <span className="font-semibold text-emerald-300">{receipt.locationInfo}</span>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-800 space-y-2">
+                <span className="text-[10px] text-gray-400 font-bold uppercase block">Daftar Penghuni Terdaftar</span>
+                <div className="space-y-1.5">
+                  {receipt.occupantsSummary.map((occ, i) => (
+                    <div key={i} className="flex justify-between items-center bg-slate-800/80 p-2 rounded text-xs">
+                      <span className="font-semibold">{occ.name}</span>
+                      <div className="space-x-2">
+                        <span className="text-[10px] bg-slate-700 text-emerald-300 px-1.5 py-0.5 rounded">
+                          {occ.relation}
+                        </span>
+                        <span className="text-[10px] text-gray-300">{occ.age} Thn</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-800/50 rounded-lg text-center border border-slate-700">
+                <span className="text-[10px] font-bold text-amber-400 block">STATUS LAPORAN:</span>
+                <span className="text-xs font-semibold text-gray-200">Menunggu Peninjauan Pemilik Kos / RT</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 bg-slate-800 text-white font-bold text-xs rounded-xl hover:bg-slate-900 transition-all shadow"
+              >
+                🖨️ Cetak / Simpan Gambar
+              </button>
+              <button
+                onClick={() => { setReceipt(null); setOccupants([{ name: '', birth_date: '', relation: 'Penanggung Jawab', ktp_file: null }]); }}
+                className="py-2.5 px-4 bg-gray-200 text-gray-800 font-bold text-xs rounded-xl hover:bg-gray-300 transition-all"
+              >
+                Lapor Baru
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -269,7 +415,6 @@ export default function CheckinPage() {
                         />
                       </div>
 
-                      {/* DROPDOWN HANYA UNTUK ANGGOTA TAMBAHAN (PENGHUNI #2 DST) */}
                       {idx > 0 && (
                         <div>
                           <label className="block text-[11px] font-semibold mb-1">Status Hubungan *</label>
@@ -349,7 +494,7 @@ export default function CheckinPage() {
               disabled={loading}
               className="w-full py-3 bg-emerald-700 text-white font-bold text-sm rounded-xl hover:bg-emerald-800 transition-all shadow-md disabled:bg-gray-400"
             >
-              {loading ? 'Validasi KTP & Mengunggah Data...' : 'Kirim Lapor Diri'}
+              {loading ? loadingStatus : 'Kirim Lapor Diri'}
             </button>
 
           </form>
