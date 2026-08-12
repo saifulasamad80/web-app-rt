@@ -67,6 +67,7 @@ export async function submitTenantCheckin(formData: FormData) {
       .insert({
         property_id: property?.id || null,
         name,
+        full_name: name,
         phone,
         address_ktp: address,
         entry_date: entryDate,
