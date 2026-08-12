@@ -71,6 +71,7 @@ export async function submitTenantCheckin(formData: FormData) {
         phone,
         address_ktp: address,
         entry_date: entryDate,
+        lease_start: entryDate,
         status: 'pending'
       })
       .select()
