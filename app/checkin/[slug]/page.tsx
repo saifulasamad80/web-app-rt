@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { submitMultiTenantsStrict } from '../../../src/actions/checkin-tenant';
+import { submitMultiTenantsStrict, getPropertyRules } from '../../../src/actions/checkin-tenant';
 
 interface OccupantInput {
   name: string;
@@ -25,12 +25,17 @@ export default function CheckinPage() {
   const slug = (params?.slug as string) || 'kos-melati-1';
 
   const [propertyType, setPropertyType] = useState<'kos' | 'kontrakan'>('kos');
+  const [houseRules, setHouseRules] = useState<string>('');
   const [phone, setPhone] = useState('');
   const [entryDate, setEntryDate] = useState('');
   const [addressKtp, setAddressKtp] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
   const [fullAddress, setFullAddress] = useState('');
+  
+  // Checkbox Persetujuan
   const [agreedPdp, setAgreedPdp] = useState(false);
+  const [agreedRules, setAgreedRules] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -46,9 +51,17 @@ export default function CheckinPage() {
     } else {
       setPropertyType('kos');
     }
+
+    // Load Tata Tertib Spesifik dari Properti
+    const loadRules = async () => {
+      const res = await getPropertyRules(slug);
+      if (res && res.property) {
+        setHouseRules(res.property.house_rules || '1. Wajib menjaga ketertiban lingkungan.');
+      }
+    };
+    loadRules();
   }, [slug]);
 
-  // Fungsi Kompresi Foto KTP (HTML5 Canvas)
   const compressImage = (file: File): Promise<File> => {
     return new Promise((resolve) => {
       if (!file || !file.type.startsWith('image/')) return resolve(file);
@@ -65,15 +78,9 @@ export default function CheckinPage() {
           let height = img.height;
 
           if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
+            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
           } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
+            if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
           }
           canvas.width = width;
           canvas.height = height;
@@ -87,9 +94,7 @@ export default function CheckinPage() {
                   lastModified: Date.now(),
                 });
                 resolve(compressedFile);
-              } else {
-                resolve(file);
-              }
+              } else { resolve(file); }
             },
             'image/jpeg',
             0.7
@@ -131,12 +136,16 @@ export default function CheckinPage() {
     e.preventDefault();
     setErrorMsg('');
 
+    if (!agreedRules) {
+      setErrorMsg('Anda wajib membaca dan menyetujui Tata Tertib Hunian terlebih dahulu.');
+      return;
+    }
+
     if (!agreedPdp) {
       setErrorMsg('Anda wajib menyetujui persetujuan simpan data UU PDP.');
       return;
     }
 
-    // Validasi Wajib KTP
     for (let i = 0; i < occupants.length; i++) {
       const age = calculateAge(occupants[i].birth_date);
       if (age >= 17 && !occupants[i].ktp_file) {
@@ -146,7 +155,7 @@ export default function CheckinPage() {
     }
 
     setLoading(true);
-    setLoadingStatus('Mengompres foto KTP secara aman...');
+    setLoadingStatus('Mengompres berkas KTP secara aman...');
 
     try {
       const formData = new FormData();
@@ -162,7 +171,6 @@ export default function CheckinPage() {
         relation: o.relation
       }))));
 
-      // Kompresi Setiap Berkas KTP
       for (let index = 0; index < occupants.length; index++) {
         const o = occupants[index];
         if (o.ktp_file) {
@@ -171,7 +179,7 @@ export default function CheckinPage() {
         }
       }
 
-      setLoadingStatus('Mengirim data lapor diri ke database...');
+      setLoadingStatus('Mengirim data lapor diri...');
 
       const res = await submitMultiTenantsStrict(formData);
       setLoading(false);
@@ -194,7 +202,7 @@ export default function CheckinPage() {
       }
     } catch (err) {
       setLoading(false);
-      setErrorMsg('Terjadi kesalahan teknis saat pemrosesan berkas.');
+      setErrorMsg('Terjadi kesalahan teknis saat pengiriman data.');
     }
   };
 
@@ -212,7 +220,6 @@ export default function CheckinPage() {
           </p>
         </div>
 
-        {/* TAMPILAN BUKTI LAPOR DIRI DIGITAL (RECEIPT) */}
         {receipt ? (
           <div className="space-y-6 print:p-0">
             <div className="p-6 bg-slate-900 text-white rounded-2xl shadow-lg border border-slate-800 space-y-4">
@@ -262,8 +269,8 @@ export default function CheckinPage() {
               </div>
 
               <div className="p-3 bg-slate-800/50 rounded-lg text-center border border-slate-700">
-                <span className="text-[10px] font-bold text-amber-400 block">STATUS LAPORAN:</span>
-                <span className="text-xs font-semibold text-gray-200">Menunggu Peninjauan Pemilik Kos / RT</span>
+                <span className="text-[10px] font-bold text-amber-400 block">STATUS LAPORAN & ATURAN:</span>
+                <span className="text-xs font-semibold text-gray-200">Telah Menyatakan Tunduk pada Tata Tertib Pemilik</span>
               </div>
             </div>
 
@@ -470,7 +477,30 @@ export default function CheckinPage() {
               })}
             </div>
 
-            <div className="flex items-start space-x-2 pt-2">
+            {/* SECTION 3: TATA TERTIB HUNIAN (LEGAL BINDING) */}
+            <div className="bg-amber-50/60 border border-amber-200 p-4 rounded-xl space-y-3">
+              <h2 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                <span>📜</span> 3. Tata Tertib & Ketentuan Hunian
+              </h2>
+              <div className="bg-white p-3 rounded-lg border border-amber-200 text-[11px] text-gray-700 max-h-36 overflow-y-auto whitespace-pre-line leading-relaxed font-mono">
+                {houseRules || 'Loading Tata Tertib...'}
+              </div>
+              <div className="flex items-start space-x-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="rulesCheck"
+                  checked={agreedRules}
+                  onChange={(e) => setAgreedRules(e.target.checked)}
+                  className="mt-1 rounded text-amber-600 focus:ring-amber-500"
+                />
+                <label htmlFor="rulesCheck" className="text-[11px] text-amber-950 font-semibold leading-tight">
+                  Saya telah membaca, memahami, dan menyatakan tunduk pada Tata Tertib Hunian di atas. Apabila melanggar, saya bersedia menerima sanksi yang berlaku.
+                </label>
+              </div>
+            </div>
+
+            {/* PERSETUJUAN PDP */}
+            <div className="flex items-start space-x-2">
               <input
                 type="checkbox"
                 id="pdpCheck"
@@ -494,7 +524,7 @@ export default function CheckinPage() {
               disabled={loading}
               className="w-full py-3 bg-emerald-700 text-white font-bold text-sm rounded-xl hover:bg-emerald-800 transition-all shadow-md disabled:bg-gray-400"
             >
-              {loading ? loadingStatus : 'Kirim Lapor Diri'}
+              {loading ? loadingStatus : 'Kirim Lapor Diri & Setujui Aturan'}
             </button>
 
           </form>

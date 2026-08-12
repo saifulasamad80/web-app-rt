@@ -279,3 +279,35 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     return { success: false, error: err?.message || 'Gagal memproses pendaftaran.' };
   }
 }
+
+
+export async function getPropertyRules(slug: string) {
+  try {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id, name, type, house_rules')
+      .eq('slug', slug)
+      .single();
+
+    if (error || !data) {
+      return { success: false, rules: '1. Wajib menjaga ketertiban dan kebersihan lingkungan.' };
+    }
+    return { success: true, property: data };
+  } catch (err) {
+    return { success: false, rules: '1. Wajib menjaga ketertiban.' };
+  }
+}
+
+export async function updateHouseRules(propertyId: string, houseRules: string) {
+  try {
+    const { error } = await supabase
+      .from('properties')
+      .update({ house_rules: houseRules })
+      .eq('id', propertyId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: 'Gagal memperbarui tata tertib.' };
+  }
+}
