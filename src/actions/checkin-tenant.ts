@@ -2,9 +2,19 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
+    throw new Error('Variabel NEXT_PUBLIC_SUPABASE_URL di Vercel belum diatur atau salah format (wajib diawali https://).');
+  }
+  if (!supabaseKey) {
+    throw new Error('Variabel SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY belum diatur di Vercel.');
+  }
+
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 export async function submitTenantCheckin(formData: FormData) {
   try {
@@ -23,12 +33,14 @@ export async function submitTenantCheckin(formData: FormData) {
       return { error: 'Anda harus menyetujui klausa UU PDP.' };
     }
 
-    // 1. Cari property_id berdasarkan slug, jika belum ada buat otomatis (demo/fallback)
+    const supabase = getSupabaseClient();
+
+    // 1. Cari property_id berdasarkan slug
     let { data: property } = await supabase
       .from('properties')
       .select('id, name, type')
       .eq('slug', propertySlug)
-      .single();
+      .maybeSingle();
 
     if (!property) {
       const { data: newProp, error: propErr } = await supabase
@@ -43,7 +55,7 @@ export async function submitTenantCheckin(formData: FormData) {
         .single();
 
       if (propErr) {
-        console.warn('Gagal buat properti otomatis, gunakan fallback:', propErr.message);
+        console.warn('Gagal membuat properti otomatis:', propErr.message);
       } else {
         property = newProp;
       }
@@ -80,6 +92,7 @@ export async function submitTenantCheckin(formData: FormData) {
 
 export async function getOwnerPropertiesAndTenants() {
   try {
+    const supabase = getSupabaseClient();
     const { data: properties } = await supabase.from('properties').select('*');
     const { data: tenants } = await supabase
       .from('tenants')
@@ -94,6 +107,7 @@ export async function getOwnerPropertiesAndTenants() {
 
 export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
   try {
+    const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('tenants')
       .update({ status })
