@@ -26,6 +26,7 @@ export default function OwnerDashboard() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [copyMsg, setCopyMsg] = useState('');
+  const [activeTab, setActiveTab] = useState<'ALL' | 'PENDING' | 'ACTIVE' | 'CHECKED_OUT'>('ALL');
 
   const fetchData = async () => {
     setLoading(true);
@@ -48,23 +49,36 @@ export default function OwnerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
-    // Perbarui UI secara instan (Optimistic Update)
     setTenants((prev) =>
       prev.map((t) => (t.id === id ? { ...t, status: newStatus.toUpperCase() } : t))
     );
 
     const res = await updateTenantStatus(id, newStatus);
     if (res && !res.success) {
-      await fetchData(); // Rollback data jika backend gagal
+      await fetchData();
     } else {
       await fetchData();
     }
   };
 
+  // Filter Data Berdasarkan Tab Aktif
+  const filteredTenants = tenants.filter((t) => {
+    const st = (t.status || '').toUpperCase();
+    if (activeTab === 'ALL') return true;
+    return st === activeTab;
+  });
+
+  // Hitung Jumlah Statistik
+  const countAll = tenants.length;
+  const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
+  const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE').length;
+  const countCheckedOut = tenants.filter((t) => (t.status || '').toUpperCase() === 'CHECKED_OUT').length;
+
   return (
     <main className="min-h-screen p-8 bg-gray-50 text-gray-900">
       <div className="max-w-4xl mx-auto space-y-6">
 
+        {/* HEADER */}
         <div className="bg-emerald-900 text-white p-6 rounded-xl shadow flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold">Dasbor Pemilik Kos & Kontrakan</h1>
@@ -80,7 +94,27 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        {/* SECTION 1: TAUTAN CHECK-IN PROPERTI */}
+        {/* STATS SUMMARY CARDS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+            <span className="text-xs text-gray-500 font-semibold uppercase">Total Terdaftar</span>
+            <p className="text-2xl font-extrabold text-gray-800 mt-1">{countAll}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-amber-200 bg-amber-50/30 shadow-sm">
+            <span className="text-xs text-amber-700 font-semibold uppercase">Menunggu (Pending)</span>
+            <p className="text-2xl font-extrabold text-amber-600 mt-1">{countPending}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-green-200 bg-green-50/30 shadow-sm">
+            <span className="text-xs text-green-700 font-semibold uppercase">Aktif Menghuni</span>
+            <p className="text-2xl font-extrabold text-green-600 mt-1">{countActive}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg border border-gray-200 bg-gray-100/50 shadow-sm">
+            <span className="text-xs text-gray-600 font-semibold uppercase">Checked-Out</span>
+            <p className="text-2xl font-extrabold text-gray-600 mt-1">{countCheckedOut}</p>
+          </div>
+        </div>
+
+        {/* SECTION 1: PROPERTI */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h2 className="text-lg font-bold mb-3">Properti Milik Anda</h2>
           {properties.length === 0 ? (
@@ -116,13 +150,58 @@ export default function OwnerDashboard() {
           )}
         </div>
 
-        {/* SECTION 2: DAFTAR PENGHUNI */}
+        {/* SECTION 2: DAFTAR PENGHUNI + TAB FILTER */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
-          <h2 className="text-lg font-bold mb-4">Daftar Penghuni / Penyewa</h2>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+            <h2 className="text-lg font-bold">Daftar Penghuni / Penyewa</h2>
+
+            {/* TAB FILTER BUTTONS */}
+            <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg text-xs font-semibold">
+              <button
+                onClick={() => setActiveTab('ALL')}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  activeTab === 'ALL' ? 'bg-white text-gray-900 shadow-sm font-bold' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Semua ({countAll})
+              </button>
+              <button
+                onClick={() => setActiveTab('PENDING')}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  activeTab === 'PENDING' ? 'bg-amber-500 text-white font-bold shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Pending ({countPending})
+              </button>
+              <button
+                onClick={() => setActiveTab('ACTIVE')}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  activeTab === 'ACTIVE' ? 'bg-green-600 text-white font-bold shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Aktif ({countActive})
+              </button>
+              <button
+                onClick={() => setActiveTab('CHECKED_OUT')}
+                className={`px-3 py-1.5 rounded-md transition-all ${
+                  activeTab === 'CHECKED_OUT' ? 'bg-gray-700 text-white font-bold shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                Keluar ({countCheckedOut})
+              </button>
+            </div>
+          </div>
+
           {loading ? (
             <p className="text-sm text-gray-500">Memuat data penyewa...</p>
-          ) : tenants.length === 0 ? (
-            <p className="text-sm text-gray-500">Belum ada penyewa yang mendaftar.</p>
+          ) : filteredTenants.length === 0 ? (
+            <div className="p-8 text-center border-2 border-dashed rounded-lg bg-gray-50">
+              <p className="text-sm text-gray-500">
+                {activeTab === 'ALL'
+                  ? 'Belum ada penyewa yang mendaftar.'
+                  : `Tidak ada penghuni dengan status ${activeTab}.`}
+              </p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm border-collapse">
@@ -137,8 +216,8 @@ export default function OwnerDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {tenants.map((t) => {
-                    const st = (t.status || '').toLowerCase();
+                  {filteredTenants.map((t) => {
+                    const st = (t.status || '').toUpperCase();
                     return (
                       <tr key={t.id} className="hover:bg-gray-50">
                         <td className="p-2.5 font-medium">{t.name}</td>
@@ -147,13 +226,13 @@ export default function OwnerDashboard() {
                         <td className="p-2.5 text-xs">{t.entry_date}</td>
                         <td className="p-2.5">
                           <span className={'text-[10px] font-bold px-2 py-0.5 rounded uppercase ' + 
-                            (st === 'active' ? 'bg-green-100 text-green-800' : 
-                             st === 'checked_out' ? 'bg-gray-100 text-gray-800' : 'bg-amber-100 text-amber-800')}>
+                            (st === 'ACTIVE' ? 'bg-green-100 text-green-800' : 
+                             st === 'CHECKED_OUT' ? 'bg-gray-100 text-gray-800' : 'bg-amber-100 text-amber-800')}>
                             {st}
                           </span>
                         </td>
                         <td className="p-2.5 text-right space-x-1">
-                          {st !== 'active' && (
+                          {st !== 'ACTIVE' && (
                             <button
                               onClick={() => handleStatusChange(t.id, 'active')}
                               className="px-2 py-1 bg-green-600 text-white text-[10px] rounded font-semibold hover:bg-green-700"
@@ -161,7 +240,7 @@ export default function OwnerDashboard() {
                               Set Active
                             </button>
                           )}
-                          {st !== 'checked_out' && (
+                          {st !== 'CHECKED_OUT' && (
                             <button
                               onClick={() => handleStatusChange(t.id, 'checked_out')}
                               className="px-2 py-1 bg-red-600 text-white text-[10px] rounded font-semibold hover:bg-red-700"
