@@ -34,6 +34,7 @@ export default function OwnerDashboard() {
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
   const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
+  const [ktpErrorMsg, setKtpErrorMsg] = useState<string>('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,13 +70,16 @@ export default function OwnerDashboard() {
   };
 
   const handleViewKtp = async (tenant: Tenant) => {
-    const targetPath = tenant.ktp_url || tenant.ktp_path || tenant.address_ktp;
+    // Utamakan ktp_url / ktp_path, hindari alamat KTP teks biasa
+    const targetPath = tenant.ktp_url || tenant.ktp_path;
     setSelectedTenantName(tenant.name);
     setLoadingKtp(true);
+    setKtpErrorMsg('');
+    setSelectedKtpUrl(null);
 
     if (!targetPath) {
-      alert('Berkas KTP belum diunggah oleh penyewa ini.');
       setLoadingKtp(false);
+      setKtpErrorMsg('Penyewa ini mendaftar tanpa mengunggah berkas KTP.');
       return;
     }
 
@@ -85,7 +89,7 @@ export default function OwnerDashboard() {
     if (res && res.success && res.url) {
       setSelectedKtpUrl(res.url);
     } else {
-      alert('Gagal memuat KTP: ' + (res?.error || 'Tautan privat tidak dapat diakses'));
+      setKtpErrorMsg(res?.error || 'Gagal memuat berkas KTP.');
     }
   };
 
@@ -319,7 +323,7 @@ export default function OwnerDashboard() {
       </div>
 
       {/* MODAL POPUP SECURE KTP VIEWER */}
-      {(selectedKtpUrl || loadingKtp) && (
+      {(selectedTenantName || loadingKtp) && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-200">
             <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
@@ -328,17 +332,22 @@ export default function OwnerDashboard() {
                 <span className="text-emerald-400 font-normal">{selectedTenantName}</span>
               </h3>
               <button
-                onClick={() => setSelectedKtpUrl(null)}
+                onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }}
                 className="text-gray-400 hover:text-white font-bold text-lg leading-none"
               >
                 ✕
               </button>
             </div>
-            <div className="p-4 flex flex-col items-center justify-center min-h-[250px] bg-slate-50">
+            <div className="p-6 flex flex-col items-center justify-center min-h-[220px] bg-slate-50">
               {loadingKtp ? (
                 <div className="text-center space-y-2">
                   <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-xs text-gray-500 font-semibold">Membuat Signed URL Aman (60 Detik)...</p>
+                  <p className="text-xs text-gray-500 font-semibold">Memuat Tautan Aman KTP...</p>
+                </div>
+              ) : ktpErrorMsg ? (
+                <div className="text-center space-y-2 p-4 bg-amber-50 border border-amber-200 rounded-lg max-w-md">
+                  <p className="text-xl">⚠️</p>
+                  <p className="text-xs font-semibold text-amber-800">{ktpErrorMsg}</p>
                 </div>
               ) : selectedKtpUrl ? (
                 <div className="space-y-3 w-full text-center">
@@ -355,7 +364,7 @@ export default function OwnerDashboard() {
             </div>
             <div className="p-3 bg-gray-100 text-right">
               <button
-                onClick={() => setSelectedKtpUrl(null)}
+                onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }}
                 className="px-4 py-1.5 bg-gray-700 text-white text-xs font-semibold rounded hover:bg-gray-800"
               >
                 Tutup Dokumen

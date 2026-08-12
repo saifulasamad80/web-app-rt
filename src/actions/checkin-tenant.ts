@@ -147,26 +147,29 @@ export async function updateTenantStatus(id: string, status: string) {
 export async function getTenantKtpUrl(ktpPath: string) {
   try {
     if (!ktpPath) {
-      return { success: false, error: 'Path berkas KTP tidak ditemukan.' };
+      return { success: false, error: 'Berkas KTP belum diunggah oleh penghuni ini.' };
     }
 
+    // Jika path sudah berupa URL HTTP/HTTPS lengkap
     if (ktpPath.startsWith('http://') || ktpPath.startsWith('https://')) {
       return { success: true, url: ktpPath };
     }
 
-    // Buat Signed URL berdurasi 60 detik dari private storage bucket
-    const bucketName = 'ktp-documents';
-    const { data, error } = await supabase.storage
-      .from(bucketName)
-      .createSignedUrl(ktpPath, 60);
+    // Coba beberapa nama bucket umum yang mungkin digunakan
+    const buckets = ['ktp-documents', 'ktp', 'tenants', 'documents'];
+    
+    for (const bucket of buckets) {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(ktpPath, 60);
 
-    if (error) {
-      console.error('Storage Signed URL Error:', error);
-      return { success: false, error: error.message };
+      if (!error && data?.signedUrl) {
+        return { success: true, url: data.signedUrl };
+      }
     }
 
-    return { success: true, url: data.signedUrl };
+    return { success: false, error: 'Berkas KTP tidak ditemukan di Storage Supabase.' };
   } catch (err: any) {
-    return { success: false, error: 'Gagal membuat tautan aman KTP.' };
+    return { success: false, error: 'Gagal menghubungkan ke Storage.' };
   }
 }
