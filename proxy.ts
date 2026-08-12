@@ -1,23 +1,26 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
   const sessionToken = request.cookies.get('rt_session')?.value;
-  const isLoginPage = request.nextUrl.pathname === '/login';
 
-  // Jika belum login dan mencoba mengakses dasbor utama (/), arahkan ke /login
-  if (!sessionToken && !isLoginPage) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  // Bebaskan akses publik untuk rute /checkin/* dan /login
+  if (pathname.startsWith('/checkin') || pathname === '/login') {
+    if (sessionToken && pathname === '/login') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    return NextResponse.next();
   }
 
-  // Jika sudah login dan mencoba membuka halaman /login, arahkan ke dasbor utama (/)
-  if (sessionToken && isLoginPage) {
-    return NextResponse.redirect(new URL('/', request.url));
+  // Proteksi rute /admin, /owner, dan / utama
+  if (!sessionToken) {
+    return NextResponse.redirect(new URL('/login', request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ['/', '/login'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
