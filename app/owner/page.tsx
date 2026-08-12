@@ -48,18 +48,21 @@ export default function OwnerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
-    // 1. Perbarui tampilan layar secara instan (Optimistic Update)
-    setTenants((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t))
-    );
-
-    // 2. Kirim perubahan ke Supabase
-    const res = await updateTenantStatus(id, newStatus);
-    if (res && res.error) {
-      alert('Gagal memperbarui database: ' + res.error);
-      await fetchData(); // Kembalikan ke data asli jika database menolak
-    } else {
-      await fetchData(); // Sinkronkan data terbaru
+    try {
+      if (!id) {
+        alert('Eror: ID penghuni tidak ditemukan!');
+        return;
+      }
+      const res = await updateTenantStatus(id, newStatus);
+      if (res && !res.success) {
+        alert('Gagal dari Server: ' + (res.error || 'Terjadi kesalahan pada database'));
+      } else {
+        alert('Berhasil! Status telah diubah menjadi: ' + newStatus);
+      }
+    } catch (err: any) {
+      alert('Eror Client JS: ' + (err?.message || err));
+    } finally {
+      await fetchData();
     }
   };
 
