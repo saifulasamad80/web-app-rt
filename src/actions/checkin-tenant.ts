@@ -1,7 +1,10 @@
 'use server';
 
-import { uploadAndWatermarkKTP } from './upload-ktp';
 import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function submitTenantCheckin(formData: FormData) {
   try {
@@ -9,60 +12,96 @@ export async function submitTenantCheckin(formData: FormData) {
     const phone = formData.get('phone') as string;
     const address = formData.get('address') as string;
     const entryDate = formData.get('entryDate') as string;
-    const pdpConsent = formData.get('pdpConsent');
+    const propertySlug = (formData.get('propertySlug') as string) || 'kos-melati-1';
+    const pdpConsent = formData.get('pdpConsent') === 'true';
 
     if (!name || !phone || !address || !entryDate) {
-      return { error: 'Semua kolom identitas wajib diisi.' };
+      return { error: 'Semua kolom wajib diisi!' };
     }
 
     if (!pdpConsent) {
-      return { error: 'Persetujuan pemrosesan data pribadi (UU PDP) wajib dicentang.' };
+      return { error: 'Anda harus menyetujui klausa UU PDP.' };
     }
 
-    let ktpPath = null;
-    const ktpData = formData.get('ktp');
-    if (ktpData && ktpData instanceof File && ktpData.size > 0) {
-      const ktpRes = await uploadAndWatermarkKTP(formData);
-      if (ktpRes.error) {
-        return { error: 'Gagal memproses gambar KTP: ' + ktpRes.error };
+    // 1. Cari property_id berdasarkan slug, jika belum ada buat otomatis (demo/fallback)
+    let { data: property } = await supabase
+      .from('properties')
+      .select('id, name, type')
+      .eq('slug', propertySlug)
+      .single();
+
+    if (!property) {
+      const { data: newProp, error: propErr } = await supabase
+        .from('properties')
+        .insert({
+          name: propertySlug.replace(/-/g, ' ').toUpperCase(),
+          slug: propertySlug,
+          type: 'KOS',
+          address: 'Wilayah RT'
+        })
+        .select()
+        .single();
+
+      if (propErr) {
+        console.warn('Gagal buat properti otomatis, gunakan fallback:', propErr.message);
+      } else {
+        property = newProp;
       }
-      ktpPath = ktpRes.path || null;
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    // 2. Simpan data penyewa ke tabel tenants
+    const { data: tenant, error: tenantErr } = await supabase
+      .from('tenants')
+      .insert({
+        property_id: property?.id || null,
+        name,
+        phone,
+        address_ktp: address,
+        entry_date: entryDate,
+        status: 'pending'
+      })
+      .select()
+      .single();
 
-    if (supabaseUrl && supabaseKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const { data, error } = await supabase
-          .from('tenants')
-          .insert([
-            {
-              full_name: name,
-              phone_number: phone,
-              origin_address: address,
-              entry_date: entryDate,
-              ktp_path: ktpPath,
-              pdp_consent: true,
-            }
-          ])
-          .select();
-
-        if (!error && data) {
-          return { success: true, message: 'Data check-in penyewa berhasil tersimpan aman di database RT!' };
-        }
-      } catch (e) {
-        console.log('Menggunakan mode Local Fallback untuk Check-In');
-      }
+    if (tenantErr) {
+      throw new Error(tenantErr.message);
     }
 
     return {
       success: true,
-      message: 'Data check-in penyewa ' + name + ' berhasil diproses (Simulasi Local DB)!'
+      message: 'Pendataan Lapor Diri berhasil dikirim ke Pengurus RT!',
+      tenantId: tenant.id
     };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Terjadi kesalahan sistem.';
+    const msg = err instanceof Error ? err.message : 'Gagal memproses data.';
     return { error: msg };
+  }
+}
+
+export async function getOwnerPropertiesAndTenants() {
+  try {
+    const { data: properties } = await supabase.from('properties').select('*');
+    const { data: tenants } = await supabase
+      .from('tenants')
+      .select('*, properties(name, type, slug)')
+      .order('created_at', { ascending: false });
+
+    return { properties: properties || [], tenants: tenants || [] };
+  } catch (err: unknown) {
+    return { properties: [], tenants: [], error: String(err) };
+  }
+}
+
+export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
+  try {
+    const { error } = await supabase
+      .from('tenants')
+      .update({ status })
+      .eq('id', tenantId);
+
+    if (error) throw new Error(error.message);
+    return { success: true };
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : 'Gagal memperbarui status' };
   }
 }

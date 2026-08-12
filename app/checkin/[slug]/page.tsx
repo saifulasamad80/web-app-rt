@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { useParams } from 'next/navigation';
+import { submitTenantCheckin } from '../../../src/actions/checkin-tenant';
 
 export default function PublicCheckinPage() {
   const params = useParams();
-  const slug = (params?.slug as string) || '';
+  const slug = (params?.slug as string) || 'kos-melati-1';
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -18,10 +19,22 @@ export default function PublicCheckinPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setStatusMsg('Mengirim data lapor diri...');
+    setStatusMsg('Mengirim data lapor diri ke database RT...');
 
     try {
-      setStatusMsg('✅ Pendataan Lapor Diri Berhasil! Data Anda telah ditransmisikan secara aman ke Pengurus RT.');
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('phone', phone);
+      formData.append('address', address);
+      formData.append('entryDate', entryDate);
+      formData.append('propertySlug', slug);
+      if (pdpConsent) formData.append('pdpConsent', 'true');
+
+      const res = await submitTenantCheckin(formData);
+
+      if (res.error) throw new Error(res.error);
+
+      setStatusMsg('✅ Pendataan Lapor Diri Berhasil! Data Anda telah tersimpan secara aman di database RT.');
       setName('');
       setPhone('');
       setAddress('');
