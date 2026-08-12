@@ -108,19 +108,21 @@ export async function getOwnerPropertiesAndTenants() {
   }
 }
 
-export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
+export async function updateTenantStatus(id: string, status: string) {
   try {
-    const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('tenants')
-      .update({ status })
-      .eq('id', tenantId);
+      .update({ status: status })
+      .eq('id', id);
 
-    if (error) throw new Error(error.message);
-    revalidatePath('/');
-    revalidatePath('/owner');
+    if (error) {
+      console.error('Error updating status:', error);
+      return { success: false, error: error.message };
+    }
+
     return { success: true };
-  } catch (err: unknown) {
-    return { error: err instanceof Error ? err.message : 'Gagal memperbarui status' };
+  } catch (err) {
+    console.error('Exception updating status:', err);
+    return { success: false, error: 'Gagal memperbarui status' };
   }
 }
