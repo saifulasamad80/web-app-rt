@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, use } from 'react';
+import React, { useState } from 'react';
+import { useParams } from 'next/navigation';
 
-export default function PublicCheckinPage({ params }: { params: Promise<{ slug: string }> }) {
-  const resolvedParams = use(params);
-  const slug = resolvedParams.slug;
+export default function PublicCheckinPage() {
+  const params = useParams();
+  const slug = (params?.slug as string) || '';
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
