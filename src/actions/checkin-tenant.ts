@@ -95,7 +95,6 @@ export async function submitTenantCheckin(formData: FormData) {
 
 export async function getOwnerPropertiesAndTenants() {
   try {
-    const supabase = getSupabaseClient();
     const { data: properties } = await supabase.from('properties').select('*');
     const { data: tenants } = await supabase
       .from('tenants')
@@ -103,8 +102,9 @@ export async function getOwnerPropertiesAndTenants() {
       .order('created_at', { ascending: false });
 
     return { properties: properties || [], tenants: tenants || [] };
-  } catch (err: unknown) {
-    return { properties: [], tenants: [], error: String(err) };
+  } catch (error) {
+    console.error('Error fetching owner data:', error);
+    return { properties: [], tenants: [] };
   }
 }
 
