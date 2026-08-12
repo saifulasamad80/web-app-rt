@@ -110,21 +110,20 @@ export async function getOwnerPropertiesAndTenants() {
 
 export async function updateTenantStatus(id: string, status: string) {
   try {
-    const formattedStatus = status.toLowerCase();
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('tenants')
-      .update({ status: formattedStatus })
-      .eq('id', id)
-      .select();
+      .update({ status: status.toLowerCase() })
+      .eq('id', id);
 
     if (error) {
-      console.error('Error updating status in Supabase:', error);
+      console.error('Update Error:', error);
       return { success: false, error: error.message };
     }
 
-    return { success: true, data };
+    revalidatePath('/owner');
+    revalidatePath('/');
+    return { success: true };
   } catch (err) {
-    console.error('Exception updating status:', err);
-    return { success: false, error: 'Terjadi kesalahan server saat memperbarui status.' };
+    return { success: false, error: 'Gagal menghubungkan ke server' };
   }
 }
