@@ -13,7 +13,7 @@ export async function getPublicPropertiesList() {
     .select('id, name, property_name, type, slug, address, house_rules, status, owner_name, owner_phone, pin_code, failed_pin_attempts, pin_locked_until')
     .order('created_at', { ascending: false });
 
-  return { success: !error, properties: data || [] };
+  return { success: !error, properties: data || [], error: error?.message };
 }
 
 export async function getPropertyRules(slug: string) {
@@ -23,8 +23,8 @@ export async function getPropertyRules(slug: string) {
     .eq('slug', slug)
     .single();
 
-  if (error || !data) return { success: false, error: 'Properti tidak ditemukan.' };
-  return { success: true, property: data };
+  if (error || !data) return { success: false, property: null, error: 'Properti tidak ditemukan.' };
+  return { success: true, property: data, error: undefined };
 }
 
 export async function createProperty(
@@ -118,10 +118,10 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
     .eq('id', propertyId)
     .single();
 
-  if (propErr || !prop) return { success: false, error: 'Properti tidak ditemukan.' };
+  if (propErr || !prop) return { success: false, property: null, tenants: [], error: 'Properti tidak ditemukan.' };
 
   if (prop.pin_locked_until && new Date(prop.pin_locked_until) > new Date()) {
-    return { success: false, error: '🔒 Unit ini terkunci sementara akibat 3x PIN salah. Hubungi RT untuk reset PIN.' };
+    return { success: false, property: null, tenants: [], error: '🔒 Unit ini terkunci sementara akibat 3x PIN salah. Hubungi RT untuk reset PIN.' };
   }
 
   if (prop.pin_code !== pinInput) {
@@ -140,10 +140,10 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
       .eq('id', propertyId);
 
     if (attempts >= 3) {
-      return { success: false, error: '🔒 Terlalu banyak percobaan PIN salah. Terkunci 15 menit.' };
+      return { success: false, property: null, tenants: [], error: '🔒 Terlalu banyak percobaan PIN salah. Terkunci 15 menit.' };
     }
 
-    return { success: false, error: `🔒 PIN salah (${attempts}/3 percobaan).` };
+    return { success: false, property: null, tenants: [], error: `🔒 PIN salah (${attempts}/3 percobaan).` };
   }
 
   await supabase
@@ -157,7 +157,7 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
     .eq('property_id', propertyId)
     .order('entry_date', { ascending: false });
 
-  return { success: true, property: prop, tenants: tenants || [] };
+  return { success: true, property: prop, tenants: tenants || [], error: tenErr?.message };
 }
 
 export async function submitMultiTenantsStrict(formData: FormData) {
@@ -166,6 +166,9 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const room_number = (formData.get('room_number') as string) || '';
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
     const occupantsRaw = formData.get('occupants') as string;
+
+    const household_id = `HH-${Date.now()}`;
+    const registered_at = new Date().toISOString();
 
     const ktpData = formData.get('ktp');
     let ktp_path = '';
@@ -200,7 +203,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       const address_ktp = formData.get('address_ktp') as string;
 
       if (!name || !phone) {
-        return { success: false, error: 'Nama dan WhatsApp wajib diisi.' };
+        return { success: false, data: [], household_id: '', registered_at: '', error: 'Nama dan WhatsApp wajib diisi.' };
       }
 
       occupants = [{ name, phone, address_ktp, relation: 'Penanggung Jawab', is_head: true }];
@@ -210,6 +213,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       property_id,
       room_number,
       entry_date,
+      household_id,
       name: occ.name,
       phone: occ.phone,
       address_ktp: occ.address_ktp || occ.address || '',
@@ -222,7 +226,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const { data, error } = await supabase.from('tenants').insert(insertPayload).select();
 
     if (error) {
-      return { success: false, error: 'Gagal menyimpan data penyewa: ' + error.message };
+      return { success: false, data: [], household_id: '', registered_at: '', error: 'Gagal menyimpan data penyewa: ' + error.message };
     }
 
     try {
@@ -230,9 +234,9 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       revalidatePath('/rt');
     } catch (e) {}
 
-    return { success: true, data };
+    return { success: true, data: data || [], household_id, registered_at, error: undefined };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Terjadi kesalahan teknis.' };
+    return { success: false, data: [], household_id: '', registered_at: '', error: err?.message || 'Terjadi kesalahan teknis.' };
   }
 }
 
@@ -242,7 +246,7 @@ export async function updateTenantStatus(tenantId: string, status: 'active' | 'c
     .update({ status: status.toUpperCase() })
     .eq('id', tenantId);
 
-  return { success: !error };
+  return { success: !error, error: error?.message };
 }
 
 export async function updateTenantData(
@@ -271,7 +275,7 @@ export async function updateTenantData(
 
 export async function deleteTenant(tenantId: string) {
   const { error } = await supabase.from('tenants').delete().eq('id', tenantId);
-  return { success: !error };
+  return { success: !error, error: error?.message };
 }
 
 export async function updateHouseRules(propertyId: string, house_rules: string) {
@@ -280,7 +284,7 @@ export async function updateHouseRules(propertyId: string, house_rules: string) 
     .update({ house_rules })
     .eq('id', propertyId);
 
-  return { success: !error };
+  return { success: !error, error: error?.message };
 }
 
 export async function getTenantKtpUrl(filePath: string) {
