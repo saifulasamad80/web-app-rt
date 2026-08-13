@@ -10,6 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export interface SubmitResponse {
   success: boolean;
   error?: string;
+  message?: string;
   household_id?: string;
   registered_at?: string;
 }
