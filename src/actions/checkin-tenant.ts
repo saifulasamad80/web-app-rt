@@ -1,6 +1,6 @@
-import { revalidatePath } from 'next/cache';
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -23,13 +23,11 @@ export async function getOwnerPropertiesAndTenants() {
       .select('*')
       .order('name', { ascending: true });
 
-    // Ambil data tenants secara langsung tanpa join PostgREST yang rawan error
     const { data: tenants, error: tenErr } = await supabase
       .from('tenants')
       .select('*')
       .order('entry_date', { ascending: false });
 
-    // Gabungkan data properti secara manual di level JavaScript (100% Aman)
     const enrichedTenants = (tenants || []).map((t) => {
       const matchedProp = (properties || []).find((p) => p.id === t.property_id);
       return {
@@ -68,6 +66,10 @@ export async function updateTenantStatus(id: string, status: 'active' | 'checked
       .eq('id', id);
 
     if (error) return { success: false, error: error.message };
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -79,6 +81,10 @@ export async function deleteTenant(id: string) {
     if (!id) return { success: false, error: 'ID tidak valid' };
     const { error } = await supabase.from('tenants').delete().eq('id', id);
     if (error) return { success: false, error: error.message };
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -137,6 +143,9 @@ export async function updateHouseRules(propertyId: string, houseRules: string) {
       .eq('id', propertyId);
 
     if (error) return { success: false, error: error.message };
+    try {
+      revalidatePath('/owner');
+    } catch (e) {}
     return { success: true };
   } catch (err: any) {
     return { success: false, error: 'Gagal memperbarui tata tertib.' };
@@ -206,7 +215,6 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
         }
       }
 
-      // SIMPAN DATA DENGAN ERROR CHECKING KETAT
       const { error: insertErr } = await supabase.from('tenants').insert({
         property_id: property_id,
         name: occ.name,
@@ -231,7 +239,6 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
       }
     }
 
-    // Refresh cache halaman owner & rt secara instan
     try {
       revalidatePath('/owner');
       revalidatePath('/rt');
@@ -247,9 +254,7 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
   }
 }
 
-
 export async function submitTenantCheckin(formData: FormData): Promise<SubmitResponse> {
-  // Jika format data lama (tanpa array occupants), bungkus otomatis
   if (!formData.get('occupants') && formData.get('name')) {
     const singleOccupant = [{
       name: formData.get('name') as string,
