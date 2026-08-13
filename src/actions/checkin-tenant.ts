@@ -16,6 +16,17 @@ export async function getPublicPropertiesList() {
   return { success: !error, properties: data || [] };
 }
 
+export async function getPropertyRules(slug: string) {
+  const { data, error } = await supabase
+    .from('properties')
+    .select('id, name, property_name, house_rules, address, owner_name, owner_phone')
+    .eq('slug', slug)
+    .single();
+
+  if (error || !data) return { success: false, error: 'Properti tidak ditemukan.' };
+  return { success: true, property: data };
+}
+
 export async function createProperty(
   name: string,
   type: 'kos' | 'kontrakan',
@@ -147,6 +158,82 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
     .order('entry_date', { ascending: false });
 
   return { success: true, property: prop, tenants: tenants || [] };
+}
+
+export async function submitMultiTenantsStrict(formData: FormData) {
+  try {
+    const property_id = formData.get('property_id') as string;
+    const room_number = (formData.get('room_number') as string) || '';
+    const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
+    const occupantsRaw = formData.get('occupants') as string;
+
+    const ktpData = formData.get('ktp');
+    let ktp_path = '';
+
+    if (ktpData && ktpData instanceof File && ktpData.size > 0) {
+      const fileExt = ktpData.name.split('.').pop() || 'jpg';
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const buffer = Buffer.from(await ktpData.arrayBuffer());
+
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('ktp-documents')
+        .upload(fileName, buffer, {
+          contentType: ktpData.type || 'image/jpeg',
+          upsert: true,
+        });
+
+      if (!uploadErr && uploadData) {
+        ktp_path = uploadData.path;
+      }
+    }
+
+    let occupants = [];
+    if (occupantsRaw) {
+      try {
+        occupants = JSON.parse(occupantsRaw);
+      } catch (e) {}
+    }
+
+    if (!occupants || occupants.length === 0) {
+      const name = formData.get('name') as string;
+      const phone = formData.get('phone') as string;
+      const address_ktp = formData.get('address_ktp') as string;
+
+      if (!name || !phone) {
+        return { success: false, error: 'Nama dan WhatsApp wajib diisi.' };
+      }
+
+      occupants = [{ name, phone, address_ktp, relation: 'Penanggung Jawab', is_head: true }];
+    }
+
+    const insertPayload = occupants.map((occ: any, index: number) => ({
+      property_id,
+      room_number,
+      entry_date,
+      name: occ.name,
+      phone: occ.phone,
+      address_ktp: occ.address_ktp || occ.address || '',
+      relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
+      is_head: index === 0,
+      ktp_path: index === 0 ? ktp_path : null,
+      status: 'PENDING',
+    }));
+
+    const { data, error } = await supabase.from('tenants').insert(insertPayload).select();
+
+    if (error) {
+      return { success: false, error: 'Gagal menyimpan data penyewa: ' + error.message };
+    }
+
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Terjadi kesalahan teknis.' };
+  }
 }
 
 export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
