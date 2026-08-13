@@ -1,101 +1,78 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { loginAdminRT } from '../../src/actions/auth';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState<string>('');
-  const [password, setPassword] = useState<string>('');
-  const [errorMsg, setErrorMsg] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const router = useRouter();
+  const [email, setEmail] = useState('admin@rt.id');
+  const [password, setPassword] = useState('admin123');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setErrorMsg('');
+    setError('');
 
-    try {
-      const formData = new FormData();
-      formData.append('email', email);
-      formData.append('password', password);
+    const res = await loginAdminRT(email, password);
+    setLoading(false);
 
-      const res = await loginAdminRT(formData);
-
-      if (res.error) {
-        throw new Error(res.error);
-      }
-
-      router.push('/');
-      router.refresh();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Terjadi eror login.';
-      setErrorMsg(msg);
-    } finally {
-      setLoading(false);
+    if (res && res.success) {
+      window.location.href = '/rt';
+    } else {
+      setError(res?.error || 'Gagal masuk. Periksa email dan password.');
     }
   };
 
   return (
-    <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-gray-200">
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Portal Pengurus RT</h1>
-          <p className="text-sm text-gray-600 mt-1">Masuk untuk mengelola data warga & iuran kas</p>
+    <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 space-y-5">
+        <div className="text-center space-y-1">
+          <span className="text-2xl">🛡️</span>
+          <h1 className="text-lg font-extrabold text-slate-900">Portal Pengurus RT</h1>
+          <p className="text-xs text-slate-500">Masuk untuk mengelola data warga & iuran kas</p>
         </div>
 
-        {errorMsg && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-md font-mono">
-            {errorMsg}
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs font-bold rounded-xl text-center">
+            {error}
           </div>
         )}
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
-            <label htmlFor="login-email" className="block text-sm font-medium text-gray-700 mb-1">
-              Email Pengurus
-            </label>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Email Pengurus</label>
             <input
-              id="login-email"
               type="email"
               required
-              placeholder="admin@rt.id"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full text-xs p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
 
           <div>
-            <label htmlFor="login-password" className="block text-sm font-medium text-gray-700 mb-1">
-              Kata Sandi
-            </label>
+            <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">Kata Sandi</label>
             <input
-              id="login-password"
               type="password"
               required
-              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-2.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full text-xs p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 px-4 bg-emerald-700 text-white font-medium rounded-md hover:bg-emerald-800 disabled:bg-gray-400 transition-colors text-sm shadow-sm"
+            className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition-all shadow disabled:bg-slate-300"
           >
-            {loading ? 'Memverifikasi...' : 'Masuk ke Dasbor RT'}
+            {loading ? 'Authenticating...' : 'Masuk ke Dasbor RT'}
           </button>
         </form>
 
-        <div className="mt-6 pt-4 border-t text-center">
-          <p className="text-xs text-gray-500">
-            Kredensial Penguji Lokal:<br />
-            Email: <code className="font-bold text-gray-700">admin@rt.id</code> | Pass: <code className="font-bold text-gray-700">admin123</code>
-          </p>
+        <div className="pt-3 border-t text-center text-[10px] text-slate-400">
+          Kredensial Penguji: <b>admin@rt.id</b> | Pass: <b>admin123</b>
         </div>
       </div>
     </main>
