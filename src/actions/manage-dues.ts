@@ -37,12 +37,45 @@ export async function submitDuesPayment(formData: FormData) {
 
     try {
       revalidatePath('/rt');
-      revalidatePath('/owner');
-      revalidatePath('/');
     } catch (e) {}
 
     return { success: true, data };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Terjadi kesalahan teknis.' };
+  }
+}
+
+export async function getDuesHistory() {
+  try {
+    const { data, error } = await supabase
+      .from('dues')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return { success: false, dues: [], error: error.message };
+    }
+
+    return { success: true, dues: data || [] };
+  } catch (err: any) {
+    return { success: false, dues: [], error: err?.message || 'Kesalahan koneksi.' };
+  }
+}
+
+export async function deleteDuesRecord(id: string) {
+  try {
+    const { error } = await supabase.from('dues').delete().eq('id', id);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    try {
+      revalidatePath('/rt');
+    } catch (e) {}
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Kesalahan teknis.' };
   }
 }

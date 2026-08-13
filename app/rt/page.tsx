@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl } from '../../src/actions/checkin-tenant';
-import { submitDuesPayment } from '../../src/actions/manage-dues';
+import { submitDuesPayment, getDuesHistory, deleteDuesRecord } from '../../src/actions/manage-dues';
 import { logoutAdminRT } from '../../src/actions/auth';
 
 interface Tenant {
@@ -39,6 +39,16 @@ interface Property {
   pin_locked_until?: string;
 }
 
+interface DuesItem {
+  id: string;
+  resident_name: string;
+  house_number?: string | null;
+  amount: number;
+  period_month?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+}
+
 const MONTH_OPTIONS = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -49,6 +59,7 @@ const YEAR_OPTIONS = ['2025', '2026', '2027', '2028', '2029', '2030'];
 export default function RtDashboardPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [duesList, setDuesList] = useState<DuesItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProperty, setSelectedProperty] = useState('ALL');
@@ -78,6 +89,9 @@ export default function RtDashboardPage() {
     const res = await getRtDashboardData();
     setProperties(res.properties || []);
     setTenants(res.tenants || []);
+
+    const duesRes = await getDuesHistory();
+    setDuesList(duesRes.dues || []);
     setLoading(false);
   };
 
@@ -159,8 +173,17 @@ export default function RtDashboardPage() {
       setDuesName('');
       setDuesHouse('');
       setTimeout(() => setDuesMsg(''), 4000);
+      await loadData();
     } else {
       alert('Gagal mencatat iuran: ' + (res?.error || 'Kesalahan teknis'));
+    }
+  };
+
+  const handleDeleteDues = async (id: string, name: string) => {
+    if (confirm(`Hapus catatan iuran atas nama "${name}"?`)) {
+      setDuesList((prev) => prev.filter((d) => d.id !== id));
+      await deleteDuesRecord(id);
+      await loadData();
     }
   };
 
@@ -221,6 +244,7 @@ export default function RtDashboardPage() {
 
   const pendingProperties = properties.filter((p) => p.status !== 'APPROVED');
   const approvedProperties = properties.filter((p) => p.status === 'APPROVED');
+  const totalKasAmount = duesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
 
   return (
     <main className="min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900">
@@ -298,7 +322,7 @@ export default function RtDashboardPage() {
           </div>
         </div>
 
-        {/* TABEL DATA PENDUDUK RT DENGAN RESPONSIVE MOBILE CARD */}
+        {/* TABEL DATA PENDUDUK RT */}
         <div className="bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
@@ -316,7 +340,7 @@ export default function RtDashboardPage() {
               Tidak ada data warga pendatang yang cocok dengan kriteria pencarian.
             </div>
           ) : (
-            <div className="hidden md:block overflow-x-auto">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
@@ -392,11 +416,28 @@ export default function RtDashboardPage() {
           )}
         </div>
 
-        {/* MODUL PENCATATAN IURAN DENGAN DROPDOWN BULAN & TAHUN */}
-        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4 print:hidden">
-          <h2 className="text-base font-bold text-slate-900 uppercase border-b pb-2">
-            Pencatatan Iuran Kas Warga
-          </h2>
+        {/* MODUL PENCATATAN & RIWAYAT IURAN KAS RT */}
+        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-6 print:hidden">
+          
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 uppercase">
+                Pencatatan & Riwayat Kas Iuran RT
+              </h2>
+              <p className="text-xs text-slate-500">Kelola dan pantau seluruh transaksi kas masuk iuran warga</p>
+            </div>
+
+            {/* RINGKASAN TOTAL SALDO KAS TERKUMPUL */}
+            <div className="bg-emerald-950 text-white px-5 py-2.5 rounded-xl border border-emerald-800 flex items-center gap-3 shadow-md">
+              <span className="text-xl">💰</span>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-emerald-400 block">Total Kas Terkumpul</span>
+                <span className="text-lg font-black text-white">
+                  Rp {totalKasAmount.toLocaleString('id-ID')}
+                </span>
+              </div>
+            </div>
+          </div>
 
           {duesMsg && (
             <div className="p-3 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold">
@@ -404,7 +445,8 @@ export default function RtDashboardPage() {
             </div>
           )}
 
-          <form onSubmit={handleDuesSubmit} className="grid grid-cols-1 md:grid-cols-6 gap-3">
+          {/* FORM INPUT IURAN */}
+          <form onSubmit={handleDuesSubmit} className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
             <div className="md:col-span-2">
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Warga / Pembayar *</label>
               <input
@@ -413,7 +455,7 @@ export default function RtDashboardPage() {
                 placeholder="Contoh: Saiful"
                 value={duesName}
                 onChange={(e) => setDuesName(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
               />
             </div>
 
@@ -424,7 +466,7 @@ export default function RtDashboardPage() {
                 placeholder="Griya Alfatihah 78"
                 value={duesHouse}
                 onChange={(e) => setDuesHouse(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
               />
             </div>
 
@@ -435,11 +477,10 @@ export default function RtDashboardPage() {
                 required
                 value={duesAmount}
                 onChange={(e) => setDuesAmount(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
               />
             </div>
 
-            {/* DROPDOWN BULAN */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bulan *</label>
               <select
@@ -453,7 +494,6 @@ export default function RtDashboardPage() {
               </select>
             </div>
 
-            {/* DROPDOWN TAHUN */}
             <div>
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tahun *</label>
               <select
@@ -467,7 +507,7 @@ export default function RtDashboardPage() {
               </select>
             </div>
 
-            <div className="md:col-span-6 flex justify-end pt-2">
+            <div className="md:col-span-6 flex justify-end pt-1">
               <button
                 type="submit"
                 disabled={submittingDues}
@@ -477,6 +517,58 @@ export default function RtDashboardPage() {
               </button>
             </div>
           </form>
+
+          {/* TABEL RIWAYAT TRANSAKSI KAS */}
+          <div className="space-y-3 pt-2">
+            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              📜 Riwayat Transaksi Kas Iuran Terdaftar ({duesList.length})
+            </h3>
+
+            {duesList.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed rounded-xl bg-slate-50 text-xs text-slate-500">
+                Belum ada riwayat transaksi iuran kas yang dicatat.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
+                      <th className="p-3">Nama Pembayar</th>
+                      <th className="p-3">Lokasi / Rumah</th>
+                      <th className="p-3">Periode Iuran</th>
+                      <th className="p-3">Nominal (Rp)</th>
+                      <th className="p-3">Tanggal Catat</th>
+                      <th className="p-3 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {duesList.map((d) => (
+                      <tr key={d.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3 font-bold text-slate-900">{d.resident_name}</td>
+                        <td className="p-3 text-slate-600 font-medium">{d.house_number || '-'}</td>
+                        <td className="p-3 font-semibold text-emerald-800">{d.period_month || '-'}</td>
+                        <td className="p-3 font-mono font-bold text-slate-900">
+                          Rp {Number(d.amount).toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3 font-mono text-slate-500 text-[11px]">
+                          {d.paid_at ? new Date(d.paid_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                        </td>
+                        <td className="p-3 text-right">
+                          <button
+                            onClick={() => handleDeleteDues(d.id, d.resident_name)}
+                            className="px-2.5 py-1 bg-red-100 text-red-700 hover:bg-red-200 text-[10px] font-bold rounded-lg transition-colors"
+                          >
+                            🗑️ Hapus
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>
