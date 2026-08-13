@@ -1,6 +1,11 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function loginAdminRT(
   emailOrData: string | FormData | { email?: string; password?: string },
@@ -20,26 +25,58 @@ export async function loginAdminRT(
     password = emailOrData.password || '';
   }
 
-  // Mengambil kredensial dari Environment Variables (Fallback ke default jika tidak diatur)
-  const validEmail = process.env.ADMIN_RT_EMAIL || 'admin@rt.id';
-  const validPassword = process.env.ADMIN_RT_PASSWORD || 'admin123';
+  // Cek pencocokan akun ke database Supabase
+  const { data: admin, error } = await supabase
+    .from('rt_admins')
+    .select('*')
+    .eq('email', email.trim().toLowerCase())
+    .eq('password', password)
+    .single();
 
-  if (email === validEmail && password === validPassword) {
-    const cookieStore = await cookies();
-    cookieStore.set('rt_session', 'authenticated', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: 60 * 60 * 24, // 1 Hari
-      path: '/',
-    });
-    return { success: true };
+  if (error || !admin) {
+    return { success: false, error: 'Email atau kata sandi pengurus RT salah.' };
   }
 
-  return { success: false, error: 'Email atau kata sandi pengurus RT salah.' };
+  // Simpan sesi login di cookie
+  const cookieStore = await cookies();
+  cookieStore.set('rt_session', JSON.stringify({ id: admin.id, name: admin.name, email: admin.email, role: admin.role }), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 60 * 60 * 24, // 1 Hari
+    path: '/',
+  });
+
+  return { success: true, admin };
 }
 
 export async function logoutAdminRT() {
   const cookieStore = await cookies();
   cookieStore.delete('rt_session');
+  return { success: true };
+}
+
+// Server Actions untuk CRUD Pengurus RT dari Web
+export async function getAllRtAdmins() {
+  const { data, error } = await supabase.from('rt_admins').select('id, name, email, role, created_at').order('created_at', { ascending: true });
+  return { success: !error, admins: data || [] };
+}
+
+export async function createRtAdmin(name: string, email: string, password: string, role: string = 'ADMIN') {
+  if (!name || !email || !password) return { success: false, error: 'Semua kolom wajib diisi.' };
+
+  const { data, error } = await supabase.from('rt_admins').insert({
+    name,
+    email: email.trim().toLowerCase(),
+    password,
+    role
+  }).select();
+
+  if (error) return { success: false, error: 'Gagal membuat akun: ' + error.message };
+  return { success: true, data };
+}
+
+export async function deleteRtAdmin(id: string) {
+  const { error } = await supabase.from('rt_admins').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
