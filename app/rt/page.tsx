@@ -4,7 +4,14 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl, updateProperty, deleteProperty } from '../../src/actions/checkin-tenant';
-import { submitDuesPayment, getDuesHistory, deleteDuesRecord, getDuesAuditLogs } from '../../src/actions/manage-dues';
+import {
+  submitDuesPayment,
+  getDuesHistory,
+  deleteDuesRecord,
+  getDuesAuditLogs,
+  DuesItem,
+  DuesAuditLog,
+} from '../../src/actions/manage-dues';
 import { logoutAdminRT, getAllRtAdmins, createRtAdmin, updateRtAdmin, deleteRtAdmin, getCurrentAdminSession } from '../../src/actions/auth';
 
 interface Tenant {
@@ -39,25 +46,6 @@ interface Property {
   pin_locked_until?: string;
   owner_name?: string;
   owner_phone?: string;
-}
-
-interface DuesItem {
-  id: string;
-  resident_name?: string | null;
-  house_number?: string | null;
-  amount: number;
-  period_month?: string | null;
-  paid_at?: string | null;
-  created_at?: string | null;
-}
-
-interface DuesAuditLog {
-  id: string;
-  dues_id?: string;
-  action_type: string;
-  performed_by: string;
-  details: string;
-  created_at?: string;
 }
 
 interface AdminUser {
