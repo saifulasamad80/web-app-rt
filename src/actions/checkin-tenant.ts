@@ -210,3 +210,17 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
     return { success: false, error: err?.message || 'Gagal memproses pendaftaran.' };
   }
 }
+
+
+export async function submitTenantCheckin(formData: FormData): Promise<SubmitResponse> {
+  // Jika format data lama (tanpa array occupants), bungkus otomatis
+  if (!formData.get('occupants') && formData.get('name')) {
+    const singleOccupant = [{
+      name: formData.get('name') as string,
+      birth_date: (formData.get('birth_date') as string) || '2000-01-01',
+      relation: 'Penanggung Jawab'
+    }];
+    formData.append('occupants', JSON.stringify(singleOccupant));
+  }
+  return await submitMultiTenantsStrict(formData);
+}
