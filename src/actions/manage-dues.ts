@@ -2,11 +2,12 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
+import { Database } from '../types/supabase';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export async function submitDuesPayment(formData: FormData) {
   try {
@@ -25,6 +26,7 @@ export async function submitDuesPayment(formData: FormData) {
       resident_name: resident_name,
       house_number: house_number,
       amount: amount,
+      period: period_month,
       period_month: period_month,
       paid_at: new Date().toISOString(),
     }).select();
