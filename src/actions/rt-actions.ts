@@ -81,3 +81,26 @@ export async function approvePropertyByRt(propertyId: string, status: 'APPROVED'
     return { success: false, error: err.message };
   }
 }
+
+export async function resetPropertyPinByRt(propertyId: string, newPin: string) {
+  try {
+    if (!/^\d{4}$/.test(newPin)) {
+      return { success: false, error: 'PIN baru harus berupa 4-digit angka.' };
+    }
+
+    const { error } = await supabase
+      .from('properties')
+      .update({
+        pin_code: newPin,
+        failed_pin_attempts: 0,
+        pin_locked_until: null,
+      })
+      .eq('id', propertyId);
+
+    if (error) return { success: false, error: error.message };
+    try { revalidatePath('/rt'); revalidatePath('/owner'); revalidatePath('/'); } catch(e){}
+    return { success: true, message: 'PIN berhasil direset!' };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}

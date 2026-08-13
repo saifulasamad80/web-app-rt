@@ -46,9 +46,45 @@ export async function getTenantsByPropertyPin(propertyId: string, pinCode: strin
       return { success: false, error: 'Properti tidak ditemukan.' };
     }
 
-    if (prop.pin_code !== pinCode) {
-      return { success: false, error: '🔒 PIN 4-digit salah! Akses ditolak.' };
+    // 1. CEK STATUS UNLOCK / LOCKOUT TERKUNCI 15 MENIT
+    if (prop.pin_locked_until) {
+      const lockUntil = new Date(prop.pin_locked_until);
+      const now = new Date();
+      if (now < lockUntil) {
+        const diffMinutes = Math.ceil((lockUntil.getTime() - now.getTime()) / 60000);
+        return {
+          success: false,
+          error: `🚫 Akses terkunci! Terlalu banyak percobaan PIN salah. Coba lagi dalam ${diffMinutes} menit atau hubungi Pengurus RT.`,
+        };
+      }
     }
+
+    // 2. VERIFIKASI KECOCOKAN PIN 4-DIGIT
+    if (prop.pin_code !== pinCode) {
+      const attempts = (prop.failed_pin_attempts || 0) + 1;
+      let updates: any = { failed_pin_attempts: attempts };
+
+      if (attempts >= 3) {
+        const lockTime = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        updates.pin_locked_until = lockTime;
+        updates.failed_pin_attempts = 0;
+        await supabase.from('properties').update(updates).eq('id', propertyId);
+        return {
+          success: false,
+          error: '🚫 3x PIN salah berturut-turut! Dasbor unit terkunci otomatis selama 15 menit.',
+        };
+      } else {
+        await supabase.from('properties').update(updates).eq('id', propertyId);
+        const sisa = 3 - attempts;
+        return {
+          success: false,
+          error: `🔒 PIN salah! Sisa kesempatan: ${sisa}x lagi sebelum terkunci 15 menit.`,
+        };
+      }
+    }
+
+    // 3. PIN BENAR -> RESET ATTEMPTS & LOCKOUT
+    await supabase.from('properties').update({ failed_pin_attempts: 0, pin_locked_until: null }).eq('id', propertyId);
 
     const { data: tenants, error: tenErr } = await supabase
       .from('tenants')
@@ -77,65 +113,6 @@ export async function getTenantsByPropertyPin(propertyId: string, pinCode: strin
     };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Terjadi kesalahan sistem.' };
-  }
-}
-
-export async function getOwnerPropertiesAndTenants() {
-  try {
-    const { data: properties } = await supabase
-      .from('properties')
-      .select('*')
-      .order('name', { ascending: true });
-
-    const { data: tenants } = await supabase
-      .from('tenants')
-      .select('*')
-      .order('entry_date', { ascending: false });
-
-    const enrichedTenants = (tenants || []).map((t) => {
-      const matchedProp = (properties || []).find((p) => p.id === t.property_id);
-      return {
-        ...t,
-        properties: matchedProp
-          ? {
-              id: matchedProp.id,
-              name: matchedProp.name || matchedProp.property_name || 'Kos Melati 1',
-              type: matchedProp.type || 'kos',
-              slug: matchedProp.slug || 'kos-melati-1',
-            }
-          : {
-              id: 'default',
-              name: 'Kos Melati 1',
-              type: 'kos',
-              slug: 'kos-melati-1',
-            },
-      };
-    });
-
-    return {
-      properties: properties || [],
-      tenants: enrichedTenants,
-      error: null,
-    };
-  } catch (err: any) {
-    return { properties: [], tenants: [], error: err.message };
-  }
-}
-
-export async function getPropertyRules(slug: string) {
-  try {
-    const { data, error } = await supabase
-      .from('properties')
-      .select('id, name, type, house_rules')
-      .eq('slug', slug)
-      .single();
-
-    if (error || !data) {
-      return { success: false, rules: '1. Wajib menjaga ketertiban lingkungan.' };
-    }
-    return { success: true, property: data };
-  } catch (err) {
-    return { success: false, rules: '1. Wajib menjaga ketertiban.' };
   }
 }
 
@@ -215,6 +192,23 @@ export async function getTenantKtpUrl(ktpPath: string) {
     return { success: false, error: 'Berkas KTP tidak ditemukan.' };
   } catch (err: any) {
     return { success: false, error: 'Gagal menghubungkan ke Storage.' };
+  }
+}
+
+export async function getPropertyRules(slug: string) {
+  try {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id, name, type, house_rules')
+      .eq('slug', slug)
+      .single();
+
+    if (error || !data) {
+      return { success: false, rules: '1. Wajib menjaga ketertiban lingkungan.' };
+    }
+    return { success: true, property: data };
+  } catch (err) {
+    return { success: false, rules: '1. Wajib menjaga ketertiban.' };
   }
 }
 

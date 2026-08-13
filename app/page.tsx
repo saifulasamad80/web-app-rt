@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt } from '../src/actions/rt-actions';
+import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../src/actions/rt-actions';
 import { getTenantKtpUrl } from '../src/actions/checkin-tenant';
 import { submitDuesPayment } from '../src/actions/manage-dues';
 import { logoutAdminRT } from '../src/actions/auth';
@@ -33,6 +33,9 @@ interface Property {
   slug: string;
   address?: string;
   status?: string;
+  pin_code?: string;
+  failed_pin_attempts?: number;
+  pin_locked_until?: string;
 }
 
 export default function UnifiedRtDashboard() {
@@ -48,6 +51,12 @@ export default function UnifiedRtDashboard() {
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
   const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
   const [ktpErrorMsg, setKtpErrorMsg] = useState<string>('');
+
+  // State Reset PIN Modal oleh RT
+  const [resetPinProp, setResetPinProp] = useState<Property | null>(null);
+  const [newPinInput, setNewPinInput] = useState('1234');
+  const [resetMsg, setResetMsg] = useState('');
+  const [resettingPin, setResettingPin] = useState(false);
 
   // State Form Iuran Kas RT
   const [duesName, setDuesName] = useState('');
@@ -79,6 +88,24 @@ export default function UnifiedRtDashboard() {
     setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, status: newStatus } : p)));
     await approvePropertyByRt(id, newStatus);
     await loadData();
+  };
+
+  const handleResetPinSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetPinProp || !newPinInput) return;
+
+    setResettingPin(true);
+    const res = await resetPropertyPinByRt(resetPinProp.id, newPinInput);
+    setResettingPin(false);
+
+    if (res.success) {
+      setResetMsg(`🔑 PIN untuk ${resetPinProp.name || resetPinProp.property_name} berhasil direset ke: ${newPinInput}`);
+      setTimeout(() => setResetMsg(''), 4000);
+      setResetPinProp(null);
+      await loadData();
+    } else {
+      alert('Gagal reset PIN: ' + res.error);
+    }
   };
 
   const handleViewKtp = async (tenant: Tenant) => {
@@ -183,7 +210,7 @@ export default function UnifiedRtDashboard() {
   });
 
   const pendingProperties = properties.filter((p) => p.status !== 'APPROVED');
-  const approvedPropertiesCount = properties.filter((p) => p.status === 'APPROVED').length;
+  const approvedProperties = properties.filter((p) => p.status === 'APPROVED');
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-900">
@@ -197,7 +224,7 @@ export default function UnifiedRtDashboard() {
             </span>
             <h1 className="text-2xl font-extrabold mt-2 text-white">Dasbor Pengurus RT Terpadu</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Buku Register Warga Pendatang, Verifikasi Properti, dan Kas Iuran RT
+              Buku Register Warga Pendatang, Verifikasi & Reset PIN Properti, Kas Iuran RT
             </p>
           </div>
 
@@ -222,6 +249,12 @@ export default function UnifiedRtDashboard() {
             </button>
           </div>
         </div>
+
+        {resetMsg && (
+          <div className="p-3 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold">
+            {resetMsg}
+          </div>
+        )}
 
         {/* PANEL PERMOHONAN PROPERTI KOS/KONTRAKAN BARU */}
         {pendingProperties.length > 0 && (
@@ -268,6 +301,38 @@ export default function UnifiedRtDashboard() {
           </div>
         )}
 
+        {/* PANEL MANAJEMEN PIN KOS/KONTRAKAN TERDAFTAR (KHUSUS RT) */}
+        <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
+          <div className="flex justify-between items-center border-b pb-2">
+            <h3 className="text-sm font-bold text-slate-900 uppercase">
+              🔑 Manajemen PIN Operasional Pemilik Unit ({properties.length})
+            </h3>
+            <span className="text-[11px] text-slate-500">Fitur Bantuan RT Saat Pemilik Lupa PIN</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {properties.map((p) => (
+              <div key={p.id} className="p-3 bg-slate-50 border rounded-xl flex justify-between items-center gap-2">
+                <div>
+                  <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] font-mono text-slate-500">PIN: <b>{p.pin_code || '1234'}</b></span>
+                    {p.pin_locked_until && new Date(p.pin_locked_until) > new Date() && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 bg-red-100 text-red-700 rounded">TERKUNCI</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setResetPinProp(p); setNewPinInput(p.pin_code || '1234'); }}
+                  className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-900"
+                >
+                  🔑 Reset PIN
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* STATS CARDS RT */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
@@ -288,7 +353,7 @@ export default function UnifiedRtDashboard() {
           </div>
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
             <span className="text-xs font-bold text-slate-500 uppercase">Unit Properti Terverifikasi</span>
-            <p className="text-3xl font-black text-slate-800 mt-1">{approvedPropertiesCount}</p>
+            <p className="text-3xl font-black text-slate-800 mt-1">{approvedProperties.length}</p>
           </div>
         </div>
 
@@ -503,6 +568,55 @@ export default function UnifiedRtDashboard() {
         </div>
 
       </div>
+
+      {/* MODAL RESET PIN PROPERTI OLEH RT */}
+      {resetPinProp && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">🔑 Reset PIN Pemilik Unit (Akses Master RT)</h3>
+              <button onClick={() => setResetPinProp(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleResetPinSubmit} className="p-5 space-y-4">
+              <div>
+                <h4 className="font-bold text-slate-900 text-sm">{resetPinProp.name || resetPinProp.property_name}</h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">Atur ulang PIN 4-digit untuk diberikan kepada pemilik unit yang lupa PIN:</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">PIN 4-Digit Baru</label>
+                <input
+                  type="password"
+                  maxLength={4}
+                  required
+                  placeholder="Contoh: 1234"
+                  value={newPinInput}
+                  onChange={(e) => setNewPinInput(e.target.value.replace(/\D/g, ''))}
+                  className="w-full text-center text-2xl tracking-[0.5em] p-3 border-2 border-slate-300 rounded-xl font-mono focus:border-emerald-600 outline-none"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetPinProp(null)}
+                  className="flex-1 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingPin || newPinInput.length !== 4}
+                  className="flex-1 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 shadow transition-all"
+                >
+                  {resettingPin ? 'Menyimpan...' : 'Simpan PIN Baru'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL PERIKSA KTP RT */}
       {(selectedTenantName || loadingKtp) && (
