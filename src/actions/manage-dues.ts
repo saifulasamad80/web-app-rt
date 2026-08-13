@@ -3,6 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 import { Database } from '../types/supabase';
+import { getCurrentAdminSession } from './auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -11,6 +12,9 @@ const supabase = createClient<Database>(supabaseUrl, supabaseKey);
 
 export async function submitDuesPayment(formData: FormData) {
   try {
+    const session = await getCurrentAdminSession();
+    const performer = session ? `${session.name} (${session.email})` : 'Pengurus RT';
+
     const resident_name = (formData.get('resident_name') as string) || (formData.get('name') as string) || '';
     const house_number = (formData.get('house_number') as string) || (formData.get('house') as string) || 'Lingkungan RT';
     const amountRaw = formData.get('amount') as string;
@@ -34,6 +38,16 @@ export async function submitDuesPayment(formData: FormData) {
     if (error) {
       return { success: false, error: 'Gagal menyimpan iuran ke database: ' + error.message };
     }
+
+    const createdRecord = data && data[0] ? data[0] : null;
+
+    // Catat ke Audit Log
+    await supabase.from('dues_audit_logs').insert({
+      dues_id: createdRecord?.id || '',
+      action_type: 'CREATE',
+      performed_by: performer,
+      details: `Mencatat iuran masuk atas nama ${resident_name} (${house_number}) sebesar Rp ${amount.toLocaleString('id-ID')} untuk periode ${period_month}.`,
+    });
 
     try {
       revalidatePath('/rt');
@@ -62,12 +76,46 @@ export async function getDuesHistory() {
   }
 }
 
+export async function getDuesAuditLogs() {
+  try {
+    const { data, error } = await supabase
+      .from('dues_audit_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      return { success: false, logs: [], error: error.message };
+    }
+
+    return { success: true, logs: data || [] };
+  } catch (err: any) {
+    return { success: false, logs: [], error: err?.message || 'Kesalahan koneksi.' };
+  }
+}
+
 export async function deleteDuesRecord(id: string) {
   try {
+    const session = await getCurrentAdminSession();
+    const performer = session ? `${session.name} (${session.email})` : 'Pengurus RT';
+
+    // Ambil data iuran sebelum dihapus untuk log
+    const { data: targetDues } = await supabase.from('dues').select('*').eq('id', id).single();
+
     const { error } = await supabase.from('dues').delete().eq('id', id);
 
     if (error) {
       return { success: false, error: error.message };
+    }
+
+    // Catat Hapus ke Audit Log
+    if (targetDues) {
+      await supabase.from('dues_audit_logs').insert({
+        dues_id: id,
+        action_type: 'DELETE',
+        performed_by: performer,
+        details: `MENGHAPUS catatan iuran milik ${targetDues.resident_name} (${targetDues.house_number}) sebesar Rp ${Number(targetDues.amount).toLocaleString('id-ID')} periode ${targetDues.period_month}.`,
+      });
     }
 
     try {

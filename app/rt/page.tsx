@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl, updateProperty, deleteProperty } from '../../src/actions/checkin-tenant';
-import { submitDuesPayment, getDuesHistory, deleteDuesRecord } from '../../src/actions/manage-dues';
+import { submitDuesPayment, getDuesHistory, deleteDuesRecord, getDuesAuditLogs } from '../../src/actions/manage-dues';
 import { logoutAdminRT, getAllRtAdmins, createRtAdmin, updateRtAdmin, deleteRtAdmin, getCurrentAdminSession } from '../../src/actions/auth';
 
 interface Tenant {
@@ -51,6 +51,15 @@ interface DuesItem {
   created_at?: string | null;
 }
 
+interface DuesAuditLog {
+  id: string;
+  dues_id?: string;
+  action_type: string;
+  performed_by: string;
+  details: string;
+  created_at?: string;
+}
+
 interface AdminUser {
   id: string;
   name: string;
@@ -71,6 +80,7 @@ export default function RtDashboardPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [duesList, setDuesList] = useState<DuesItem[]>([]);
+  const [duesLogs, setDuesLogs] = useState<DuesAuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProperty, setSelectedProperty] = useState('ALL');
@@ -116,7 +126,6 @@ export default function RtDashboardPage() {
   const [newAdminPass, setNewAdminPass] = useState('');
   const [savingAdmin, setSavingAdmin] = useState(false);
 
-  // State Edit Pengurus Spesifik
   const [editingAdminUser, setEditingAdminUser] = useState<AdminUser | null>(null);
   const [editAdminName, setEditAdminName] = useState('');
   const [editAdminEmail, setEditAdminEmail] = useState('');
@@ -135,6 +144,10 @@ export default function RtDashboardPage() {
 
     const duesRes = await getDuesHistory();
     setDuesList(duesRes.dues || []);
+
+    const logRes = await getDuesAuditLogs();
+    setDuesLogs(logRes.logs || []);
+
     setLoading(false);
   };
 
@@ -586,7 +599,7 @@ export default function RtDashboardPage() {
           )}
         </div>
 
-        {/* MODUL PENCATATAN & RIWAYAT IURAN KAS RT */}
+        {/* MODUL PENCATATAN & AUDIT KAS IURAN RT */}
         <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
             <div>
@@ -737,6 +750,57 @@ export default function RtDashboardPage() {
             )}
           </div>
 
+          {/* TABEL LOG AKTIVITAS AUDIT IURAN */}
+          <div className="space-y-3 pt-4 border-t border-slate-200">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <span>🛡️ Log Aktivitas Audit Iuran (Audit Trail)</span>
+              </h3>
+              <span className="text-[10px] font-mono text-slate-500">{duesLogs.length} Entri Terakhir</span>
+            </div>
+
+            {duesLogs.length === 0 ? (
+              <div className="p-6 text-center border rounded-xl bg-slate-50 text-xs text-slate-500">
+                Belum ada aktivitas audit iuran yang terekam.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-slate-200">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-900 text-white font-bold uppercase text-[9px]">
+                      <th className="p-2.5">Waktu Exec</th>
+                      <th className="p-2.5">Aksi</th>
+                      <th className="p-2.5">Pengurus / Eksekutor</th>
+                      <th className="p-2.5">Detail Log Aktivitas Audit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {duesLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50">
+                        <td className="p-2.5 font-mono text-slate-500 text-[10px]">
+                          {log.created_at ? new Date(log.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
+                        </td>
+                        <td className="p-2.5">
+                          {log.action_type === 'CREATE' ? (
+                            <span className="text-[9px] font-extrabold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
+                              ➕ CATAT
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-extrabold px-2 py-0.5 bg-red-100 text-red-800 rounded">
+                              🗑️ HAPUS
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-2.5 font-semibold text-slate-900">{log.performed_by}</td>
+                        <td className="p-2.5 text-slate-700 font-medium">{log.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>
@@ -813,7 +877,7 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL KELOLA AKUN PENGURUS RT & EDIT AKUN PENGURUS (SUPER ADMIN) */}
+      {/* MODAL KELOLA AKUN PENGURUS RT & EDIT AKUN PENGURUS */}
       {showAdminModal && isSuperAdmin && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 space-y-0">
@@ -826,7 +890,6 @@ export default function RtDashboardPage() {
 
             <div className="p-5 space-y-5 bg-slate-50 max-h-[80vh] overflow-y-auto">
               
-              {/* FORM EDIT PENGURUS YANG DIPILIH */}
               {editingAdminUser ? (
                 <form onSubmit={handleUpdateAdminSubmit} className="bg-amber-50 p-4 rounded-xl border border-amber-300 space-y-3">
                   <div className="flex justify-between items-center">
@@ -904,7 +967,6 @@ export default function RtDashboardPage() {
                   </div>
                 </form>
               ) : (
-                /* FORM BUAT AKUN PENGURUS BARU */
                 <form onSubmit={handleCreateAdminSubmit} className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
                   <h4 className="text-xs font-bold text-slate-900 uppercase">➕ Tambah Akun Pengurus Baru</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -966,7 +1028,6 @@ export default function RtDashboardPage() {
                 </form>
               )}
 
-              {/* TABEL DAFTAR AKUN PENGURUS TERDAFTAR */}
               <div className="space-y-2">
                 <h4 className="text-xs font-bold text-slate-800 uppercase">📋 Daftar Pengurus Terdaftar ({adminList.length})</h4>
                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
