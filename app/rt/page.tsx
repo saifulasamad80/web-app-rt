@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl } from '../../src/actions/checkin-tenant';
 import { submitDuesPayment, getDuesHistory, deleteDuesRecord } from '../../src/actions/manage-dues';
-import { logoutAdminRT, getAllRtAdmins, createRtAdmin, deleteRtAdmin } from '../../src/actions/auth';
+import { logoutAdminRT, getAllRtAdmins, createRtAdmin, deleteRtAdmin, getCurrentAdminSession } from '../../src/actions/auth';
 
 interface Tenant {
   id: string;
@@ -73,6 +73,9 @@ export default function RtDashboardPage() {
   const [selectedProperty, setSelectedProperty] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
 
+  // Sesi Admin Aktif
+  const [currentAdmin, setCurrentAdmin] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+
   const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
@@ -104,6 +107,9 @@ export default function RtDashboardPage() {
 
   const loadData = async () => {
     setLoading(true);
+    const session = await getCurrentAdminSession();
+    setCurrentAdmin(session);
+
     const res = await getRtDashboardData();
     setProperties(res.properties || []);
     setTenants(res.tenants || []);
@@ -260,6 +266,8 @@ export default function RtDashboardPage() {
   const totalKasAmount = duesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
   const fontClass = textScale === 'lg' ? 'text-sm' : textScale === 'sm' ? 'text-[11px]' : 'text-xs';
 
+  const isSuperAdmin = currentAdmin?.role === 'SUPER_ADMIN';
+
   return (
     <main className={`min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900 ${fontClass}`}>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -273,18 +281,21 @@ export default function RtDashboardPage() {
             <h1 className="text-xl md:text-2xl font-extrabold mt-2 text-white">Dasbor Pengurus RT Terpadu</h1>
             <p className="text-xs text-slate-400 mt-0.5">
               Buku Register Warga Pendatang, Verifikasi & Reset PIN Properti, Kas Iuran RT
+              {currentAdmin && <span className="text-emerald-400 block mt-0.5">👤 Login Sebagai: <b>{currentAdmin.name}</b> ({currentAdmin.role})</span>}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             
-            {/* TOMBOL KELOLA AKUN PENGURUS RT */}
-            <button
-              onClick={handleOpenAdminModal}
-              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1.5"
-            >
-              <span>⚙️ Kelola Pengurus</span>
-            </button>
+            {/* TOMBOL HANYA MUNCUL JIKA ROLE === SUPER_ADMIN */}
+            {isSuperAdmin && (
+              <button
+                onClick={handleOpenAdminModal}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1.5"
+              >
+                <span>⚙️ Kelola Pengurus</span>
+              </button>
+            )}
 
             {/* WIDGET ZOOM FONT */}
             <div className="bg-slate-800/90 p-1 rounded-xl border border-slate-700 flex items-center gap-1 shadow-inner">
@@ -600,13 +611,13 @@ export default function RtDashboardPage() {
 
       </div>
 
-      {/* MODAL KELOLA AKUN PENGURUS RT */}
-      {showAdminModal && (
+      {/* MODAL KELOLA AKUN PENGURUS RT (KHUSUS SUPER_ADMIN) */}
+      {showAdminModal && isSuperAdmin && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 space-y-0">
             <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
               <h3 className="text-xs font-bold flex items-center gap-2">
-                <span>⚙️ Kelola Akun Pengurus RT</span>
+                <span>⚙️ Kelola Akun Pengurus RT (Hak Akses Super Admin)</span>
               </h3>
               <button onClick={() => setShowAdminModal(false)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
             </div>
@@ -683,12 +694,16 @@ export default function RtDashboardPage() {
                           </td>
                           <td className="p-2.5 font-mono text-slate-600">{adm.email}</td>
                           <td className="p-2.5 text-right">
-                            <button
-                              onClick={() => handleDeleteAdmin(adm.id, adm.name)}
-                              className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded hover:bg-red-200"
-                            >
-                              Hapus
-                            </button>
+                            {adm.role !== 'SUPER_ADMIN' ? (
+                              <button
+                                onClick={() => handleDeleteAdmin(adm.id, adm.name)}
+                                className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded hover:bg-red-200"
+                              >
+                                Hapus
+                              </button>
+                            ) : (
+                              <span className="text-[9px] text-slate-400 font-semibold">Utama</span>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -47,6 +47,17 @@ export async function loginAdminRT(
   return { success: true, admin };
 }
 
+export async function getCurrentAdminSession() {
+  const cookieStore = await cookies();
+  const sessionVal = cookieStore.get('rt_session')?.value;
+  if (!sessionVal) return null;
+  try {
+    return JSON.parse(sessionVal);
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function logoutAdminRT() {
   const cookieStore = await cookies();
   cookieStore.delete('rt_session');
