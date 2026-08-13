@@ -24,6 +24,7 @@ interface Tenant {
 interface Property {
   id: string;
   name: string;
+  status?: string;
   property_name?: string;
   type: string;
   slug: string;
@@ -256,9 +257,20 @@ export default function OwnerDashboard() {
               {properties.map((prop) => (
                 <div key={prop.id} className="p-4 border rounded-lg bg-gray-50 flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
-                      {prop.type}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
+                        {prop.type}
+                      </span>
+                      {prop.status === 'APPROVED' ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">
+                          ✅ VERIFIED RT
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
+                          ⚠️ MENUNGGU VERIFIKASI RT
+                        </span>
+                      )}
+                    </div>
                     <h3 className="font-bold text-base mt-1">{prop.name || prop.property_name}</h3>
                     <p className="text-xs text-gray-500 font-mono">/checkin/{prop.slug}</p>
                   </div>
