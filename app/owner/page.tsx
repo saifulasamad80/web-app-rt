@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { getOwnerPropertiesAndTenants, updateTenantStatus, getTenantKtpUrl, deleteTenant, updateHouseRules } from '../../src/actions/checkin-tenant';
+import { getOwnerPropertiesAndTenants, createProperty, updateTenantStatus, getTenantKtpUrl, deleteTenant, updateHouseRules } from '../../src/actions/checkin-tenant';
 
 interface Tenant {
   id: string;
@@ -52,6 +52,34 @@ export default function OwnerDashboard() {
   const [editingRulesProp, setEditingRulesProp] = useState<Property | null>(null);
   const [rulesText, setRulesText] = useState<string>('');
   const [savingRules, setSavingRules] = useState<boolean>(false);
+
+  
+  const [showAddPropModal, setShowAddPropModal] = useState<boolean>(false);
+  const [newPropName, setNewPropName] = useState<string>('');
+  const [newPropType, setNewPropType] = useState<'kos' | 'kontrakan'>('kos');
+  const [newPropAddress, setNewPropAddress] = useState<string>('');
+  const [newPropRules, setNewPropRules] = useState<string>('');
+  const [creatingProp, setCreatingProp] = useState<boolean>(false);
+
+  const handleCreatePropertySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPropName) return;
+    setCreatingProp(true);
+    const res = await createProperty(newPropName, newPropType, newPropAddress, newPropRules);
+    setCreatingProp(false);
+
+    if (res && res.success) {
+      setCopyMsg('Properti baru "' + newPropName + '" berhasil dibuat dan menunggu verifikasi RT!');
+      setTimeout(() => setCopyMsg(''), 4000);
+      setShowAddPropModal(false);
+      setNewPropName('');
+      setNewPropAddress('');
+      setNewPropRules('');
+      await fetchData();
+    } else {
+      alert('Gagal menambah properti: ' + (res?.error || 'Kesalahan teknis'));
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -233,7 +261,15 @@ export default function OwnerDashboard() {
 
         {/* PROPERTI MILIK ANDA & PENGATURAN TATA TERTIB */}
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
-          <h2 className="text-lg font-bold mb-3">Properti Milik Anda</h2>
+          <div className="flex justify-between items-center mb-3">
+          <h2 className="text-lg font-bold">Properti Milik Anda</h2>
+          <button
+            onClick={() => setShowAddPropModal(true)}
+            className="px-3.5 py-1.5 bg-emerald-700 text-white font-bold text-xs rounded-lg hover:bg-emerald-800 transition-all shadow-sm"
+          >
+            + Tambah Properti Baru
+          </button>
+        </div>
           {properties.length === 0 ? (
             <div className="p-4 border rounded-lg bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div>
@@ -564,6 +600,45 @@ export default function OwnerDashboard() {
         </div>
       )}
 
+    
+      {showAddPropModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-200">
+            <div className="p-4 bg-emerald-900 text-white flex justify-between items-center">
+              <h3 className="text-sm font-bold">🏢 Daftarkan Properti Kos / Kontrakan Baru</h3>
+              <button onClick={() => setShowAddPropModal(false)} className="text-gray-300 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+            <form onSubmit={handleCreatePropertySubmit} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-700">Nama Unit / Properti *</label>
+                <input type="text" required placeholder="Contoh: Kontrakan Berkah" value={newPropName} onChange={(e) => setNewPropName(e.target.value)} className="w-full text-xs p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-700">Tipe Properti *</label>
+                <select value={newPropType} onChange={(e) => setNewPropType(e.target.value as 'kos' | 'kontrakan')} className="w-full text-xs p-2.5 border rounded-lg bg-white font-semibold text-gray-800">
+                  <option value="kos">Kos-kosan (Per Kamar)</option>
+                  <option value="kontrakan">Kontrakan (1 Rumah / Unit)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-700">Alamat Lengkap Unit</label>
+                <input type="text" placeholder="Contoh: Jl. Melati No. 88 RT 02/RW 05" value={newPropAddress} onChange={(e) => setNewPropAddress(e.target.value)} className="w-full text-xs p-2.5 border rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1 text-gray-700">Tata Tertib Khusus Unit (Opsional)</label>
+                <textarea rows={3} placeholder="Tuliskan aturan khusus jika ada..." value={newPropRules} onChange={(e) => setNewPropRules(e.target.value)} className="w-full text-xs p-2 border rounded-lg font-mono outline-none"></textarea>
+              </div>
+              <div className="pt-2 flex justify-end gap-2">
+                <button type="button" onClick={() => setShowAddPropModal(false)} className="px-4 py-2 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-300">Batal</button>
+                <button type="submit" disabled={creatingProp} className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-lg hover:bg-emerald-800 disabled:bg-gray-400">
+                  {creatingProp ? 'Mendaftarkan...' : 'Daftarkan Properti'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    
     </main>
   );
 }
