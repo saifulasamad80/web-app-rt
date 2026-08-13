@@ -203,14 +203,22 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
       const file = formData.get(fileKey) as File | null;
 
       if (file && file.size > 0) {
-        const fileExt = file.name.split('.').pop();
+        const fileExt = file.name.split('.').pop() || 'jpg';
         const fileName = household_id + '_' + i + '_' + Date.now() + '.' + fileExt;
 
         const { data: storageData, error: uploadErr } = await supabase.storage
           .from('ktp-documents')
-          .upload(fileName, file);
+          .upload(fileName, file, { upsert: true });
 
-        if (!uploadErr && storageData) {
+        if (uploadErr) {
+          console.error('Storage Upload Error:', uploadErr);
+          return {
+            success: false,
+            error: 'Gagal mengunggah berkas KTP ke Storage: ' + uploadErr.message,
+          };
+        }
+
+        if (storageData) {
           ktp_url = storageData.path;
         }
       }
