@@ -229,14 +229,28 @@ export default function OwnerDashboard() {
         <div className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h2 className="text-lg font-bold mb-3">Properti Milik Anda</h2>
           {properties.length === 0 ? (
-            <div className="text-sm text-gray-500">
-              Properti default: <span className="font-mono font-semibold">kos-melati-1</span>
-              <button
-                onClick={() => handleCopyLink('kos-melati-1')}
-                className="ml-3 px-2.5 py-1 bg-emerald-700 text-white text-xs font-semibold rounded hover:bg-emerald-800"
-              >
-                📋 Salin Link Check-In
-              </button>
+            <div className="p-4 border rounded-lg bg-gray-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
+                  KOS
+                </span>
+                <h3 className="font-bold text-base mt-1">Kos Melati 1 (Default)</h3>
+                <p className="text-xs text-gray-500 font-mono">/checkin/kos-melati-1</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleCopyLink('kos-melati-1')}
+                  className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded hover:bg-emerald-800"
+                >
+                  📋 Salin Link
+                </button>
+                <button
+                  onClick={() => handleOpenRulesModal({ id: 'default', name: 'Kos Melati 1', type: 'kos', slug: 'kos-melati-1', address: '', house_rules: '' })}
+                  className="px-3 py-1.5 bg-slate-800 text-white text-xs font-semibold rounded hover:bg-slate-900 inline-flex items-center gap-1"
+                >
+                  📜 Atur Tata Tertib
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
