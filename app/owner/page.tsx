@@ -39,6 +39,8 @@ interface Property {
   address?: string;
   house_rules?: string;
   status?: string;
+  owner_name?: string;
+  owner_phone?: string;
 }
 
 export default function OwnerDashboard() {
@@ -48,34 +50,31 @@ export default function OwnerDashboard() {
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [copyMsg, setCopyMsg] = useState('');
 
-  // Fitur Ukuran Teks A- / A+ (Foto 6)
   const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
 
-  // State Modal Input PIN
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
   const [targetPropForUnlock, setTargetPropForUnlock] = useState<Property | null>(null);
   const [inputPin, setInputPin] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
   const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
 
-  // State Modal Tambah Properti Baru
+  // Modal Tambah Properti Baru
   const [showAddPropModal, setShowAddPropModal] = useState<boolean>(false);
   const [newPropName, setNewPropName] = useState<string>('');
   const [newPropType, setNewPropType] = useState<'kos' | 'kontrakan'>('kos');
+  const [newPropOwnerName, setNewPropOwnerName] = useState<string>('');
+  const [newPropOwnerPhone, setNewPropOwnerPhone] = useState<string>('');
   const [newPropAddress, setNewPropAddress] = useState<string>('');
   const [newPropRules, setNewPropRules] = useState<string>('');
   const [newPropPin, setNewPropPin] = useState<string>('');
   const [creatingProp, setCreatingProp] = useState<boolean>(false);
 
-  // State Modal Edit Tata Tertib
   const [editingRulesProp, setEditingRulesProp] = useState<Property | null>(null);
   const [rulesText, setRulesText] = useState<string>('');
   const [savingRules, setSavingRules] = useState<boolean>(false);
 
-  // State Modal Poster QR
   const [posterProp, setPosterProp] = useState<Property | null>(null);
 
-  // State Modal KTP
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
   const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
@@ -130,7 +129,15 @@ export default function OwnerDashboard() {
     }
 
     setCreatingProp(true);
-    const res = await createProperty(newPropName, newPropType, newPropAddress, newPropRules, newPropPin);
+    const res = await createProperty(
+      newPropName,
+      newPropType,
+      newPropAddress,
+      newPropRules,
+      newPropPin,
+      newPropOwnerName,
+      newPropOwnerPhone
+    );
     setCreatingProp(false);
 
     if (res && res.success) {
@@ -138,6 +145,8 @@ export default function OwnerDashboard() {
       setTimeout(() => setCopyMsg(''), 4000);
       setShowAddPropModal(false);
       setNewPropName('');
+      setNewPropOwnerName('');
+      setNewPropOwnerPhone('');
       setNewPropAddress('');
       setNewPropRules('');
       setNewPropPin('');
@@ -237,7 +246,7 @@ export default function OwnerDashboard() {
     <main className={`min-h-screen p-3 md:p-8 bg-slate-100 text-slate-900 ${fontClass}`}>
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER DENGAN TOMBOL KELUAR KE PAGE UTAMA (FOTO 4) DAN PENYESUAI UKURAN FONT A-/A+ (FOTO 6) */}
+        {/* HEADER */}
         <div className="bg-emerald-950 text-white p-5 md:p-6 rounded-2xl shadow-xl border border-emerald-900 space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
@@ -247,7 +256,6 @@ export default function OwnerDashboard() {
               </p>
             </div>
 
-            {/* CONTROLS FONT SIZE (FOTO 6) DAN KELUAR (FOTO 4) */}
             <div className="flex flex-wrap items-center gap-2">
               <div className="bg-emerald-900/80 p-1 rounded-xl border border-emerald-700/60 flex items-center gap-1">
                 <span className="text-[10px] font-bold px-2 text-emerald-300">Ukuran Teks:</span>
@@ -344,8 +352,11 @@ export default function OwnerDashboard() {
                       )}
                     </div>
                     <h3 className="font-bold text-base mt-2 text-slate-900">{prop.name || prop.property_name}</h3>
-                    <p className="text-xs text-slate-500 font-mono break-all">/checkin/{prop.slug}</p>
-                    <p className="text-xs text-slate-600 mt-1">{prop.address || 'Alamat belum diatur'}</p>
+                    {prop.owner_name && (
+                      <p className="text-xs text-emerald-800 font-semibold mt-0.5">👤 Pemilik: {prop.owner_name} {prop.owner_phone ? `(${prop.owner_phone})` : ''}</p>
+                    )}
+                    <p className="text-xs text-slate-500 font-mono break-all mt-1">/checkin/{prop.slug}</p>
+                    <p className="text-xs text-slate-600 mt-0.5">{prop.address || 'Alamat belum diatur'}</p>
                   </div>
 
                   <div className="pt-2 border-t border-slate-200 space-y-2">
@@ -396,6 +407,7 @@ export default function OwnerDashboard() {
                   DASBOR KHUSUS UNIT TERVERIFIKASI PIN
                 </span>
                 <h2 className="text-lg font-bold mt-1 text-white">{activeProperty.name || activeProperty.property_name}</h2>
+                {activeProperty.owner_name && <p className="text-xs text-emerald-200 mt-0.5">Pemilik Resmi: {activeProperty.owner_name}</p>}
               </div>
               <button
                 onClick={() => handleOpenRulesModal(activeProperty)}
@@ -424,7 +436,6 @@ export default function OwnerDashboard() {
               </div>
             </div>
 
-            {/* FOTO 5: DESAIN TAMPILAN RESPONSIF MOBILE TANPA OVERFLOW KANAN-KIRI */}
             <div className="bg-white p-4 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                 Daftar Penghuni / Penyewa Khusus: {activeProperty.name || activeProperty.property_name}
@@ -436,7 +447,6 @@ export default function OwnerDashboard() {
                 </div>
               ) : (
                 <>
-                  {/* TAMPILAN CARD MOBILE (SOLUSI FOTO 5 HP) */}
                   <div className="block md:hidden space-y-3">
                     {tenants.map((t) => {
                       const st = (t.status || '').toUpperCase();
@@ -507,7 +517,6 @@ export default function OwnerDashboard() {
                     })}
                   </div>
 
-                  {/* TAMPILAN TABEL DESKTOP */}
                   <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
@@ -629,6 +638,7 @@ export default function OwnerDashboard() {
 
               <div className="py-2">
                 <h3 className="text-lg font-bold text-emerald-900">{posterProp.name || posterProp.property_name}</h3>
+                {posterProp.owner_name && <p className="text-xs text-slate-700 font-semibold">Pemilik: {posterProp.owner_name}</p>}
                 <p className="text-xs text-slate-500">{posterProp.address || 'Wilayah Lingkungan RT'}</p>
               </div>
 
@@ -719,7 +729,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PROPERTI BARU */}
+      {/* MODAL TAMBAH PROPERTI BARU (LENGKAP INPUT PEMILIK & NO WA) */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
@@ -728,7 +738,7 @@ export default function OwnerDashboard() {
               <button onClick={() => setShowAddPropModal(false)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
             </div>
 
-            <form onSubmit={handleCreatePropertySubmit} className="p-5 space-y-3.5">
+            <form onSubmit={handleCreatePropertySubmit} className="p-5 space-y-3">
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
                 <input
@@ -739,6 +749,31 @@ export default function OwnerDashboard() {
                   onChange={(e) => setNewPropName(e.target.value)}
                   className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Bpk. Hj. Ahmad"
+                    value={newPropOwnerName}
+                    onChange={(e) => setNewPropOwnerName(e.target.value)}
+                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="08123456789"
+                    value={newPropOwnerPhone}
+                    onChange={(e) => setNewPropOwnerPhone(e.target.value)}
+                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none font-mono"
+                  />
+                </div>
               </div>
 
               <div>
@@ -781,7 +816,7 @@ export default function OwnerDashboard() {
               <div>
                 <label className="block text-xs font-bold mb-1 text-slate-700">Tata Tertib Khusus Unit (Opsional)</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Tuliskan aturan khusus..."
                   value={newPropRules}
                   onChange={(e) => setNewPropRules(e.target.value)}

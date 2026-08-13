@@ -37,6 +37,8 @@ interface Property {
   pin_code?: string;
   failed_pin_attempts?: number;
   pin_locked_until?: string;
+  owner_name?: string;
+  owner_phone?: string;
 }
 
 interface DuesItem {
@@ -239,6 +241,13 @@ export default function RtDashboardPage() {
     }
   };
 
+  const formatPhoneToWA = (phone?: string) => {
+    if (!phone) return '';
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('0')) cleaned = '62' + cleaned.slice(1);
+    return cleaned;
+  };
+
   const handleLogout = async () => {
     await logoutAdminRT();
     window.location.href = '/';
@@ -331,35 +340,56 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* PANEL MANAJEMEN PIN KOS/KONTRAKAN TERDAFTAR */}
+        {/* PANEL MANAJEMEN PIN & INFORMASI PEMILIK UNIT */}
         <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
           <div className="flex justify-between items-center border-b pb-2">
             <h3 className="text-sm font-bold text-slate-900 uppercase">
-              🔑 Manajemen PIN Operasional Pemilik Unit ({properties.length})
+              🔑 Manajemen PIN Operasional & Pemilik Unit ({properties.length})
             </h3>
-            <span className="text-[11px] text-slate-500">Fitur Bantuan RT</span>
+            <span className="text-[11px] text-slate-500">Fitur Kontak Pemilik & Bantuan RT</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {properties.map((p) => (
-              <div key={p.id} className="p-3 bg-slate-50 border rounded-xl flex justify-between items-center gap-2">
-                <div>
-                  <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[10px] font-mono text-slate-500">PIN: <b>{p.pin_code || '1234'}</b></span>
-                    {p.pin_locked_until && new Date(p.pin_locked_until) > new Date() && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.2 bg-red-100 text-red-700 rounded">TERKUNCI</span>
+            {properties.map((p) => {
+              const ownerWa = formatPhoneToWA(p.owner_phone);
+
+              return (
+                <div key={p.id} className="p-3.5 bg-slate-50 border rounded-xl flex flex-col justify-between gap-2.5">
+                  <div>
+                    <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
+                    <p className="text-[11px] text-slate-600 font-medium mt-0.5">👤 Pemilik: <b>{p.owner_name || 'Belum Diisi'}</b></p>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="text-[10px] font-mono text-slate-500">PIN: <b>{p.pin_code || '1234'}</b></span>
+                      {p.pin_locked_until && new Date(p.pin_locked_until) > new Date() && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-red-100 text-red-700 rounded">TERKUNCI</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-200">
+                    {ownerWa ? (
+                      <a
+                        href={`https://wa.me/${ownerWa}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                      >
+                        💬 Hubungi Pemilik
+                      </a>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 italic">No WA -</span>
                     )}
+
+                    <button
+                      onClick={() => { setResetPinProp(p); setNewPinInput(p.pin_code || '1234'); }}
+                      className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-900"
+                    >
+                      🔑 Reset PIN
+                    </button>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setResetPinProp(p); setNewPinInput(p.pin_code || '1234'); }}
-                  className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-900"
-                >
-                  🔑 Reset PIN
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -681,7 +711,6 @@ export default function RtDashboardPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                       {adminList.map((adm) => {
-                        // KONDISI BARU: HANYA LINDUNGI AKUN YANG SEDANG DIGUNAKAN UNTUK LOGIN SAAT INI
                         const isSelf = adm.id === currentAdmin?.id;
 
                         return (
