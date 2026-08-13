@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl } from '../../src/actions/checkin-tenant';
 import { submitDuesPayment, getDuesHistory, deleteDuesRecord } from '../../src/actions/manage-dues';
-import { logoutAdminRT } from '../../src/actions/auth';
+import { logoutAdminRT, getAllRtAdmins, createRtAdmin, deleteRtAdmin } from '../../src/actions/auth';
 
 interface Tenant {
   id: string;
@@ -49,6 +49,14 @@ interface DuesItem {
   created_at?: string | null;
 }
 
+interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  created_at?: string;
+}
+
 const MONTH_OPTIONS = [
   'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
   'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
@@ -65,7 +73,6 @@ export default function RtDashboardPage() {
   const [selectedProperty, setSelectedProperty] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
 
-  // Pengatur Skala Teks (Font Zoom)
   const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
@@ -87,6 +94,14 @@ export default function RtDashboardPage() {
   const [duesMsg, setDuesMsg] = useState('');
   const [submittingDues, setSubmittingDues] = useState(false);
 
+  // Modal Kelola Akun Pengurus RT
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminList, setAdminList] = useState<AdminUser[]>([]);
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPass, setNewAdminPass] = useState('');
+  const [savingAdmin, setSavingAdmin] = useState(false);
+
   const loadData = async () => {
     setLoading(true);
     const res = await getRtDashboardData();
@@ -101,6 +116,41 @@ export default function RtDashboardPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const loadAdminUsers = async () => {
+    const res = await getAllRtAdmins();
+    setAdminList(res.admins || []);
+  };
+
+  const handleOpenAdminModal = () => {
+    setShowAdminModal(true);
+    loadAdminUsers();
+  };
+
+  const handleCreateAdminSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAdminName || !newAdminEmail || !newAdminPass) return;
+
+    setSavingAdmin(true);
+    const res = await createRtAdmin(newAdminName, newAdminEmail, newAdminPass, 'ADMIN');
+    setSavingAdmin(false);
+
+    if (res.success) {
+      setNewAdminName('');
+      setNewAdminEmail('');
+      setNewAdminPass('');
+      await loadAdminUsers();
+    } else {
+      alert('Gagal menambah akun pengurus: ' + res.error);
+    }
+  };
+
+  const handleDeleteAdmin = async (id: string, name: string) => {
+    if (confirm(`Hapus akun pengurus RT "${name}"?`)) {
+      await deleteRtAdmin(id);
+      await loadAdminUsers();
+    }
+  };
 
   const handleVerifyTenant = async (id: string, newStatus: 'VERIFIED' | 'REJECTED' | 'ACTIVE') => {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
@@ -228,7 +278,15 @@ export default function RtDashboardPage() {
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             
-            {/* WIDGET RINGKAS PENGATUR UKURAN FONT (SAMA PERSIS DENGAN GAMBAR) */}
+            {/* TOMBOL KELOLA AKUN PENGURUS RT */}
+            <button
+              onClick={handleOpenAdminModal}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1.5"
+            >
+              <span>⚙️ Kelola Pengurus</span>
+            </button>
+
+            {/* WIDGET ZOOM FONT */}
             <div className="bg-slate-800/90 p-1 rounded-xl border border-slate-700 flex items-center gap-1 shadow-inner">
               <span className="text-xs text-emerald-400 font-bold px-1.5">T↕</span>
               <button
@@ -541,6 +599,118 @@ export default function RtDashboardPage() {
         </div>
 
       </div>
+
+      {/* MODAL KELOLA AKUN PENGURUS RT */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 space-y-0">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold flex items-center gap-2">
+                <span>⚙️ Kelola Akun Pengurus RT</span>
+              </h3>
+              <button onClick={() => setShowAdminModal(false)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <div className="p-5 space-y-5 bg-slate-50 max-h-[80vh] overflow-y-auto">
+              
+              {/* FORM BUAT AKUN PENGURUS BARU */}
+              <form onSubmit={handleCreateAdminSubmit} className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+                <h4 className="text-xs font-bold text-slate-900 uppercase">➕ Tambah Akun Pengurus Baru</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Lengkap</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Contoh: Pak RT Budi"
+                      value={newAdminName}
+                      onChange={(e) => setNewAdminName(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Login</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="pakt.budi@gmail.com"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      className="w-full text-xs p-2 border rounded-lg outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Kata Sandi Baru</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Buat kata sandi..."
+                    value={newAdminPass}
+                    onChange={(e) => setNewAdminPass(e.target.value)}
+                    className="w-full text-xs p-2 border rounded-lg outline-none"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingAdmin}
+                  className="w-full py-2 bg-emerald-700 text-white text-xs font-bold rounded-lg hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
+                >
+                  {savingAdmin ? 'Menyimpan...' : 'Daftarkan Akun Pengurus'}
+                </button>
+              </form>
+
+              {/* TABEL DAFTAR AKUN PENGURUS TERDAFTAR */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-slate-800 uppercase">📋 Daftar Pengurus Terdaftar ({adminList.length})</h4>
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[9px]">
+                        <th className="p-2.5">Nama & Peran</th>
+                        <th className="p-2.5">Email</th>
+                        <th className="p-2.5 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {adminList.map((adm) => (
+                        <tr key={adm.id} className="hover:bg-slate-50">
+                          <td className="p-2.5 font-bold text-slate-900">
+                            <div>{adm.name}</div>
+                            <span className="text-[9px] font-normal px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
+                              {adm.role}
+                            </span>
+                          </td>
+                          <td className="p-2.5 font-mono text-slate-600">{adm.email}</td>
+                          <td className="p-2.5 text-right">
+                            <button
+                              onClick={() => handleDeleteAdmin(adm.id, adm.name)}
+                              className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded hover:bg-red-200"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+
+            <div className="p-3 bg-slate-100 text-right border-t">
+              <button
+                onClick={() => setShowAdminModal(false)}
+                className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-xl"
+              >
+                Selesai
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

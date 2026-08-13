@@ -25,7 +25,6 @@ export async function loginAdminRT(
     password = emailOrData.password || '';
   }
 
-  // Cek pencocokan akun ke database Supabase
   const { data: admin, error } = await supabase
     .from('rt_admins')
     .select('*')
@@ -37,12 +36,11 @@ export async function loginAdminRT(
     return { success: false, error: 'Email atau kata sandi pengurus RT salah.' };
   }
 
-  // Simpan sesi login di cookie
   const cookieStore = await cookies();
   cookieStore.set('rt_session', JSON.stringify({ id: admin.id, name: admin.name, email: admin.email, role: admin.role }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 24, // 1 Hari
+    maxAge: 60 * 60 * 24,
     path: '/',
   });
 
@@ -55,7 +53,6 @@ export async function logoutAdminRT() {
   return { success: true };
 }
 
-// Server Actions untuk CRUD Pengurus RT dari Web
 export async function getAllRtAdmins() {
   const { data, error } = await supabase.from('rt_admins').select('id, name, email, role, created_at').order('created_at', { ascending: true });
   return { success: !error, admins: data || [] };
