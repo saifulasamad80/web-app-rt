@@ -73,7 +73,6 @@ export default function RtDashboardPage() {
   const [selectedProperty, setSelectedProperty] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
 
-  // Sesi Admin Aktif
   const [currentAdmin, setCurrentAdmin] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
 
   const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
@@ -152,7 +151,7 @@ export default function RtDashboardPage() {
   };
 
   const handleDeleteAdmin = async (id: string, name: string) => {
-    if (confirm(`Hapus akun pengurus RT "${name}"?`)) {
+    if (confirm(`Apakah Anda yakin ingin menghapus akun pengurus RT "${name}"?`)) {
       await deleteRtAdmin(id);
       await loadAdminUsers();
     }
@@ -286,8 +285,6 @@ export default function RtDashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            
-            {/* TOMBOL HANYA MUNCUL JIKA ROLE === SUPER_ADMIN */}
             {isSuperAdmin && (
               <button
                 onClick={handleOpenAdminModal}
@@ -297,7 +294,6 @@ export default function RtDashboardPage() {
               </button>
             )}
 
-            {/* WIDGET ZOOM FONT */}
             <div className="bg-slate-800/90 p-1 rounded-xl border border-slate-700 flex items-center gap-1 shadow-inner">
               <span className="text-xs text-emerald-400 font-bold px-1.5">T↕</span>
               <button
@@ -611,7 +607,7 @@ export default function RtDashboardPage() {
 
       </div>
 
-      {/* MODAL KELOLA AKUN PENGURUS RT (KHUSUS SUPER_ADMIN) */}
+      {/* MODAL KELOLA AKUN PENGURUS RT */}
       {showAdminModal && isSuperAdmin && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 space-y-0">
@@ -684,29 +680,36 @@ export default function RtDashboardPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200">
-                      {adminList.map((adm) => (
-                        <tr key={adm.id} className="hover:bg-slate-50">
-                          <td className="p-2.5 font-bold text-slate-900">
-                            <div>{adm.name}</div>
-                            <span className="text-[9px] font-normal px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
-                              {adm.role}
-                            </span>
-                          </td>
-                          <td className="p-2.5 font-mono text-slate-600">{adm.email}</td>
-                          <td className="p-2.5 text-right">
-                            {adm.role !== 'SUPER_ADMIN' ? (
-                              <button
-                                onClick={() => handleDeleteAdmin(adm.id, adm.name)}
-                                className="px-2 py-1 bg-red-100 text-red-700 text-[10px] font-bold rounded hover:bg-red-200"
-                              >
-                                Hapus
-                              </button>
-                            ) : (
-                              <span className="text-[9px] text-slate-400 font-semibold">Utama</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
+                      {adminList.map((adm) => {
+                        // KONDISI BARU: HANYA LINDUNGI AKUN YANG SEDANG DIGUNAKAN UNTUK LOGIN SAAT INI
+                        const isSelf = adm.id === currentAdmin?.id;
+
+                        return (
+                          <tr key={adm.id} className="hover:bg-slate-50">
+                            <td className="p-2.5 font-bold text-slate-900">
+                              <div>{adm.name}</div>
+                              <span className="text-[9px] font-normal px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
+                                {adm.role}
+                              </span>
+                            </td>
+                            <td className="p-2.5 font-mono text-slate-600">{adm.email}</td>
+                            <td className="p-2.5 text-right">
+                              {!isSelf ? (
+                                <button
+                                  onClick={() => handleDeleteAdmin(adm.id, adm.name)}
+                                  className="px-2.5 py-1 bg-red-100 text-red-700 hover:bg-red-200 text-[10px] font-bold rounded-lg transition-colors"
+                                >
+                                  🗑️ Hapus
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                  Sesi Aktif
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
