@@ -2,13 +2,31 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
-import { Database } from '../types/supabase';
 import { getCurrentAdminSession } from './auth';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+export interface DuesItem {
+  id: string;
+  resident_name?: string | null;
+  house_number?: string | null;
+  amount: number;
+  period_month?: string | null;
+  paid_at?: string | null;
+  created_at?: string | null;
+}
+
+export interface DuesAuditLog {
+  id: string;
+  dues_id?: string | null;
+  action_type: string;
+  performed_by: string;
+  details: string;
+  created_at?: string | null;
+}
 
 export async function submitDuesPayment(formData: FormData) {
   try {
@@ -42,7 +60,7 @@ export async function submitDuesPayment(formData: FormData) {
     const createdRecord = data && data[0] ? data[0] : null;
 
     // Catat ke Audit Log
-    await supabase.from('dues_audit_logs').insert({
+    await (supabase as any).from('dues_audit_logs').insert({
       dues_id: createdRecord?.id || '',
       action_type: 'CREATE',
       performed_by: performer,
@@ -59,7 +77,7 @@ export async function submitDuesPayment(formData: FormData) {
   }
 }
 
-export async function getDuesHistory() {
+export async function getDuesHistory(): Promise<{ success: boolean; dues: DuesItem[]; error?: string }> {
   try {
     const { data, error } = await supabase
       .from('dues')
@@ -70,15 +88,15 @@ export async function getDuesHistory() {
       return { success: false, dues: [], error: error.message };
     }
 
-    return { success: true, dues: data || [] };
+    return { success: true, dues: (data as DuesItem[]) || [] };
   } catch (err: any) {
     return { success: false, dues: [], error: err?.message || 'Kesalahan koneksi.' };
   }
 }
 
-export async function getDuesAuditLogs() {
+export async function getDuesAuditLogs(): Promise<{ success: boolean; logs: DuesAuditLog[]; error?: string }> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('dues_audit_logs')
       .select('*')
       .order('created_at', { ascending: false })
@@ -88,7 +106,7 @@ export async function getDuesAuditLogs() {
       return { success: false, logs: [], error: error.message };
     }
 
-    return { success: true, logs: data || [] };
+    return { success: true, logs: (data as DuesAuditLog[]) || [] };
   } catch (err: any) {
     return { success: false, logs: [], error: err?.message || 'Kesalahan koneksi.' };
   }
@@ -99,7 +117,6 @@ export async function deleteDuesRecord(id: string) {
     const session = await getCurrentAdminSession();
     const performer = session ? `${session.name} (${session.email})` : 'Pengurus RT';
 
-    // Ambil data iuran sebelum dihapus untuk log
     const { data: targetDues } = await supabase.from('dues').select('*').eq('id', id).single();
 
     const { error } = await supabase.from('dues').delete().eq('id', id);
@@ -108,9 +125,8 @@ export async function deleteDuesRecord(id: string) {
       return { success: false, error: error.message };
     }
 
-    // Catat Hapus ke Audit Log
     if (targetDues) {
-      await supabase.from('dues_audit_logs').insert({
+      await (supabase as any).from('dues_audit_logs').insert({
         dues_id: id,
         action_type: 'DELETE',
         performed_by: performer,
