@@ -42,11 +42,9 @@ interface Property {
 
 export default function OwnerDashboard() {
   const [propertiesList, setPropertiesList] = useState<Property[]>([]);
-  const [selectedPropertyId, setSelectedPropertyId] = useState<string>('');
   const [activeProperty, setActiveProperty] = useState<Property | null>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
-  const [loading, setLoading] = useState(false);
   const [copyMsg, setCopyMsg] = useState('');
 
   // State Modal Input PIN
@@ -106,7 +104,6 @@ export default function OwnerDashboard() {
       setActiveProperty(res.property);
       setTenants(res.tenants || []);
       setIsUnlocked(true);
-      setSelectedPropertyId(res.property.id);
       setShowPinModal(false);
       setInputPin('');
       setCopyMsg('Dasbor ' + (res.property.name || res.property.property_name) + ' berhasil dibuka!');
@@ -152,7 +149,7 @@ export default function OwnerDashboard() {
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
-    if (!activeProperty || !inputPin) return;
+    if (!activeProperty) return;
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus.toUpperCase() } : t)));
     await updateTenantStatus(id, newStatus);
   };
@@ -335,7 +332,6 @@ export default function OwnerDashboard() {
         {isUnlocked && activeProperty ? (
           <div className="space-y-6">
 
-            {/* BAR INFORMASI PROPERTI TERBUKA */}
             <div className="bg-emerald-900 text-white p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div>
                 <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500 text-slate-950 rounded uppercase">
@@ -351,7 +347,6 @@ export default function OwnerDashboard() {
               </button>
             </div>
 
-            {/* STATS CARDS PROPERTI TERPILIH */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <span className="text-xs text-slate-500 font-bold uppercase">Total Terdaftar</span>
@@ -371,7 +366,6 @@ export default function OwnerDashboard() {
               </div>
             </div>
 
-            {/* TABEL PENYEWA KHUSUS PROPERTI INI */}
             <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                 Daftar Penghuni / Penyewa Khusus: {activeProperty.name || activeProperty.property_name}
@@ -494,7 +488,7 @@ export default function OwnerDashboard() {
             <form onSubmit={handleUnlockWithPin} className="p-5 space-y-4">
               <div className="text-center space-y-1">
                 <h4 className="font-bold text-slate-900 text-sm">{targetPropForUnlock.name || targetPropForUnlock.property_name}</h4>
-                <p className="text-[11px] text-slate-500">Masukkan PIN 4-digit rahasia yang Anda buat saat mendaftarkan unit ini:</p>
+                <p className="text-[11px] text-slate-500">Masukkan PIN 4-digit rahasia unit ini:</p>
               </div>
 
               {pinError && (
@@ -538,7 +532,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PROPERTI BARU DENGAN SETTING PIN 4-DIGIT */}
+      {/* MODAL TAMBAH PROPERTI BARU */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
@@ -583,7 +577,7 @@ export default function OwnerDashboard() {
                   onChange={(e) => setNewPropPin(e.target.value.replace(/\D/g, ''))}
                   className="w-full text-xs p-2.5 border rounded-xl font-mono tracking-widest focus:ring-2 focus:ring-emerald-600 outline-none"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">PIN ini digunakan untuk membongkar data penyewa Anda di kemudian hari.</p>
+                <p className="text-[10px] text-slate-500 mt-0.5">PIN ini digunakan untuk membuka data penyewa Anda.</p>
               </div>
 
               <div>

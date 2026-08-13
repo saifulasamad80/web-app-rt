@@ -16,12 +16,11 @@ export interface SubmitResponse {
   registered_at?: string;
 }
 
-// 1. Ambil hanya daftar nama properti (Tanpa menyertakan data penyewa sensitif & tanpa PIN)
 export async function getPublicPropertiesList() {
   try {
     const { data: properties, error } = await supabase
       .from('properties')
-      .select('id, name, property_name, type, slug, address, status')
+      .select('id, name, property_name, type, slug, address, status, house_rules')
       .order('created_at', { ascending: false });
 
     if (error) return { properties: [], error: error.message };
@@ -31,14 +30,12 @@ export async function getPublicPropertiesList() {
   }
 }
 
-// 2. Ambil data penyewa KHUSUS untuk 1 properti berdasarkan verifikasi PIN 4-Digit
 export async function getTenantsByPropertyPin(propertyId: string, pinCode: string) {
   try {
     if (!propertyId || !pinCode) {
       return { success: false, error: 'Properti dan PIN 4-digit wajib diisi.' };
     }
 
-    // Verifikasi PIN di database
     const { data: prop, error: propErr } = await supabase
       .from('properties')
       .select('*')
@@ -53,7 +50,6 @@ export async function getTenantsByPropertyPin(propertyId: string, pinCode: strin
       return { success: false, error: '🔒 PIN 4-digit salah! Akses ditolak.' };
     }
 
-    // Jika PIN Benar, ambil penyewa khusus properti ini saja
     const { data: tenants, error: tenErr } = await supabase
       .from('tenants')
       .select('*')
@@ -84,7 +80,65 @@ export async function getTenantsByPropertyPin(propertyId: string, pinCode: strin
   }
 }
 
-// 3. Buat Properti Baru dengan PIN 4-Digit
+export async function getOwnerPropertiesAndTenants() {
+  try {
+    const { data: properties } = await supabase
+      .from('properties')
+      .select('*')
+      .order('name', { ascending: true });
+
+    const { data: tenants } = await supabase
+      .from('tenants')
+      .select('*')
+      .order('entry_date', { ascending: false });
+
+    const enrichedTenants = (tenants || []).map((t) => {
+      const matchedProp = (properties || []).find((p) => p.id === t.property_id);
+      return {
+        ...t,
+        properties: matchedProp
+          ? {
+              id: matchedProp.id,
+              name: matchedProp.name || matchedProp.property_name || 'Kos Melati 1',
+              type: matchedProp.type || 'kos',
+              slug: matchedProp.slug || 'kos-melati-1',
+            }
+          : {
+              id: 'default',
+              name: 'Kos Melati 1',
+              type: 'kos',
+              slug: 'kos-melati-1',
+            },
+      };
+    });
+
+    return {
+      properties: properties || [],
+      tenants: enrichedTenants,
+      error: null,
+    };
+  } catch (err: any) {
+    return { properties: [], tenants: [], error: err.message };
+  }
+}
+
+export async function getPropertyRules(slug: string) {
+  try {
+    const { data, error } = await supabase
+      .from('properties')
+      .select('id, name, type, house_rules')
+      .eq('slug', slug)
+      .single();
+
+    if (error || !data) {
+      return { success: false, rules: '1. Wajib menjaga ketertiban lingkungan.' };
+    }
+    return { success: true, property: data };
+  } catch (err) {
+    return { success: false, rules: '1. Wajib menjaga ketertiban.' };
+  }
+}
+
 export async function createProperty(name: string, type: 'kos' | 'kontrakan', address: string, houseRules: string, pinCode: string) {
   try {
     if (!name || !type || !pinCode) {
