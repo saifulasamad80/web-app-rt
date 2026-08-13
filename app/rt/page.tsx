@@ -56,6 +56,7 @@ export default function RtDashboardPage() {
   const [resetMsg, setResetMsg] = useState('');
   const [resettingPin, setResettingPin] = useState(false);
 
+  // Form Iuran Kas RT
   const [duesName, setDuesName] = useState('');
   const [duesHouse, setDuesHouse] = useState('');
   const [duesAmount, setDuesAmount] = useState('50000');
@@ -134,7 +135,7 @@ export default function RtDashboardPage() {
     setSubmittingDues(true);
     const formData = new FormData();
     formData.append('resident_name', duesName);
-    formData.append('house_number', duesHouse);
+    formData.append('house_number', duesHouse || 'Griya Alfatihah 78');
     formData.append('amount', duesAmount);
     formData.append('period_month', duesMonth);
 
@@ -142,7 +143,7 @@ export default function RtDashboardPage() {
     setSubmittingDues(false);
 
     if (res && res.success) {
-      setDuesMsg('Pembayaran iuran kas atas nama ' + duesName + ' berhasil dicatat!');
+      setDuesMsg('Pembayaran iuran kas atas nama "' + duesName + '" (Rp ' + parseInt(duesAmount).toLocaleString('id-ID') + ') berhasil dicatat!');
       setDuesName('');
       setDuesHouse('');
       setTimeout(() => setDuesMsg(''), 4000);
@@ -505,7 +506,7 @@ export default function RtDashboardPage() {
           )}
         </div>
 
-        {/* MODUL MANAJEMEN IURAN & KAS RT */}
+        {/* MODUL MANAJEMEN IURAN & KAS RT (LENGKAP DENGAN PERIODE) */}
         <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4 print:hidden">
           <h2 className="text-base font-bold text-slate-900 uppercase border-b pb-2">
             Pencatatan Iuran Kas Warga
@@ -517,9 +518,9 @@ export default function RtDashboardPage() {
             </div>
           )}
 
-          <form onSubmit={handleDuesSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <form onSubmit={handleDuesSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-3">
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Warga / Pembayar</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Warga / Pembayar *</label>
               <input
                 type="text"
                 required
@@ -534,7 +535,7 @@ export default function RtDashboardPage() {
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nomor Rumah / Blok</label>
               <input
                 type="text"
-                placeholder="Contoh: B-12 / Kos Melati"
+                placeholder="Contoh: Griya Alfatihah 78"
                 value={duesHouse}
                 onChange={(e) => setDuesHouse(e.target.value)}
                 className="w-full text-xs p-2.5 border rounded-xl outline-none"
@@ -542,12 +543,24 @@ export default function RtDashboardPage() {
             </div>
 
             <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nominal Iuran (Rp)</label>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nominal Iuran (Rp) *</label>
               <input
                 type="number"
                 required
                 value={duesAmount}
                 onChange={(e) => setDuesAmount(e.target.value)}
+                className="w-full text-xs p-2.5 border rounded-xl outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Periode Bulan *</label>
+              <input
+                type="text"
+                required
+                placeholder="Agustus 2026"
+                value={duesMonth}
+                onChange={(e) => setDuesMonth(e.target.value)}
                 className="w-full text-xs p-2.5 border rounded-xl outline-none"
               />
             </div>
@@ -558,7 +571,7 @@ export default function RtDashboardPage() {
                 disabled={submittingDues}
                 className="w-full py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800 transition-all disabled:bg-slate-400"
               >
-                {submittingDues ? 'Catat...' : 'Catat Pembayaran Iuran'}
+                {submittingDues ? 'Mencatat...' : 'Catat Iuran'}
               </button>
             </div>
           </form>
@@ -571,14 +584,14 @@ export default function RtDashboardPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
             <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">🔑 Reset PIN Pemilik Unit (Akses Master RT)</h3>
+              <h3 className="text-xs font-bold">🔑 Reset PIN Pemilik Unit</h3>
               <button onClick={() => setResetPinProp(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
             </div>
 
             <form onSubmit={handleResetPinSubmit} className="p-5 space-y-4">
               <div>
                 <h4 className="font-bold text-slate-900 text-sm">{resetPinProp.name || resetPinProp.property_name}</h4>
-                <p className="text-[11px] text-slate-500 mt-0.5">Atur ulang PIN 4-digit untuk diberikan kepada pemilik unit yang lupa PIN:</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Atur ulang PIN 4-digit untuk pemilik unit yang lupa PIN:</p>
               </div>
 
               <div>

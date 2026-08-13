@@ -1,53 +1,46 @@
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
+import { revalidatePath } from 'next/cache';
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function submitDuesPayment(formData: FormData) {
   try {
-    const residentName = formData.get('residentName') as string;
-    const houseNumber = formData.get('houseNumber') as string;
-    const periodMonth = formData.get('periodMonth') as string;
-    const amountStr = formData.get('amount') as string;
+    const resident_name = (formData.get('resident_name') as string) || (formData.get('name') as string) || '';
+    const house_number = (formData.get('house_number') as string) || (formData.get('house') as string) || 'Lingkungan RT';
+    const amountRaw = formData.get('amount') as string;
+    const period_month = (formData.get('period_month') as string) || (formData.get('period') as string) || 'Agustus 2026';
 
-    if (!residentName || !houseNumber || !periodMonth || !amountStr) {
-      return { error: 'Semua kolom pencatatan iuran wajib diisi.' };
+    if (!resident_name || !amountRaw) {
+      return { success: false, error: 'Nama warga dan nominal iuran wajib diisi.' };
     }
 
-    const amount = parseFloat(amountStr);
+    const amount = parseInt(amountRaw.toString().replace(/\D/g, ''), 10) || 0;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const { data, error } = await supabase.from('dues').insert({
+      resident_name: resident_name,
+      house_number: house_number,
+      amount: amount,
+      period_month: period_month,
+      paid_at: new Date().toISOString(),
+    }).select();
 
-    if (supabaseUrl && supabaseKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseKey);
-        const { data, error } = await supabase
-          .from('dues')
-          .insert([
-            {
-              resident_name: residentName,
-              house_number: houseNumber,
-              period_month: periodMonth,
-              amount: amount,
-              status: 'paid'
-            }
-          ])
-          .select();
-
-        if (!error && data) {
-          return { success: true, message: 'Pembayaran iuran berhasil dicatat ke Database Supabase!' };
-        }
-      } catch (e) {
-        console.log('Menggunakan mode Local Fallback untuk Iuran');
-      }
+    if (error) {
+      return { success: false, error: 'Gagal menyimpan iuran ke database: ' + error.message };
     }
 
-    return {
-      success: true,
-      message: 'Pembayaran iuran warga ' + residentName + ' (Blok ' + houseNumber + ') sebesar Rp ' + amount.toLocaleString('id-ID') + ' berhasil dicatat!'
-    };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Terjadi kesalahan sistem.';
-    return { error: msg };
+    try {
+      revalidatePath('/rt');
+      revalidatePath('/owner');
+      revalidatePath('/');
+    } catch (e) {}
+
+    return { success: true, data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Terjadi kesalahan teknis.' };
   }
 }
