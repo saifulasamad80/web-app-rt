@@ -68,6 +68,9 @@ export default function OwnerDashboard() {
   const [rulesText, setRulesText] = useState<string>('');
   const [savingRules, setSavingRules] = useState<boolean>(false);
 
+  // State Modal Poster QR
+  const [posterProp, setPosterProp] = useState<Property | null>(null);
+
   // State Modal KTP
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
@@ -127,7 +130,7 @@ export default function OwnerDashboard() {
     setCreatingProp(false);
 
     if (res && res.success) {
-      setCopyMsg('Properti "' + newPropName + '" berhasil dibuat dengan PIN 4-Digit! Menunggu verifikasi RT.');
+      setCopyMsg('Properti "' + newPropName + '" berhasil dibuat! Menunggu verifikasi RT.');
       setTimeout(() => setCopyMsg(''), 4000);
       setShowAddPropModal(false);
       setNewPropName('');
@@ -140,12 +143,15 @@ export default function OwnerDashboard() {
     }
   };
 
-  const handleCopyLink = (slug: string) => {
+  const handleShareWA = (prop: Property) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const url = origin + '/checkin/' + slug;
-    navigator.clipboard.writeText(url);
-    setCopyMsg('Tautan /checkin/' + slug + ' berhasil disalin!');
-    setTimeout(() => setCopyMsg(''), 3000);
+    const checkinUrl = origin + '/checkin/' + prop.slug;
+    const propName = prop.name || prop.property_name;
+
+    const message = `Halo calon penghuni *${propName}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih atas kerjasamanya.`;
+
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
   };
 
   const handleStatusChange = async (id: string, newStatus: 'active' | 'checked_out') => {
@@ -258,12 +264,12 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        {/* PILIH PROPERTI UNTUK DI-UNLOCK */}
+        {/* PILIH PROPERTI UNTUK DI-UNLOCK & BAGIKAN LINK */}
         <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-bold text-slate-900">Pilih Unit Properti Anda</h2>
-              <p className="text-xs text-slate-500">Masukkan PIN 4-Digit rahasia unit Anda untuk membuka data penyewa.</p>
+              <p className="text-xs text-slate-500">Gunakan PIN 4-Digit untuk membuka data penyewa, atau bagikan link pendaftaran langsung.</p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
               {propertiesList.length} Unit Terdaftar
@@ -301,26 +307,37 @@ export default function OwnerDashboard() {
                     <p className="text-xs text-slate-600 mt-1">{prop.address || 'Alamat belum diatur'}</p>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
-                    <button
-                      onClick={() => handleCopyLink(prop.slug)}
-                      className="px-3 py-1.5 bg-slate-200 text-slate-800 text-xs font-bold rounded-lg hover:bg-slate-300"
-                    >
-                      📋 Link Check-In
-                    </button>
-
-                    {isCurrentActive ? (
-                      <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                        <span>🔓 Dasbor Aktif</span>
-                      </span>
-                    ) : (
+                  <div className="pt-2 border-t border-slate-200 space-y-2">
+                    <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => handleOpenUnlockModal(prop)}
-                        className="px-4 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-all shadow-sm flex items-center gap-1"
+                        onClick={() => handleShareWA(prop)}
+                        className="flex-1 px-2.5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm flex items-center justify-center gap-1"
                       >
-                        <span>🔒 Buka Dasbor (PIN)</span>
+                        <span>💬 Kirim WA</span>
                       </button>
-                    )}
+
+                      <button
+                        onClick={() => setPosterProp(prop)}
+                        className="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-900 transition-all shadow-sm flex items-center gap-1"
+                      >
+                        <span>🖨️ Poster QR</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      {isCurrentActive ? (
+                        <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 w-full justify-center py-1 bg-emerald-100/50 rounded-lg">
+                          <span>🔓 Dasbor Aktif</span>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenUnlockModal(prop)}
+                          className="w-full py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-all shadow-sm flex items-center justify-center gap-1"
+                        >
+                          <span>🔒 Buka Dasbor (PIN)</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -475,6 +492,61 @@ export default function OwnerDashboard() {
         )}
 
       </div>
+
+      {/* MODAL CETAK POSTER QR CODE */}
+      {posterProp && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center print:hidden">
+              <h3 className="text-xs font-bold">🖨️ Poster Resmi QR Code Wajib Lapor RT</h3>
+              <button onClick={() => setPosterProp(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <div className="p-6 text-center space-y-4 bg-white" id="printable-poster">
+              <div className="border-b-2 border-slate-900 pb-3">
+                <span className="text-[10px] font-extrabold px-2 py-0.5 bg-emerald-800 text-white rounded uppercase tracking-wider">
+                  TERAKREDITASI PENGURUS RT
+                </span>
+                <h2 className="text-xl font-black text-slate-900 mt-2 uppercase">WAJIB LAPOR DIRI</h2>
+                <p className="text-xs text-slate-600 font-bold">WARGA PENDATANG SEMENTARA</p>
+              </div>
+
+              <div className="py-2">
+                <h3 className="text-lg font-bold text-emerald-900">{posterProp.name || posterProp.property_name}</h3>
+                <p className="text-xs text-slate-500">{posterProp.address || 'Wilayah Lingkungan RT'}</p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 inline-block shadow-inner">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x250&data=${encodeURIComponent(
+                    (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + posterProp.slug
+                  )}`}
+                  alt="QR Code Check-in"
+                  className="w-48 h-48 mx-auto rounded-lg"
+                />
+              </div>
+
+              <div className="text-left bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                <p className="font-bold">📢 PERHATIAN PENGHUNI BARU:</p>
+                <p>1. Pindai QR Code di atas menggunakan kamera HP Anda.</p>
+                <p>2. Lengkapi formulir pendaftaran & unggah KTP dalam 1x24 jam.</p>
+                <p>3. Data disimpan aman sesuai aturan UU PDP No. 27 Tahun 2022.</p>
+              </div>
+
+              <div className="pt-2 border-t text-[10px] text-slate-400 font-mono">
+                Sistem Informasi Kependudukan Digital RT
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-100 flex justify-end gap-2 print:hidden">
+              <button onClick={() => setPosterProp(null)} className="px-4 py-2 bg-slate-300 text-slate-700 text-xs font-bold rounded-xl">Tutup</button>
+              <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow">
+                🖨️ Cetak Poster (A4/A5)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL INPUT PIN 4-DIGIT */}
       {showPinModal && targetPropForUnlock && (
