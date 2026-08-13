@@ -157,7 +157,11 @@ export default function OwnerDashboard() {
     const st = (t.status || '').toUpperCase();
     const matchesStatus = activeTab === 'ALL' || st === activeTab;
     const propId = t.property_id || t.properties?.id;
-    const matchesProperty = selectedPropertyFilter === 'ALL' || propId === selectedPropertyFilter;
+    // Jika hanya ada 1 properti atau cocok dengan ID/Slug
+    const matchesProperty = 
+      selectedPropertyFilter === 'ALL' || 
+      propId === selectedPropertyFilter ||
+      (!propId && properties.length === 1 && properties[0].id === selectedPropertyFilter);
     return matchesStatus && matchesProperty;
   });
 
