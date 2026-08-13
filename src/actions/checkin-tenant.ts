@@ -273,3 +273,39 @@ export async function submitTenantCheckin(formData: FormData): Promise<SubmitRes
   }
   return await submitMultiTenantsStrict(formData);
 }
+
+
+export async function createProperty(name: string, type: 'kos' | 'kontrakan', address: string, houseRules: string) {
+  try {
+    if (!name || !type) {
+      return { success: false, error: 'Nama dan Tipe Properti wajib diisi.' };
+    }
+
+    const rawSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+    const slug = rawSlug + '-' + Math.floor(1000 + Math.random() * 9000);
+    const defaultRules = houseRules || '1. Wajib menjaga ketertiban lingkungan.\n2. Pembayaran sewa tepat waktu.\n3. Dilarang melakukan tindakan melanggar hukum.';
+
+    const { data, error } = await supabase.from('properties').insert({
+      name: name,
+      property_name: name,
+      type: type,
+      slug: slug,
+      address: address || '',
+      house_rules: defaultRules,
+      status: 'PENDING'
+    }).select().single();
+
+    if (error) {
+      return { success: false, error: 'Gagal membuat properti: ' + error.message };
+    }
+
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+
+    return { success: true, property: data };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Terjadi kesalahan teknis.' };
+  }
+}
