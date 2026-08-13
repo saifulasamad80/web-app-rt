@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 'use server';
 
 import { createClient } from '@supabase/supabase-js';
@@ -205,8 +206,9 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
         }
       }
 
-      await supabase.from('tenants').insert({
-        property_id,
+      // SIMPAN DATA DENGAN ERROR CHECKING KETAT
+      const { error: insertErr } = await supabase.from('tenants').insert({
+        property_id: property_id,
         name: occ.name,
         phone: phone,
         entry_date: entry_date,
@@ -222,7 +224,18 @@ export async function submitMultiTenantsStrict(formData: FormData): Promise<Subm
         agreed_rules: true,
         agreed_rules_at: registered_at,
       });
+
+      if (insertErr) {
+        console.error('Database Insert Error:', insertErr);
+        return { success: false, error: 'Gagal menyimpan data ke database: ' + insertErr.message };
+      }
     }
+
+    // Refresh cache halaman owner & rt secara instan
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
 
     return {
       success: true,
