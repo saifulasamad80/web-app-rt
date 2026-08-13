@@ -37,7 +37,7 @@ export async function loginAdminRT(
   }
 
   const cookieStore = await cookies();
-  cookieStore.set('rt_session', JSON.stringify({ id: admin.id, name: admin.name, email: admin.email, role: admin.role }), {
+  cookieStore.set('rt_session', JSON.stringify({ id: admin.id, name: admin.name, email: admin.email, role: admin.role, phone: admin.phone }), {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 24,
@@ -65,22 +65,38 @@ export async function logoutAdminRT() {
 }
 
 export async function getAllRtAdmins() {
-  const { data, error } = await supabase.from('rt_admins').select('id, name, email, role, created_at').order('created_at', { ascending: true });
+  const { data, error } = await supabase.from('rt_admins').select('id, name, email, phone, role, created_at').order('created_at', { ascending: true });
   return { success: !error, admins: data || [] };
 }
 
-export async function createRtAdmin(name: string, email: string, password: string, role: string = 'ADMIN') {
-  if (!name || !email || !password) return { success: false, error: 'Semua kolom wajib diisi.' };
+export async function createRtAdmin(name: string, email: string, password: string, phone: string = '', role: string = 'ADMIN') {
+  if (!name || !email || !password) return { success: false, error: 'Nama, Email & Password wajib diisi.' };
 
   const { data, error } = await supabase.from('rt_admins').insert({
     name,
     email: email.trim().toLowerCase(),
     password,
+    phone: phone.trim(),
     role
   }).select();
 
   if (error) return { success: false, error: 'Gagal membuat akun: ' + error.message };
   return { success: true, data };
+}
+
+export async function updateRtAdmin(
+  id: string,
+  payload: { name?: string; email?: string; phone?: string; password?: string }
+) {
+  const updateData: any = {};
+  if (payload.name) updateData.name = payload.name;
+  if (payload.email) updateData.email = payload.email.trim().toLowerCase();
+  if (payload.phone !== undefined) updateData.phone = payload.phone.trim();
+  if (payload.password) updateData.password = payload.password;
+
+  const { error } = await supabase.from('rt_admins').update(updateData).eq('id', id);
+  if (error) return { success: false, error: 'Gagal update akun: ' + error.message };
+  return { success: true };
 }
 
 export async function deleteRtAdmin(id: string) {
