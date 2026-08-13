@@ -6,7 +6,10 @@ import {
   getPublicPropertiesList,
   getTenantsByPropertyPin,
   createProperty,
+  updateProperty,
+  deleteProperty,
   updateTenantStatus,
+  updateTenantData,
   getTenantKtpUrl,
   deleteTenant,
   updateHouseRules,
@@ -58,16 +61,25 @@ export default function OwnerDashboard() {
   const [pinError, setPinError] = useState<string>('');
   const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
 
-  // Modal Tambah Properti Baru
+  // Modal Tambah & Edit Properti
   const [showAddPropModal, setShowAddPropModal] = useState<boolean>(false);
-  const [newPropName, setNewPropName] = useState<string>('');
-  const [newPropType, setNewPropType] = useState<'kos' | 'kontrakan'>('kos');
-  const [newPropOwnerName, setNewPropOwnerName] = useState<string>('');
-  const [newPropOwnerPhone, setNewPropOwnerPhone] = useState<string>('');
-  const [newPropAddress, setNewPropAddress] = useState<string>('');
-  const [newPropRules, setNewPropRules] = useState<string>('');
-  const [newPropPin, setNewPropPin] = useState<string>('');
-  const [creatingProp, setCreatingProp] = useState<boolean>(false);
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [propName, setPropName] = useState<string>('');
+  const [propType, setPropType] = useState<'kos' | 'kontrakan'>('kos');
+  const [propOwnerName, setPropOwnerName] = useState<string>('');
+  const [propOwnerPhone, setPropOwnerPhone] = useState<string>('');
+  const [propAddress, setPropAddress] = useState<string>('');
+  const [propRules, setPropRules] = useState<string>('');
+  const [propPin, setPropPin] = useState<string>('');
+  const [submittingProp, setSubmittingProp] = useState<boolean>(false);
+
+  // Modal Edit Penyewa
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [tenantName, setTenantName] = useState('');
+  const [tenantPhone, setTenantPhone] = useState('');
+  const [tenantRoom, setTenantRoom] = useState('');
+  const [tenantRelation, setTenantRelation] = useState('');
+  const [savingTenant, setSavingTenant] = useState(false);
 
   const [editingRulesProp, setEditingRulesProp] = useState<Property | null>(null);
   const [rulesText, setRulesText] = useState<string>('');
@@ -119,49 +131,117 @@ export default function OwnerDashboard() {
     }
   };
 
-  const handleCreatePropertySubmit = async (e: React.FormEvent) => {
+  const handleOpenEditProp = (prop: Property) => {
+    setEditingProperty(prop);
+    setPropName(prop.name || prop.property_name || '');
+    setPropType((prop.type as 'kos' | 'kontrakan') || 'kos');
+    setPropOwnerName(prop.owner_name || '');
+    setPropOwnerPhone(prop.owner_phone || '');
+    setPropAddress(prop.address || '');
+  };
+
+  const handlePropFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPropName || !newPropPin) return;
+    if (!propName) return;
 
-    if (!/^\d{4}$/.test(newPropPin)) {
-      alert('PIN harus berupa 4-digit angka (contoh: 1234)');
-      return;
-    }
+    setSubmittingProp(true);
 
-    setCreatingProp(true);
-    const res = await createProperty(
-      newPropName,
-      newPropType,
-      newPropAddress,
-      newPropRules,
-      newPropPin,
-      newPropOwnerName,
-      newPropOwnerPhone
-    );
-    setCreatingProp(false);
+    if (editingProperty) {
+      const res = await updateProperty(editingProperty.id, {
+        name: propName,
+        owner_name: propOwnerName,
+        owner_phone: propOwnerPhone,
+        address: propAddress,
+        type: propType,
+      });
+      setSubmittingProp(false);
 
-    if (res && res.success) {
-      setCopyMsg('Properti "' + newPropName + '" berhasil dibuat!');
-      setTimeout(() => setCopyMsg(''), 4000);
-      setShowAddPropModal(false);
-      setNewPropName('');
-      setNewPropOwnerName('');
-      setNewPropOwnerPhone('');
-      setNewPropAddress('');
-      setNewPropRules('');
-      setNewPropPin('');
-      await fetchPublicPropertyList();
+      if (res.success) {
+        setCopyMsg('Data unit properti berhasil diperbarui!');
+        setTimeout(() => setCopyMsg(''), 3000);
+        setEditingProperty(null);
+        await fetchPublicPropertyList();
+      } else {
+        alert('Gagal update properti: ' + res.error);
+      }
     } else {
-      alert('Gagal membuat properti: ' + (res?.error || 'Kesalahan teknis'));
+      if (!propPin || !/^\d{4}$/.test(propPin)) {
+        alert('PIN harus berupa 4-digit angka (contoh: 1234)');
+        setSubmittingProp(false);
+        return;
+      }
+
+      const res = await createProperty(
+        propName,
+        propType,
+        propAddress,
+        propRules,
+        propPin,
+        propOwnerName,
+        propOwnerPhone
+      );
+      setSubmittingProp(false);
+
+      if (res && res.success) {
+        setCopyMsg('Properti "' + propName + '" berhasil dibuat!');
+        setTimeout(() => setCopyMsg(''), 4000);
+        setShowAddPropModal(false);
+        setPropName('');
+        setPropOwnerName('');
+        setPropOwnerPhone('');
+        setPropAddress('');
+        setPropRules('');
+        setPropPin('');
+        await fetchPublicPropertyList();
+      } else {
+        alert('Gagal membuat properti: ' + (res?.error || 'Kesalahan teknis'));
+      }
+    }
+  };
+
+  const handleOpenEditTenant = (t: Tenant) => {
+    setEditingTenant(t);
+    setTenantName(t.name);
+    setTenantPhone(t.phone);
+    setTenantRoom(t.room_number || '');
+    setTenantRelation(t.relation || '');
+  };
+
+  const handleSaveTenantSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTenant) return;
+
+    setSavingTenant(true);
+    const res = await updateTenantData(editingTenant.id, {
+      name: tenantName,
+      phone: tenantPhone,
+      room_number: tenantRoom,
+      relation: tenantRelation,
+    });
+    setSavingTenant(false);
+
+    if (res.success) {
+      setTenants((prev) =>
+        prev.map((t) =>
+          t.id === editingTenant.id
+            ? { ...t, name: tenantName, phone: tenantPhone, room_number: tenantRoom, relation: tenantRelation }
+            : t
+        )
+      );
+      setCopyMsg('Data penyewa berhasil diperbarui!');
+      setTimeout(() => setCopyMsg(''), 3000);
+      setEditingTenant(null);
+    } else {
+      alert('Gagal update data penyewa: ' + res.error);
     }
   };
 
   const handleShareWA = (prop: Property) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const checkinUrl = origin + '/checkin/' + prop.slug;
-    const propName = prop.name || prop.property_name;
+    const propNameStr = prop.name || prop.property_name;
 
-    const message = `Halo calon penghuni *${propName}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih.`;
+    const message = `Halo calon penghuni *${propNameStr}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih.`;
 
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
@@ -290,7 +370,7 @@ export default function OwnerDashboard() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-emerald-900/80">
             <button
-              onClick={() => setShowAddPropModal(true)}
+              onClick={() => { setPropName(''); setPropOwnerName(''); setPropOwnerPhone(''); setPropAddress(''); setShowAddPropModal(true); }}
               className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold text-xs rounded-xl hover:bg-emerald-400 transition-all shadow"
             >
               + Tambah Properti Baru
@@ -341,16 +421,26 @@ export default function OwnerDashboard() {
                       <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
                         {prop.type}
                       </span>
-                      {prop.status === 'APPROVED' ? (
-                        <span className="text-[9px] font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">
-                          ✅ VERIFIED RT
-                        </span>
-                      ) : (
-                        <span className="text-[9px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
-                          ⚠️ MENUNGGU RT
-                        </span>
-                      )}
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEditProp(prop)}
+                          className="px-2 py-0.5 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded text-[10px] font-bold"
+                        >
+                          ✏️ Edit Unit
+                        </button>
+                        {prop.status === 'APPROVED' ? (
+                          <span className="text-[9px] font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">
+                            ✅ VERIFIED
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
+                            ⚠️ MENUNGGU
+                          </span>
+                        )}
+                      </div>
                     </div>
+
                     <h3 className="font-bold text-base mt-2 text-slate-900">{prop.name || prop.property_name}</h3>
                     {prop.owner_name && (
                       <p className="text-xs text-emerald-800 font-semibold mt-0.5">👤 Pemilik: {prop.owner_name} {prop.owner_phone ? `(${prop.owner_phone})` : ''}</p>
@@ -475,6 +565,12 @@ export default function OwnerDashboard() {
                           </div>
 
                           <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <button
+                              onClick={() => handleOpenEditTenant(t)}
+                              className="px-2.5 py-2 bg-amber-600 text-white text-[11px] font-bold rounded-lg"
+                            >
+                              ✏️ Edit
+                            </button>
                             <a
                               href={`https://wa.me/${waNumber}`}
                               target="_blank"
@@ -572,6 +668,12 @@ export default function OwnerDashboard() {
                                 </span>
                               </td>
                               <td className="p-3 text-right space-x-1">
+                                <button
+                                  onClick={() => handleOpenEditTenant(t)}
+                                  className="px-2 py-1 bg-amber-600 text-white text-[10px] font-bold rounded hover:bg-amber-700"
+                                >
+                                  ✏️ Edit
+                                </button>
                                 {st !== 'ACTIVE' && (
                                   <button
                                     onClick={() => handleStatusChange(t.id, 'active')}
@@ -592,7 +694,7 @@ export default function OwnerDashboard() {
                                   onClick={() => handleDelete(t.id, t.name)}
                                   className="px-2 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded hover:bg-red-100 hover:text-red-700"
                                 >
-                                  🗑️ Hapus
+                                  🗑️
                                 </button>
                               </td>
                             </tr>
@@ -617,6 +719,207 @@ export default function OwnerDashboard() {
         )}
 
       </div>
+
+      {/* MODAL TAMBAH & EDIT PROPERTI */}
+      {(showAddPropModal || editingProperty) && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
+            <div className="p-4 bg-emerald-950 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">
+                {editingProperty ? '✏️ Edit Data Unit Properti' : '🏢 Daftarkan Properti Kos / Kontrakan Baru'}
+              </h3>
+              <button
+                onClick={() => { setShowAddPropModal(false); setEditingProperty(null); }}
+                className="text-slate-400 hover:text-white font-bold text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handlePropFormSubmit} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Kontrakan Berkah"
+                  value={propName}
+                  onChange={(e) => setPropName(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Bpk. Hj. Ahmad"
+                    value={propOwnerName}
+                    onChange={(e) => setPropOwnerName(e.target.value)}
+                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik</label>
+                  <input
+                    type="tel"
+                    placeholder="08123456789"
+                    value={propOwnerPhone}
+                    onChange={(e) => setPropOwnerPhone(e.target.value)}
+                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Tipe Properti *</label>
+                <select
+                  value={propType}
+                  onChange={(e) => setPropType(e.target.value as 'kos' | 'kontrakan')}
+                  className="w-full text-xs p-2.5 border rounded-xl bg-white font-semibold text-slate-800"
+                >
+                  <option value="kos">Kos-kosan (Per Kamar)</option>
+                  <option value="kontrakan">Kontrakan (1 Rumah / Unit)</option>
+                </select>
+              </div>
+
+              {!editingProperty && (
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">Buat PIN 4-Digit Rahasia *</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    required
+                    placeholder="Contoh: 8821"
+                    value={propPin}
+                    onChange={(e) => setPropPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full text-xs p-2.5 border rounded-xl font-mono tracking-widest focus:ring-2 focus:ring-emerald-600 outline-none"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-0.5">PIN ini digunakan untuk membuka data penyewa Anda.</p>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Alamat Lengkap Unit</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Jl. Melati No. 88 RT 02/RW 05"
+                  value={propAddress}
+                  onChange={(e) => setPropAddress(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                />
+              </div>
+
+              {!editingProperty && (
+                <div>
+                  <label className="block text-xs font-bold mb-1 text-slate-700">Tata Tertib Khusus Unit (Opsional)</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Tuliskan aturan khusus..."
+                    value={propRules}
+                    onChange={(e) => setPropRules(e.target.value)}
+                    className="w-full text-xs p-2 border rounded-xl font-mono outline-none"
+                  ></textarea>
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowAddPropModal(false); setEditingProperty(null); }}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingProp}
+                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
+                >
+                  {submittingProp ? 'Menyimpan...' : editingProperty ? 'Simpan Perubahan' : 'Daftarkan Properti'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL EDIT PENYEWA */}
+      {editingTenant && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">✏️ Edit Data Penyewa</h3>
+              <button onClick={() => setEditingTenant(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveTenantSubmit} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Penyewa *</label>
+                <input
+                  type="text"
+                  required
+                  value={tenantName}
+                  onChange={(e) => setTenantName(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp *</label>
+                <input
+                  type="tel"
+                  required
+                  value={tenantPhone}
+                  onChange={(e) => setTenantPhone(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Nomor Kamar / Lokasi Unit</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Kamar 04"
+                  value={tenantRoom}
+                  onChange={(e) => setTenantRoom(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-semibold text-emerald-800"
+                />
+                <p className="text-[10px] text-slate-500 mt-0.5">Ubah ini jika penyewa berpindah kamar.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Peran / Hubungan</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Penanggung Jawab"
+                  value={tenantRelation}
+                  onChange={(e) => setTenantRelation(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTenant(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingTenant}
+                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow"
+                >
+                  {savingTenant ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL CETAK POSTER QR CODE */}
       {posterProp && (
@@ -722,122 +1025,6 @@ export default function OwnerDashboard() {
                   className="flex-1 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
                 >
                   {verifyingPin ? 'Memeriksa...' : 'Buka Dasbor'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL TAMBAH PROPERTI BARU (LENGKAP INPUT PEMILIK & NO WA) */}
-      {showAddPropModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-emerald-950 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">🏢 Daftarkan Properti Kos / Kontrakan Baru</h3>
-              <button onClick={() => setShowAddPropModal(false)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
-            </div>
-
-            <form onSubmit={handleCreatePropertySubmit} className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kontrakan Berkah"
-                  value={newPropName}
-                  onChange={(e) => setNewPropName(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Contoh: Bpk. Hj. Ahmad"
-                    value={newPropOwnerName}
-                    onChange={(e) => setNewPropOwnerName(e.target.value)}
-                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik *</label>
-                  <input
-                    type="tel"
-                    required
-                    placeholder="08123456789"
-                    value={newPropOwnerPhone}
-                    onChange={(e) => setNewPropOwnerPhone(e.target.value)}
-                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none font-mono"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Tipe Properti *</label>
-                <select
-                  value={newPropType}
-                  onChange={(e) => setNewPropType(e.target.value as 'kos' | 'kontrakan')}
-                  className="w-full text-xs p-2.5 border rounded-xl bg-white font-semibold text-slate-800"
-                >
-                  <option value="kos">Kos-kosan (Per Kamar)</option>
-                  <option value="kontrakan">Kontrakan (1 Rumah / Unit)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Buat PIN 4-Digit Rahasia *</label>
-                <input
-                  type="password"
-                  maxLength={4}
-                  required
-                  placeholder="Contoh: 8821"
-                  value={newPropPin}
-                  onChange={(e) => setNewPropPin(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-xs p-2.5 border rounded-xl font-mono tracking-widest focus:ring-2 focus:ring-emerald-600 outline-none"
-                />
-                <p className="text-[10px] text-slate-500 mt-0.5">PIN ini digunakan untuk membuka data penyewa Anda.</p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Alamat Lengkap Unit</label>
-                <input
-                  type="text"
-                  placeholder="Contoh: Jl. Melati No. 88 RT 02/RW 05"
-                  value={newPropAddress}
-                  onChange={(e) => setNewPropAddress(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Tata Tertib Khusus Unit (Opsional)</label>
-                <textarea
-                  rows={2}
-                  placeholder="Tuliskan aturan khusus..."
-                  value={newPropRules}
-                  onChange={(e) => setNewPropRules(e.target.value)}
-                  className="w-full text-xs p-2 border rounded-xl font-mono outline-none"
-                ></textarea>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddPropModal(false)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={creatingProp || newPropPin.length !== 4}
-                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
-                >
-                  {creatingProp ? 'Mendaftarkan...' : 'Daftarkan Properti'}
                 </button>
               </div>
             </form>

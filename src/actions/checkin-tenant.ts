@@ -54,6 +54,52 @@ export async function createProperty(
   return { success: true, data };
 }
 
+export async function updateProperty(
+  propertyId: string,
+  payload: {
+    name?: string;
+    owner_name?: string;
+    owner_phone?: string;
+    address?: string;
+    type?: string;
+  }
+) {
+  const { error } = await supabase
+    .from('properties')
+    .update({
+      name: payload.name,
+      property_name: payload.name,
+      owner_name: payload.owner_name,
+      owner_phone: payload.owner_phone,
+      address: payload.address,
+      type: payload.type
+    })
+    .eq('id', propertyId);
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
+}
+
+export async function deleteProperty(propertyId: string) {
+  await supabase.from('tenants').delete().eq('property_id', propertyId);
+  const { error } = await supabase.from('properties').delete().eq('id', propertyId);
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
+}
+
 export async function getTenantsByPropertyPin(propertyId: string, pinInput: string) {
   const { data: prop, error: propErr } = await supabase
     .from('properties')
@@ -110,6 +156,30 @@ export async function updateTenantStatus(tenantId: string, status: 'active' | 'c
     .eq('id', tenantId);
 
   return { success: !error };
+}
+
+export async function updateTenantData(
+  tenantId: string,
+  payload: {
+    name?: string;
+    phone?: string;
+    room_number?: string;
+    relation?: string;
+  }
+) {
+  const { error } = await supabase
+    .from('tenants')
+    .update(payload)
+    .eq('id', tenantId);
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
 }
 
 export async function deleteTenant(tenantId: string) {

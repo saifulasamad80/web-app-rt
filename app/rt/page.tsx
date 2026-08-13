@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
-import { getTenantKtpUrl } from '../../src/actions/checkin-tenant';
+import { getTenantKtpUrl, updateProperty, deleteProperty } from '../../src/actions/checkin-tenant';
 import { submitDuesPayment, getDuesHistory, deleteDuesRecord } from '../../src/actions/manage-dues';
 import { logoutAdminRT, getAllRtAdmins, createRtAdmin, deleteRtAdmin, getCurrentAdminSession } from '../../src/actions/auth';
 
@@ -89,6 +89,14 @@ export default function RtDashboardPage() {
   const [resetMsg, setResetMsg] = useState('');
   const [resettingPin, setResettingPin] = useState(false);
 
+  // Edit Properti oleh RT
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [propName, setPropName] = useState('');
+  const [propOwnerName, setPropOwnerName] = useState('');
+  const [propOwnerPhone, setPropOwnerPhone] = useState('');
+  const [propAddress, setPropAddress] = useState('');
+  const [savingProp, setSavingProp] = useState(false);
+
   // Form Iuran Kas RT
   const [duesName, setDuesName] = useState('');
   const [duesHouse, setDuesHouse] = useState('');
@@ -156,6 +164,45 @@ export default function RtDashboardPage() {
     if (confirm(`Apakah Anda yakin ingin menghapus akun pengurus RT "${name}"?`)) {
       await deleteRtAdmin(id);
       await loadAdminUsers();
+    }
+  };
+
+  const handleOpenEditProperty = (p: Property) => {
+    setEditingProperty(p);
+    setPropName(p.name || p.property_name || '');
+    setPropOwnerName(p.owner_name || '');
+    setPropOwnerPhone(p.owner_phone || '');
+    setPropAddress(p.address || '');
+  };
+
+  const handleSavePropertySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProperty || !propName) return;
+
+    setSavingProp(true);
+    const res = await updateProperty(editingProperty.id, {
+      name: propName,
+      owner_name: propOwnerName,
+      owner_phone: propOwnerPhone,
+      address: propAddress,
+    });
+    setSavingProp(false);
+
+    if (res.success) {
+      setResetMsg(`Data properti "${propName}" berhasil diperbarui!`);
+      setTimeout(() => setResetMsg(''), 4000);
+      setEditingProperty(null);
+      await loadData();
+    } else {
+      alert('Gagal memperbarui properti: ' + res.error);
+    }
+  };
+
+  const handleDeletePropertyClick = async (p: Property) => {
+    if (confirm(`Hapus unit properti "${p.name || p.property_name}" beserta seluruh data penyewanya?`)) {
+      setProperties((prev) => prev.filter((item) => item.id !== p.id));
+      await deleteProperty(p.id);
+      await loadData();
     }
   };
 
@@ -340,7 +387,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* PANEL MANAJEMEN PIN & INFORMASI PEMILIK UNIT */}
+        {/* PANEL MANAJEMEN PIN & EDIT/HAPUS PROPERTI OLEH RT */}
         <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
           <div className="flex justify-between items-center border-b pb-2">
             <h3 className="text-sm font-bold text-slate-900 uppercase">
@@ -356,9 +403,26 @@ export default function RtDashboardPage() {
               return (
                 <div key={p.id} className="p-3.5 bg-slate-50 border rounded-xl flex flex-col justify-between gap-2.5">
                   <div>
-                    <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
-                    <p className="text-[11px] text-slate-600 font-medium mt-0.5">👤 Pemilik: <b>{p.owner_name || 'Belum Diisi'}</b></p>
-                    <div className="flex items-center gap-1.5 mt-1">
+                    <div className="flex justify-between items-start">
+                      <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleOpenEditProperty(p)}
+                          className="px-1.5 py-0.5 bg-amber-100 text-amber-800 hover:bg-amber-200 text-[9px] font-bold rounded"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeletePropertyClick(p)}
+                          className="px-1.5 py-0.5 bg-red-100 text-red-700 hover:bg-red-200 text-[9px] font-bold rounded"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-slate-600 font-medium mt-1">👤 Pemilik: <b>{p.owner_name || 'Belum Diisi'}</b></p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
                       <span className="text-[10px] font-mono text-slate-500">PIN: <b>{p.pin_code || '1234'}</b></span>
                       {p.pin_locked_until && new Date(p.pin_locked_until) > new Date() && (
                         <span className="text-[9px] font-bold px-1.5 py-0.2 bg-red-100 text-red-700 rounded">TERKUNCI</span>
@@ -374,7 +438,7 @@ export default function RtDashboardPage() {
                         rel="noopener noreferrer"
                         className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1"
                       >
-                        💬 Hubungi Pemilik
+                        💬 WA Pemilik
                       </a>
                     ) : (
                       <span className="text-[10px] text-slate-400 italic">No WA -</span>
@@ -636,6 +700,78 @@ export default function RtDashboardPage() {
         </div>
 
       </div>
+
+      {/* MODAL EDIT PROPERTI OLEH RT */}
+      {editingProperty && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">✏️ Edit Informasi Properti</h3>
+              <button onClick={() => setEditingProperty(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleSavePropertySubmit} className="p-5 space-y-3">
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
+                <input
+                  type="text"
+                  required
+                  value={propName}
+                  onChange={(e) => setPropName(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik Properti</label>
+                <input
+                  type="text"
+                  value={propOwnerName}
+                  onChange={(e) => setPropOwnerName(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik</label>
+                <input
+                  type="tel"
+                  value={propOwnerPhone}
+                  onChange={(e) => setPropOwnerPhone(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold mb-1 text-slate-700">Alamat Lengkap</label>
+                <input
+                  type="text"
+                  value={propAddress}
+                  onChange={(e) => setPropAddress(e.target.value)}
+                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingProperty(null)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProp}
+                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow"
+                >
+                  {savingProp ? 'Menyimpan...' : 'Simpan Perubahan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL KELOLA AKUN PENGURUS RT */}
       {showAdminModal && isSuperAdmin && (
