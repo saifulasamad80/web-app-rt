@@ -24,6 +24,7 @@ interface Tenant {
 interface Property {
   id: string;
   name: string;
+  property_name?: string;
   type: string;
   slug: string;
   address: string;
@@ -86,7 +87,7 @@ export default function OwnerDashboard() {
     setSavingRules(false);
 
     if (res && res.success) {
-      setCopyMsg('Tata tertib properti ' + editingRulesProp.name + ' berhasil diperbarui!');
+      setCopyMsg('Tata tertib berhasil diperbarui!');
       setTimeout(() => setCopyMsg(''), 3000);
       setEditingRulesProp(null);
       await fetchData();
@@ -191,7 +192,7 @@ export default function OwnerDashboard() {
                 <option value="ALL">🏢 Semua Properti ({properties.length})</option>
                 {properties.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.type.toUpperCase()})
+                    {p.name || p.property_name} ({p.type?.toUpperCase()})
                   </option>
                 ))}
               </select>
@@ -234,7 +235,7 @@ export default function OwnerDashboard() {
                 <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
                   KOS
                 </span>
-                <h3 className="font-bold text-base mt-1">Kos Melati 1 (Default)</h3>
+                <h3 className="font-bold text-base mt-1">Kos Melati 1</h3>
                 <p className="text-xs text-gray-500 font-mono">/checkin/kos-melati-1</p>
               </div>
               <div className="flex items-center gap-2">
@@ -243,12 +244,6 @@ export default function OwnerDashboard() {
                   className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded hover:bg-emerald-800"
                 >
                   📋 Salin Link
-                </button>
-                <button
-                  onClick={() => handleOpenRulesModal({ id: 'default', name: 'Kos Melati 1', type: 'kos', slug: 'kos-melati-1', address: '', house_rules: '' })}
-                  className="px-3 py-1.5 bg-slate-800 text-white text-xs font-semibold rounded hover:bg-slate-900 inline-flex items-center gap-1"
-                >
-                  📜 Atur Tata Tertib
                 </button>
               </div>
             </div>
@@ -260,11 +255,10 @@ export default function OwnerDashboard() {
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
                       {prop.type}
                     </span>
-                    <h3 className="font-bold text-base mt-1">{prop.name}</h3>
+                    <h3 className="font-bold text-base mt-1">{prop.name || prop.property_name}</h3>
                     <p className="text-xs text-gray-500 font-mono">/checkin/{prop.slug}</p>
                   </div>
                   
-                  {/* TOMBOL AKSI PROPERTI */}
                   <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
                     <button
                       onClick={() => handleCopyLink(prop.slug)}
@@ -456,7 +450,7 @@ export default function OwnerDashboard() {
                   <span>📜 Atur Tata Tertib & Ketentuan Hunian</span>
                 </h3>
                 <p className="text-[11px] text-emerald-400 mt-0.5">
-                  Properti: {editingRulesProp.name} ({editingRulesProp.type.toUpperCase()})
+                  Properti: {editingRulesProp.name || editingRulesProp.property_name} ({editingRulesProp.type?.toUpperCase()})
                 </p>
               </div>
               <button
