@@ -65,6 +65,9 @@ export default function RtDashboardPage() {
   const [selectedProperty, setSelectedProperty] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
 
+  // Pengatur Skala Teks (Font Zoom)
+  const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
+
   const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
   const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
@@ -102,12 +105,6 @@ export default function RtDashboardPage() {
   const handleVerifyTenant = async (id: string, newStatus: 'VERIFIED' | 'REJECTED' | 'ACTIVE') => {
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
     await verifyTenantByRt(id, newStatus);
-    await loadData();
-  };
-
-  const handleApproveProperty = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
-    setProperties((prev) => prev.map((p) => (p.id === id ? { ...p, status: newStatus } : p)));
-    await approvePropertyByRt(id, newStatus);
     await loadData();
   };
 
@@ -192,38 +189,6 @@ export default function RtDashboardPage() {
     window.location.href = '/';
   };
 
-  const calculateAge = (dobString?: string): number => {
-    if (!dobString) return 0;
-    const today = new Date();
-    const birthDate = new Date(dobString);
-    let age = today.getFullYear() - birthDate.getFullYear();
-    const monthDiff = today.getMonth() - birthDate.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
-    return age;
-  };
-
-  const exportCSV = () => {
-    const headers = ['Nama Warga', 'Hubungan', 'Lokasi Unit/Kamar', 'Asal KTP', 'WhatsApp', 'Tanggal Masuk', 'Status Verifikasi RT'];
-    const rows = filteredTenants.map((t) => [
-      `"${t.name}"`,
-      `"${t.relation || (t.is_head ? 'Kepala Keluarga' : 'Anggota')}"`,
-      `"${t.room_number ? 'Kamar ' + t.room_number : t.full_address || t.properties?.name}"`,
-      `"${t.address_ktp}"`,
-      `"${t.phone}"`,
-      `"${t.entry_date}"`,
-      `"${t.status}"`
-    ]);
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Buku_Register_Warga_RT_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const filteredTenants = tenants.filter((t) => {
     const matchesSearch =
       t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -242,12 +207,11 @@ export default function RtDashboardPage() {
     return matchesSearch && matchesProperty && matchesStatus;
   });
 
-  const pendingProperties = properties.filter((p) => p.status !== 'APPROVED');
-  const approvedProperties = properties.filter((p) => p.status === 'APPROVED');
   const totalKasAmount = duesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+  const fontClass = textScale === 'lg' ? 'text-sm' : textScale === 'sm' ? 'text-[11px]' : 'text-xs';
 
   return (
-    <main className="min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900">
+    <main className={`min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900 ${fontClass}`}>
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* HEADER DASBOR RT */}
@@ -263,18 +227,30 @@ export default function RtDashboardPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            <button
-              onClick={exportCSV}
-              className="px-3.5 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 transition-all shadow"
-            >
-              📊 Ekspor CSV
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="px-3.5 py-2 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl hover:bg-slate-700 border border-slate-700 transition-all"
-            >
-              🖨️ Cetak
-            </button>
+            
+            {/* WIDGET RINGKAS PENGATUR UKURAN FONT (SAMA PERSIS DENGAN GAMBAR) */}
+            <div className="bg-slate-800/90 p-1 rounded-xl border border-slate-700 flex items-center gap-1 shadow-inner">
+              <span className="text-xs text-emerald-400 font-bold px-1.5">T↕</span>
+              <button
+                onClick={() => setTextScale('sm')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'sm' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
+              >
+                A-
+              </button>
+              <button
+                onClick={() => setTextScale('base')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'base' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
+              >
+                A
+              </button>
+              <button
+                onClick={() => setTextScale('lg')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'lg' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
+              >
+                A+
+              </button>
+            </div>
+
             <button
               onClick={handleLogout}
               className="px-3.5 py-2 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition-all shadow flex items-center gap-1"
@@ -341,39 +317,34 @@ export default function RtDashboardPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                    <th className="p-3">Nama Warga & Peran</th>
+                    <th className="p-3">Nama Warga</th>
                     <th className="p-3">Lokasi Unit & Kamar</th>
                     <th className="p-3">Kota Asal KTP</th>
                     <th className="p-3">Kontak WA</th>
                     <th className="p-3">Dokumen KTP</th>
                     <th className="p-3">Mulai Menetap</th>
                     <th className="p-3">Status RT</th>
-                    <th className="p-3 text-right print:hidden">Aksi Verifikasi RT</th>
+                    <th className="p-3 text-right">Aksi Verifikasi RT</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {filteredTenants.map((t) => {
                     const isVerified = (t.status || '').toUpperCase() === 'VERIFIED';
-                    const age = calculateAge(t.birth_date);
                     const location = t.room_number ? `Kamar ${t.room_number}` : (t.full_address || 'Kos Melati 1');
 
                     return (
                       <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3">
-                          <div className="font-bold text-slate-900">{t.name}</div>
-                        </td>
-                        <td className="p-3">
-                          <span className="font-semibold text-emerald-800 block">{location}</span>
-                        </td>
+                        <td className="p-3 font-bold text-slate-900">{t.name}</td>
+                        <td className="p-3 font-semibold text-emerald-800">{location}</td>
                         <td className="p-3 font-medium text-slate-700">{t.address_ktp || '-'}</td>
                         <td className="p-3 font-mono text-slate-800">{t.phone}</td>
                         <td className="p-3">
                           <button
                             onClick={() => handleViewKtp(t)}
-                            className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-semibold rounded hover:bg-slate-900 transition-colors"
+                            className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-semibold rounded hover:bg-slate-900"
                           >
                             🪪 KTP
                           </button>
@@ -390,7 +361,7 @@ export default function RtDashboardPage() {
                             </span>
                           )}
                         </td>
-                        <td className="p-3 text-right space-x-1.5 print:hidden">
+                        <td className="p-3 text-right space-x-1.5">
                           {!isVerified ? (
                             <button
                               onClick={() => handleVerifyTenant(t.id, 'VERIFIED')}
@@ -417,8 +388,7 @@ export default function RtDashboardPage() {
         </div>
 
         {/* MODUL PENCATATAN & RIWAYAT IURAN KAS RT */}
-        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-6 print:hidden">
-          
+        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
             <div>
               <h2 className="text-base font-bold text-slate-900 uppercase">
@@ -427,7 +397,6 @@ export default function RtDashboardPage() {
               <p className="text-xs text-slate-500">Kelola dan pantau seluruh transaksi kas masuk iuran warga</p>
             </div>
 
-            {/* RINGKASAN TOTAL SALDO KAS TERKUMPUL */}
             <div className="bg-emerald-950 text-white px-5 py-2.5 rounded-xl border border-emerald-800 flex items-center gap-3 shadow-md">
               <span className="text-xl">💰</span>
               <div>
@@ -455,7 +424,7 @@ export default function RtDashboardPage() {
                 placeholder="Contoh: Saiful"
                 value={duesName}
                 onChange={(e) => setDuesName(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
+                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
               />
             </div>
 
@@ -466,7 +435,7 @@ export default function RtDashboardPage() {
                 placeholder="Griya Alfatihah 78"
                 value={duesHouse}
                 onChange={(e) => setDuesHouse(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
+                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
               />
             </div>
 
@@ -477,7 +446,7 @@ export default function RtDashboardPage() {
                 required
                 value={duesAmount}
                 onChange={(e) => setDuesAmount(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white"
+                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
               />
             </div>
 
@@ -486,7 +455,7 @@ export default function RtDashboardPage() {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
+                className="w-full p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
               >
                 {MONTH_OPTIONS.map((m) => (
                   <option key={m} value={m}>{m}</option>
@@ -499,7 +468,7 @@ export default function RtDashboardPage() {
               <select
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full text-xs p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
+                className="w-full p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
               >
                 {YEAR_OPTIONS.map((y) => (
                   <option key={y} value={y}>{y}</option>
@@ -530,7 +499,7 @@ export default function RtDashboardPage() {
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left text-xs border-collapse">
+                <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
                       <th className="p-3">Nama Pembayar</th>
