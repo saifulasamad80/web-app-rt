@@ -41,7 +41,7 @@ interface Property {
 
 interface DuesItem {
   id: string;
-  resident_name: string;
+  resident_name?: string | null;
   house_number?: string | null;
   amount: number;
   period_month?: string | null;
@@ -544,7 +544,7 @@ export default function RtDashboardPage() {
                   <tbody className="divide-y divide-slate-200">
                     {duesList.map((d) => (
                       <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">{d.resident_name}</td>
+                        <td className="p-3 font-bold text-slate-900">{d.resident_name || 'Warga'}</td>
                         <td className="p-3 text-slate-600 font-medium">{d.house_number || '-'}</td>
                         <td className="p-3 font-semibold text-emerald-800">{d.period_month || '-'}</td>
                         <td className="p-3 font-mono font-bold text-slate-900">
@@ -555,7 +555,7 @@ export default function RtDashboardPage() {
                         </td>
                         <td className="p-3 text-right">
                           <button
-                            onClick={() => handleDeleteDues(d.id, d.resident_name)}
+                            onClick={() => handleDeleteDues(d.id, d.resident_name || 'Warga')}
                             className="px-2.5 py-1 bg-red-100 text-red-700 hover:bg-red-200 text-[10px] font-bold rounded-lg transition-colors"
                           >
                             🗑️ Hapus
