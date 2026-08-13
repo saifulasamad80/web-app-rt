@@ -20,7 +20,11 @@ export async function loginAdminRT(
     password = emailOrData.password || '';
   }
 
-  if (email === 'admin@rt.id' && password === 'admin123') {
+  // Mengambil kredensial dari Environment Variables (Fallback ke default jika tidak diatur)
+  const validEmail = process.env.ADMIN_RT_EMAIL || 'admin@rt.id';
+  const validPassword = process.env.ADMIN_RT_PASSWORD || 'admin123';
+
+  if (email === validEmail && password === validPassword) {
     const cookieStore = await cookies();
     cookieStore.set('rt_session', 'authenticated', {
       httpOnly: true,
