@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   getPublicPropertiesList,
   getTenantsByPropertyPin,
@@ -46,6 +47,9 @@ export default function OwnerDashboard() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [copyMsg, setCopyMsg] = useState('');
+
+  // Fitur Ukuran Teks A- / A+ (Foto 6)
+  const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   // State Modal Input PIN
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
@@ -130,7 +134,7 @@ export default function OwnerDashboard() {
     setCreatingProp(false);
 
     if (res && res.success) {
-      setCopyMsg('Properti "' + newPropName + '" berhasil dibuat! Menunggu verifikasi RT.');
+      setCopyMsg('Properti "' + newPropName + '" berhasil dibuat!');
       setTimeout(() => setCopyMsg(''), 4000);
       setShowAddPropModal(false);
       setNewPropName('');
@@ -148,7 +152,7 @@ export default function OwnerDashboard() {
     const checkinUrl = origin + '/checkin/' + prop.slug;
     const propName = prop.name || prop.property_name;
 
-    const message = `Halo calon penghuni *${propName}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih atas kerjasamanya.`;
+    const message = `Halo calon penghuni *${propName}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih.`;
 
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
@@ -227,26 +231,63 @@ export default function OwnerDashboard() {
   const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE').length;
   const countCheckedOut = tenants.filter((t) => (t.status || '').toUpperCase() === 'CHECKED_OUT').length;
 
-  return (
-    <main className="min-h-screen p-4 md:p-8 bg-slate-100 text-slate-900">
-      <div className="max-w-6xl mx-auto space-y-6">
+  const fontClass = textScale === 'lg' ? 'text-base' : textScale === 'sm' ? 'text-[11px]' : 'text-xs';
 
-        {/* HEADER */}
-        <div className="bg-emerald-950 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 border border-emerald-900">
-          <div>
-            <h1 className="text-2xl font-extrabold text-white">Dasbor Pemilik Kos & Kontrakan</h1>
-            <p className="text-xs text-emerald-300 mt-1">
-              Portal Mandiri Terproteksi PIN 4-Digit Pemilik Unit
-            </p>
+  return (
+    <main className={`min-h-screen p-3 md:p-8 bg-slate-100 text-slate-900 ${fontClass}`}>
+      <div className="max-w-6xl mx-auto space-y-5">
+
+        {/* HEADER DENGAN TOMBOL KELUAR KE PAGE UTAMA (FOTO 4) DAN PENYESUAI UKURAN FONT A-/A+ (FOTO 6) */}
+        <div className="bg-emerald-950 text-white p-5 md:p-6 rounded-2xl shadow-xl border border-emerald-900 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl md:text-2xl font-extrabold text-white">Dasbor Pemilik Kos & Kontrakan</h1>
+              <p className="text-xs text-emerald-300 mt-0.5">
+                Portal Mandiri Terproteksi PIN 4-Digit Pemilik Unit
+              </p>
+            </div>
+
+            {/* CONTROLS FONT SIZE (FOTO 6) DAN KELUAR (FOTO 4) */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="bg-emerald-900/80 p-1 rounded-xl border border-emerald-700/60 flex items-center gap-1">
+                <span className="text-[10px] font-bold px-2 text-emerald-300">Ukuran Teks:</span>
+                <button
+                  onClick={() => setTextScale('sm')}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'sm' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
+                >
+                  A-
+                </button>
+                <button
+                  onClick={() => setTextScale('base')}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'base' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
+                >
+                  A
+                </button>
+                <button
+                  onClick={() => setTextScale('lg')}
+                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'lg' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
+                >
+                  A+
+                </button>
+              </div>
+
+              <Link
+                href="/"
+                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1"
+              >
+                <span>🚪 Keluar ke Halaman Utama</span>
+              </Link>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-emerald-900/80">
             <button
               onClick={() => setShowAddPropModal(true)}
               className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold text-xs rounded-xl hover:bg-emerald-400 transition-all shadow"
             >
               + Tambah Properti Baru
             </button>
+
             {isUnlocked && (
               <button
                 onClick={() => { setIsUnlocked(false); setActiveProperty(null); setTenants([]); }}
@@ -264,15 +305,15 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        {/* PILIH PROPERTI UNTUK DI-UNLOCK & BAGIKAN LINK */}
-        <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4">
+        {/* PILIH PROPERTI */}
+        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-base font-bold text-slate-900">Pilih Unit Properti Anda</h2>
-              <p className="text-xs text-slate-500">Gunakan PIN 4-Digit untuk membuka data penyewa, atau bagikan link pendaftaran langsung.</p>
+              <p className="text-xs text-slate-500">Gunakan PIN 4-Digit untuk membuka data penyewa.</p>
             </div>
             <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-              {propertiesList.length} Unit Terdaftar
+              {propertiesList.length} Unit
             </span>
           </div>
 
@@ -303,7 +344,7 @@ export default function OwnerDashboard() {
                       )}
                     </div>
                     <h3 className="font-bold text-base mt-2 text-slate-900">{prop.name || prop.property_name}</h3>
-                    <p className="text-xs text-slate-500 font-mono">/checkin/{prop.slug}</p>
+                    <p className="text-xs text-slate-500 font-mono break-all">/checkin/{prop.slug}</p>
                     <p className="text-xs text-slate-600 mt-1">{prop.address || 'Alamat belum diatur'}</p>
                   </div>
 
@@ -345,7 +386,7 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        {/* TAMPILKAN DATA DASBOR HANYA JIKA PIN BENAR / UNLOCKED */}
+        {/* DASBOR PENYEWA TERVERIFIKASI PIN */}
         {isUnlocked && activeProperty ? (
           <div className="space-y-6">
 
@@ -370,20 +411,21 @@ export default function OwnerDashboard() {
                 <p className="text-2xl font-black text-slate-800 mt-1">{countAll}</p>
               </div>
               <div className="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm">
-                <span className="text-xs text-amber-700 font-bold uppercase">Menunggu (Pending)</span>
+                <span className="text-xs text-amber-700 font-bold uppercase">Menunggu</span>
                 <p className="text-2xl font-black text-amber-600 mt-1">{countPending}</p>
               </div>
               <div className="bg-white p-4 rounded-xl border border-green-200 bg-green-50/30 shadow-sm">
-                <span className="text-xs text-green-700 font-bold uppercase">Aktif Menghuni</span>
+                <span className="text-xs text-green-700 font-bold uppercase">Aktif</span>
                 <p className="text-2xl font-black text-green-600 mt-1">{countActive}</p>
               </div>
               <div className="bg-white p-4 rounded-xl border border-slate-200 bg-slate-100/50 shadow-sm">
-                <span className="text-xs text-slate-600 font-bold uppercase">Checked-Out</span>
+                <span className="text-xs text-slate-600 font-bold uppercase">Out</span>
                 <p className="text-2xl font-black text-slate-600 mt-1">{countCheckedOut}</p>
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4">
+            {/* FOTO 5: DESAIN TAMPILAN RESPONSIF MOBILE TANPA OVERFLOW KANAN-KIRI */}
+            <div className="bg-white p-4 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4">
               <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
                 Daftar Penghuni / Penyewa Khusus: {activeProperty.name || activeProperty.property_name}
               </h3>
@@ -393,96 +435,170 @@ export default function OwnerDashboard() {
                   <p className="text-xs text-slate-500">Belum ada penyewa yang mendaftar di unit ini.</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                        <th className="p-3">Nama & Peran</th>
-                        <th className="p-3">Lokasi / Kamar</th>
-                        <th className="p-3">WhatsApp Direct</th>
-                        <th className="p-3">Dokumen KTP</th>
-                        <th className="p-3">Tanggal Masuk</th>
-                        <th className="p-3">Status</th>
-                        <th className="p-3 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {tenants.map((t) => {
-                        const st = (t.status || '').toUpperCase();
-                        const waNumber = formatPhoneToWA(t.phone);
-                        const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
+                <>
+                  {/* TAMPILAN CARD MOBILE (SOLUSI FOTO 5 HP) */}
+                  <div className="block md:hidden space-y-3">
+                    {tenants.map((t) => {
+                      const st = (t.status || '').toUpperCase();
+                      const waNumber = formatPhoneToWA(t.phone);
+                      const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
 
-                        return (
-                          <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="p-3 font-medium">
-                              <div className="font-bold text-slate-900">{t.name}</div>
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 inline-block mt-0.5">
+                      return (
+                        <div key={t.id} className="p-4 bg-slate-50 border rounded-xl space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-slate-900 text-sm">{t.name}</h4>
+                              <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 text-slate-800 rounded inline-block mt-1">
                                 {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
                               </span>
-                            </td>
-                            <td className="p-3 text-slate-700 font-semibold">{locationLabel}</td>
-                            <td className="p-3 font-mono">
-                              <a
-                                href={`https://wa.me/${waNumber}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 bg-emerald-600 text-white text-[10px] rounded font-bold hover:bg-emerald-700 inline-flex items-center gap-1 shadow-sm"
-                              >
-                                💬 Chat WA ({t.phone})
-                              </a>
-                            </td>
-                            <td className="p-3">
+                            </div>
+                            <span className={'text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ' +
+                              (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
+                               st === 'CHECKED_OUT' ? 'bg-slate-200 text-slate-800' : 'bg-amber-100 text-amber-800')}>
+                              {st}
+                            </span>
+                          </div>
+
+                          <div className="text-xs space-y-1 text-slate-600 font-medium border-t pt-2 border-slate-200">
+                            <p>🏠 <b>Lokasi:</b> {locationLabel}</p>
+                            <p>📅 <b>Masuk:</b> {t.entry_date}</p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <a
+                              href={`https://wa.me/${waNumber}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 py-2 bg-emerald-600 text-white text-[11px] rounded-lg font-bold text-center"
+                            >
+                              💬 Chat WA
+                            </a>
+                            <button
+                              onClick={() => handleViewKtp(t)}
+                              className="px-3 py-2 bg-slate-800 text-white text-[11px] rounded-lg font-bold"
+                            >
+                              🪪 KTP
+                            </button>
+                            {st !== 'ACTIVE' && (
                               <button
-                                onClick={() => handleViewKtp(t)}
-                                className="px-2.5 py-1 bg-slate-800 text-white text-[10px] rounded font-bold hover:bg-slate-900"
+                                onClick={() => handleStatusChange(t.id, 'active')}
+                                className="px-3 py-2 bg-green-600 text-white text-[11px] font-bold rounded-lg"
                               >
-                                🪪 Lihat KTP
+                                Aktif
                               </button>
-                            </td>
-                            <td className="p-3 font-mono">{t.entry_date}</td>
-                            <td className="p-3">
-                              <span className={'text-[9px] font-extrabold px-2 py-0.5 rounded uppercase ' +
-                                (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
-                                 st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
-                                {st}
-                              </span>
-                            </td>
-                            <td className="p-3 text-right space-x-1">
-                              {st !== 'ACTIVE' && (
-                                <button
-                                  onClick={() => handleStatusChange(t.id, 'active')}
-                                  className="px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded hover:bg-green-700"
-                                >
-                                  Aktifkan
-                                </button>
-                              )}
-                              {st !== 'CHECKED_OUT' && (
-                                <button
-                                  onClick={() => handleStatusChange(t.id, 'checked_out')}
-                                  className="px-2 py-1 bg-red-600 text-white text-[10px] font-bold rounded hover:bg-red-700"
-                                >
-                                  Out
-                                </button>
-                              )}
+                            )}
+                            {st !== 'CHECKED_OUT' && (
                               <button
-                                onClick={() => handleDelete(t.id, t.name)}
-                                className="px-2 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded hover:bg-red-100 hover:text-red-700"
+                                onClick={() => handleStatusChange(t.id, 'checked_out')}
+                                className="px-3 py-2 bg-red-600 text-white text-[11px] font-bold rounded-lg"
                               >
-                                🗑️ Hapus
+                                Out
                               </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            )}
+                            <button
+                              onClick={() => handleDelete(t.id, t.name)}
+                              className="p-2 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* TAMPILAN TABEL DESKTOP */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
+                          <th className="p-3">Nama & Peran</th>
+                          <th className="p-3">Lokasi / Kamar</th>
+                          <th className="p-3">WhatsApp Direct</th>
+                          <th className="p-3">Dokumen KTP</th>
+                          <th className="p-3">Tanggal Masuk</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {tenants.map((t) => {
+                          const st = (t.status || '').toUpperCase();
+                          const waNumber = formatPhoneToWA(t.phone);
+                          const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
+
+                          return (
+                            <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="p-3 font-medium">
+                                <div className="font-bold text-slate-900">{t.name}</div>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 inline-block mt-0.5">
+                                  {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-700 font-semibold">{locationLabel}</td>
+                              <td className="p-3 font-mono">
+                                <a
+                                  href={`https://wa.me/${waNumber}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-1 bg-emerald-600 text-white text-[10px] rounded font-bold hover:bg-emerald-700 inline-flex items-center gap-1 shadow-sm"
+                                >
+                                  💬 Chat WA ({t.phone})
+                                </a>
+                              </td>
+                              <td className="p-3">
+                                <button
+                                  onClick={() => handleViewKtp(t)}
+                                  className="px-2.5 py-1 bg-slate-800 text-white text-[10px] rounded font-bold hover:bg-slate-900"
+                                >
+                                  🪪 Lihat KTP
+                                </button>
+                              </td>
+                              <td className="p-3 font-mono">{t.entry_date}</td>
+                              <td className="p-3">
+                                <span className={'text-[9px] font-extrabold px-2 py-0.5 rounded uppercase ' +
+                                  (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
+                                   st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
+                                  {st}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right space-x-1">
+                                {st !== 'ACTIVE' && (
+                                  <button
+                                    onClick={() => handleStatusChange(t.id, 'active')}
+                                    className="px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded hover:bg-green-700"
+                                  >
+                                    Aktifkan
+                                  </button>
+                                )}
+                                {st !== 'CHECKED_OUT' && (
+                                  <button
+                                    onClick={() => handleStatusChange(t.id, 'checked_out')}
+                                    className="px-2 py-1 bg-red-600 text-white text-[10px] font-bold rounded hover:bg-red-700"
+                                  >
+                                    Out
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDelete(t.id, t.name)}
+                                  className="px-2 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded hover:bg-red-100 hover:text-red-700"
+                                >
+                                  🗑️ Hapus
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
 
           </div>
         ) : (
-          <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
+          <div className="p-10 text-center bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
             <p className="text-3xl">🔒</p>
             <h3 className="text-base font-bold text-slate-800">Dasbor Penyewa Masih Terkunci</h3>
             <p className="text-xs text-slate-500">
@@ -580,7 +696,6 @@ export default function OwnerDashboard() {
                   onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
                   className="w-full text-center text-2xl tracking-[0.5em] p-3 border-2 border-slate-300 rounded-xl font-mono focus:border-emerald-600 outline-none"
                 />
-                <p className="text-[10px] text-slate-400 text-center mt-1">Petunjuk Pengujian: PIN default unit awal adalah <b>1234</b></p>
               </div>
 
               <div className="flex gap-2 pt-2">

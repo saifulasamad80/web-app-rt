@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
 import { getTenantKtpUrl } from '../../src/actions/checkin-tenant';
 import { submitDuesPayment } from '../../src/actions/manage-dues';
@@ -143,7 +144,7 @@ export default function RtDashboardPage() {
     setSubmittingDues(false);
 
     if (res && res.success) {
-      setDuesMsg('Pembayaran iuran kas atas nama "' + duesName + '" (Rp ' + parseInt(duesAmount).toLocaleString('id-ID') + ') berhasil dicatat!');
+      setDuesMsg('Pembayaran iuran kas atas nama "' + duesName + '" berhasil dicatat!');
       setDuesName('');
       setDuesHouse('');
       setTimeout(() => setDuesMsg(''), 4000);
@@ -152,9 +153,10 @@ export default function RtDashboardPage() {
     }
   };
 
+  // FOTO 3: KELUAR DARI DASBOR RT KEMBALI KE HALAMAN UTAMA /
   const handleLogout = async () => {
     await logoutAdminRT();
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const calculateAge = (dobString?: string): number => {
@@ -211,39 +213,39 @@ export default function RtDashboardPage() {
   const approvedProperties = properties.filter((p) => p.status === 'APPROVED');
 
   return (
-    <main className="min-h-screen bg-slate-100 p-4 md:p-8 text-slate-900">
+    <main className="min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900">
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* HEADER DASBOR RT */}
-        <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div className="bg-slate-900 text-white p-5 md:p-6 rounded-2xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-500 text-slate-950 rounded uppercase">
               PORTAL PENGURUS RT / KEPENDUDUKAN
             </span>
-            <h1 className="text-2xl font-extrabold mt-2 text-white">Dasbor Pengurus RT Terpadu</h1>
+            <h1 className="text-xl md:text-2xl font-extrabold mt-2 text-white">Dasbor Pengurus RT Terpadu</h1>
             <p className="text-xs text-slate-400 mt-0.5">
               Buku Register Warga Pendatang, Verifikasi & Reset PIN Properti, Kas Iuran RT
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button
               onClick={exportCSV}
               className="px-3.5 py-2 bg-emerald-600 text-white font-bold text-xs rounded-xl hover:bg-emerald-700 transition-all shadow"
             >
-              📊 Ekspor Excel/CSV
+              📊 Ekspor CSV
             </button>
             <button
               onClick={() => window.print()}
               className="px-3.5 py-2 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl hover:bg-slate-700 border border-slate-700 transition-all"
             >
-              🖨️ Cetak Register
+              🖨️ Cetak
             </button>
             <button
               onClick={handleLogout}
-              className="px-3.5 py-2 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition-all shadow"
+              className="px-3.5 py-2 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition-all shadow flex items-center gap-1"
             >
-              🚪 Keluar
+              🚪 Keluar ke Utama
             </button>
           </div>
         </div>
@@ -305,7 +307,7 @@ export default function RtDashboardPage() {
             <h3 className="text-sm font-bold text-slate-900 uppercase">
               🔑 Manajemen PIN Operasional Pemilik Unit ({properties.length})
             </h3>
-            <span className="text-[11px] text-slate-500">Fitur Bantuan RT Saat Pemilik Lupa PIN</span>
+            <span className="text-[11px] text-slate-500">Fitur Bantuan RT</span>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -332,26 +334,26 @@ export default function RtDashboardPage() {
         </div>
 
         {/* STATS CARDS RT */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <span className="text-xs font-bold text-slate-500 uppercase">Total Warga Pendatang</span>
-            <p className="text-3xl font-black text-slate-900 mt-1">{tenants.length}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <span className="text-xs font-bold text-slate-500 uppercase">Total Warga</span>
+            <p className="text-2xl md:text-3xl font-black text-slate-900 mt-1">{tenants.length}</p>
           </div>
-          <div className="bg-white p-5 rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
-            <span className="text-xs font-bold text-amber-800 uppercase">Perlu Verifikasi RT</span>
-            <p className="text-3xl font-black text-amber-600 mt-1">
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-amber-200 bg-amber-50/40 shadow-sm">
+            <span className="text-xs font-bold text-amber-800 uppercase">Perlu RT</span>
+            <p className="text-2xl md:text-3xl font-black text-amber-600 mt-1">
               {tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING' || (t.status || '').toUpperCase() === 'ACTIVE').length}
             </p>
           </div>
-          <div className="bg-white p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
-            <span className="text-xs font-bold text-emerald-800 uppercase">Terverifikasi Resmi RT</span>
-            <p className="text-3xl font-black text-emerald-600 mt-1">
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
+            <span className="text-xs font-bold text-emerald-800 uppercase">Verified</span>
+            <p className="text-2xl md:text-3xl font-black text-emerald-600 mt-1">
               {tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED').length}
             </p>
           </div>
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-            <span className="text-xs font-bold text-slate-500 uppercase">Unit Properti Terverifikasi</span>
-            <p className="text-3xl font-black text-slate-800 mt-1">{approvedProperties.length}</p>
+          <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <span className="text-xs font-bold text-slate-500 uppercase">Unit Properti</span>
+            <p className="text-2xl md:text-3xl font-black text-slate-800 mt-1">{approvedProperties.length}</p>
           </div>
         </div>
 
@@ -398,7 +400,7 @@ export default function RtDashboardPage() {
           </div>
         </div>
 
-        {/* TABEL DATA PENDUDUK RT */}
+        {/* TABEL DATA PENDUDUK RT DENGAN RESPONSIVE MOBILE CARD */}
         <div className="bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
@@ -416,98 +418,166 @@ export default function RtDashboardPage() {
               Tidak ada data warga pendatang yang cocok dengan kriteria pencarian.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                    <th className="p-3">Nama Warga & Peran</th>
-                    <th className="p-3">Lokasi Unit & Kamar</th>
-                    <th className="p-3">Kota Asal KTP</th>
-                    <th className="p-3">Kontak WA</th>
-                    <th className="p-3">Dokumen KTP</th>
-                    <th className="p-3">Mulai Menetap</th>
-                    <th className="p-3">Status RT</th>
-                    <th className="p-3 text-right print:hidden">Aksi Verifikasi RT</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredTenants.map((t) => {
-                    const isVerified = (t.status || '').toUpperCase() === 'VERIFIED';
-                    const age = calculateAge(t.birth_date);
-                    const location = t.room_number ? `Kamar ${t.room_number}` : (t.full_address || 'Kos Melati 1');
+            <>
+              {/* MOBILE CARD VIEW FOR RT */}
+              <div className="block md:hidden p-3 space-y-3">
+                {filteredTenants.map((t) => {
+                  const isVerified = (t.status || '').toUpperCase() === 'VERIFIED';
+                  const age = calculateAge(t.birth_date);
+                  const location = t.room_number ? `Kamar ${t.room_number}` : (t.full_address || 'Kos Melati 1');
 
-                    return (
-                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3">
-                          <div className="font-bold text-slate-900">{t.name}</div>
-                          <div className="flex gap-1.5 mt-0.5">
+                  return (
+                    <div key={t.id} className="p-4 bg-slate-50 border rounded-xl space-y-2.5">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-sm">{t.name}</h3>
+                          <div className="flex gap-1 mt-0.5">
                             <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded">
                               {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
                             </span>
                             {age > 0 && <span className="text-[9px] text-slate-500">{age} Thn</span>}
                           </div>
-                        </td>
+                        </div>
+                        {isVerified ? (
+                          <span className="text-[9px] font-extrabold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
+                            ✅ VERIFIED
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-extrabold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                            ⚠️ MENUNGGU
+                          </span>
+                        )}
+                      </div>
 
-                        <td className="p-3">
-                          <span className="font-semibold text-emerald-800 block">{location}</span>
-                          <span className="text-[10px] text-slate-500">{t.properties?.name || 'Kos Melati 1'}</span>
-                        </td>
+                      <div className="text-xs space-y-1 text-slate-600 font-medium border-t pt-2 border-slate-200">
+                        <p>🏠 <b>Unit:</b> {location} ({t.properties?.name || 'Kos Melati 1'})</p>
+                        <p>📍 <b>KTP Asal:</b> {t.address_ktp || '-'}</p>
+                        <p>📱 <b>WA:</b> {t.phone}</p>
+                        <p>📅 <b>Masuk:</b> {t.entry_date}</p>
+                      </div>
 
-                        <td className="p-3 font-medium text-slate-700">{t.address_ktp || '-'}</td>
-
-                        <td className="p-3 font-mono text-slate-800">{t.phone}</td>
-
-                        <td className="p-3">
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
+                        <button
+                          onClick={() => handleViewKtp(t)}
+                          className="flex-1 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg"
+                        >
+                          🪪 Periksa KTP
+                        </button>
+                        {!isVerified ? (
                           <button
-                            onClick={() => handleViewKtp(t)}
-                            className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-semibold rounded hover:bg-slate-900 transition-colors"
+                            onClick={() => handleVerifyTenant(t.id, 'VERIFIED')}
+                            className="flex-1 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-lg"
                           >
-                            🪪 Periksa KTP
+                            ✓ Setujui RT
                           </button>
-                        </td>
+                        ) : (
+                          <button
+                            onClick={() => handleVerifyTenant(t.id, 'ACTIVE')}
+                            className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg"
+                          >
+                            Batal
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
 
-                        <td className="p-3 font-mono">{t.entry_date}</td>
+              {/* DESKTOP TABLE VIEW FOR RT */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
+                      <th className="p-3">Nama Warga & Peran</th>
+                      <th className="p-3">Lokasi Unit & Kamar</th>
+                      <th className="p-3">Kota Asal KTP</th>
+                      <th className="p-3">Kontak WA</th>
+                      <th className="p-3">Dokumen KTP</th>
+                      <th className="p-3">Mulai Menetap</th>
+                      <th className="p-3">Status RT</th>
+                      <th className="p-3 text-right print:hidden">Aksi Verifikasi RT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredTenants.map((t) => {
+                      const isVerified = (t.status || '').toUpperCase() === 'VERIFIED';
+                      const age = calculateAge(t.birth_date);
+                      const location = t.room_number ? `Kamar ${t.room_number}` : (t.full_address || 'Kos Melati 1');
 
-                        <td className="p-3">
-                          {isVerified ? (
-                            <span className="text-[10px] font-extrabold px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
-                              ✅ VERIFIED RT
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-extrabold px-2 py-1 bg-amber-100 text-amber-800 rounded-full border border-amber-300">
-                              ⚠️ MENUNGGU RT
-                            </span>
-                          )}
-                        </td>
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{t.name}</div>
+                            <div className="flex gap-1.5 mt-0.5">
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded">
+                                {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
+                              </span>
+                              {age > 0 && <span className="text-[9px] text-slate-500">{age} Thn</span>}
+                            </div>
+                          </td>
 
-                        <td className="p-3 text-right space-x-1.5 print:hidden">
-                          {!isVerified ? (
+                          <td className="p-3">
+                            <span className="font-semibold text-emerald-800 block">{location}</span>
+                            <span className="text-[10px] text-slate-500">{t.properties?.name || 'Kos Melati 1'}</span>
+                          </td>
+
+                          <td className="p-3 font-medium text-slate-700">{t.address_ktp || '-'}</td>
+
+                          <td className="p-3 font-mono text-slate-800">{t.phone}</td>
+
+                          <td className="p-3">
                             <button
-                              onClick={() => handleVerifyTenant(t.id, 'VERIFIED')}
-                              className="px-3 py-1.5 bg-emerald-700 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-800 transition-all shadow-sm"
+                              onClick={() => handleViewKtp(t)}
+                              className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-semibold rounded hover:bg-slate-900 transition-colors"
                             >
-                              ✓ Setujui RT
+                              🪪 Periksa KTP
                             </button>
-                          ) : (
-                            <button
-                              onClick={() => handleVerifyTenant(t.id, 'ACTIVE')}
-                              className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg hover:bg-slate-300"
-                            >
-                              Batal Verifikasi
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                          </td>
+
+                          <td className="p-3 font-mono">{t.entry_date}</td>
+
+                          <td className="p-3">
+                            {isVerified ? (
+                              <span className="text-[10px] font-extrabold px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
+                                ✅ VERIFIED RT
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-extrabold px-2 py-1 bg-amber-100 text-amber-800 rounded-full border border-amber-300">
+                                ⚠️ MENUNGGU RT
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3 text-right space-x-1.5 print:hidden">
+                            {!isVerified ? (
+                              <button
+                                onClick={() => handleVerifyTenant(t.id, 'VERIFIED')}
+                                className="px-3 py-1.5 bg-emerald-700 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-800 transition-all shadow-sm"
+                              >
+                                ✓ Setujui RT
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleVerifyTenant(t.id, 'ACTIVE')}
+                                className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg hover:bg-slate-300"
+                              >
+                                Batal Verifikasi
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
-        {/* MODUL MANAJEMEN IURAN & KAS RT (LENGKAP DENGAN PERIODE) */}
-        <div className="bg-white p-6 rounded-2xl shadow border border-slate-200 space-y-4 print:hidden">
+        {/* MODUL MANAJEMEN IURAN & KAS RT */}
+        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4 print:hidden">
           <h2 className="text-base font-bold text-slate-900 uppercase border-b pb-2">
             Pencatatan Iuran Kas Warga
           </h2>
@@ -524,7 +594,7 @@ export default function RtDashboardPage() {
               <input
                 type="text"
                 required
-                placeholder="Contoh: Saiful Anwar"
+                placeholder="Contoh: Saiful"
                 value={duesName}
                 onChange={(e) => setDuesName(e.target.value)}
                 className="w-full text-xs p-2.5 border rounded-xl outline-none"
@@ -535,7 +605,7 @@ export default function RtDashboardPage() {
               <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nomor Rumah / Blok</label>
               <input
                 type="text"
-                placeholder="Contoh: Griya Alfatihah 78"
+                placeholder="Griya Alfatihah 78"
                 value={duesHouse}
                 onChange={(e) => setDuesHouse(e.target.value)}
                 className="w-full text-xs p-2.5 border rounded-xl outline-none"
