@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -11,11 +10,10 @@ const supabase = createClient(
 );
 
 export default function LoginPage() {
-  const router = useRouter();
   const [zoomPercent, setZoomPercent] = useState<number>(100);
 
-  const [email, setEmail] = useState('ajpsas@gmail.com');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('ajipsas@gmail.com');
+  const [password, setPassword] = useState('admin12345');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -29,17 +27,25 @@ export default function LoginPage() {
     setLoading(true);
     setErrorMsg('');
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+    // Autentikasi langsung di Client Browser (menyimpan token ke LocalStorage & Cookies)
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: password,
     });
 
-    setLoading(false);
-
-    if (!error) {
-      router.push('/rt');
-    } else {
+    if (error) {
+      setLoading(false);
       setErrorMsg(error.message || 'Email atau kata sandi pengurus salah.');
+      return;
+    }
+
+    if (data.session || data.user) {
+      // Simpan session flag dan lakukan redirect penuh ke Dasbor RT
+      localStorage.setItem('rt_admin_logged_in', 'true');
+      window.location.href = '/rt';
+    } else {
+      setLoading(false);
+      setErrorMsg('Gagal membuat sesi login. Silakan coba lagi.');
     }
   };
 
@@ -50,7 +56,7 @@ export default function LoginPage() {
     >
       <div className="max-w-md w-full space-y-5">
 
-        {/* HEADER CERAH DENGAN WIDGET ZOOM */}
+        {/* HEADER CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-6 rounded-3xl shadow-xl flex justify-between items-center">
           <div>
             <span className="text-[0.75rem] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
@@ -64,7 +70,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleZoomOut}
-              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all"
+              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
             >
               A-
             </button>
@@ -74,7 +80,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleZoomIn}
-              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all"
+              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
             >
               A+
             </button>
@@ -90,7 +96,7 @@ export default function LoginPage() {
           <div className="text-center">
             <h2 className="text-[1.1rem] font-black text-slate-900">Autentikasi Pengurus</h2>
             <p className="text-[0.8rem] text-slate-500 mt-1">
-              Gunakan email dan kata sandi akun resmi pengurus RT.
+              Gunakan akun resmi Pengurus RT untuk memvalidasi warga & kas.
             </p>
           </div>
 
@@ -129,7 +135,7 @@ export default function LoginPage() {
               disabled={loading || !password}
               className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[1rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
             >
-              {loading ? 'Memverifikasi Akun...' : 'Masuk ke Dasbor RT →'}
+              {loading ? 'Memverifikasi & Membuka Dasbor...' : 'Masuk ke Dasbor RT →'}
             </button>
           </form>
 
