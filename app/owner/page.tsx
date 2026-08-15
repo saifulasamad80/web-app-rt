@@ -83,7 +83,6 @@ function isPhoneMatch(phoneA?: string, phoneB?: string): boolean {
   return suffixA === suffixB;
 }
 
-// PARSER NOMOR KAMAR PRESISI: MENGAMBIL ANGKA SETELAH KATA "KAMAR" / "UNIT"
 function parseRoomNumber(roomStr?: string): number | null {
   if (!roomStr) return null;
   const match = roomStr.match(/(?:kamar|unit|no\.?)\s*(\d+)/i) || roomStr.match(/^(\d+)/);
@@ -489,7 +488,6 @@ export default function OwnerDashboard() {
     }
   };
 
-  // HITUNG FISIK OKUPANSI SECARA PRESISI (BERDASARKAN JUMLAH KAMAR FISIK UNIK YANG TERISI)
   const totalRooms = activeProperty?.total_rooms || 10;
   const occupiedRoomSet = new Set<string>();
 
@@ -767,7 +765,7 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
-                {/* TAB 1: DAFTAR PENYEWA */}
+                {/* TAB 1: DAFTAR PENYEWA (TAGIHAN HANYA PADA PENANGGUNG JAWAB) */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -775,7 +773,7 @@ export default function OwnerDashboard() {
                         <h3 className="text-[1rem] font-black text-slate-900 uppercase">
                           Penghuni: {activeProperty.name || activeProperty.property_name}
                         </h3>
-                        <p className="text-[0.75rem] text-slate-500">Klik status tagihan untuk mengubah status bayar sewa.</p>
+                        <p className="text-[0.75rem] text-slate-500">Klik status tagihan pada Penanggung Jawab untuk mengubah status bayar sewa.</p>
                       </div>
 
                       <div className="flex gap-2">
@@ -828,6 +826,7 @@ export default function OwnerDashboard() {
                               const isPending = st === 'PENDING';
                               const isMarriedWithoutDoc = t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
                               const threeMonthHistory = getThreeMonthStatus(t.payment_status);
+                              const isHeadPerson = t.is_head || (t.relation || '').toLowerCase().includes('penanggung');
 
                               return (
                                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -838,37 +837,52 @@ export default function OwnerDashboard() {
                                     </span>
                                   </td>
                                   <td className="p-3 font-bold text-emerald-900">{t.room_number || '-'}</td>
+
+                                  {/* STATUS TAGIHAN HANYA DISEMATKAN PADA PENANGGUNG JAWAB */}
                                   <td className="p-3">
-                                    <button
-                                      onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)}
-                                      className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black transition-all shadow-sm cursor-pointer ${
-                                        isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
-                                      }`}
-                                    >
-                                      {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
-                                    </button>
+                                    {isHeadPerson ? (
+                                      <button
+                                        onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)}
+                                        className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black transition-all shadow-sm cursor-pointer ${
+                                          isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
+                                        }`}
+                                      >
+                                        {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
+                                      </button>
+                                    ) : (
+                                      <span className="text-slate-400 font-bold text-[0.7rem] italic">
+                                        - (Ikut Tagihan PJ)
+                                      </span>
+                                    )}
                                   </td>
 
+                                  {/* RIWAYAT 3 BULAN HANYA PADA PENANGGUNG JAWAB */}
                                   <td className="p-3">
-                                    <div className="flex gap-1">
-                                      {threeMonthHistory.map((m, idx) => (
-                                        <span
-                                          key={idx}
-                                          className={`text-[0.65rem] font-black px-2 py-0.5 rounded-lg border ${
-                                            m.isPaid
-                                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                                              : 'bg-red-50 text-red-900 border-red-300'
-                                          }`}
-                                        >
-                                          {m.label} {m.isPaid ? '✓' : '✗'}
-                                        </span>
-                                      ))}
-                                    </div>
+                                    {isHeadPerson ? (
+                                      <div className="flex gap-1">
+                                        {threeMonthHistory.map((m, idx) => (
+                                          <span
+                                            key={idx}
+                                            className={`text-[0.65rem] font-black px-2 py-0.5 rounded-lg border ${
+                                              m.isPaid
+                                                ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                                                : 'bg-red-50 text-red-900 border-red-300'
+                                            }`}
+                                            title={`Bulan ${m.label}: ${m.isPaid ? 'Lunas' : 'Belum Lunas'}`}
+                                          >
+                                            {m.label} {m.isPaid ? '✓' : '✗'}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 font-bold text-[0.7rem]">-</span>
+                                    )}
                                   </td>
 
                                   <td className="p-3 font-mono font-bold text-slate-900">
-                                    Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
+                                    {isHeadPerson ? `Rp ${Number(t.rent_price || 0).toLocaleString('id-ID')}` : 'Rp 0'}
                                   </td>
+
                                   <td className="p-3 space-y-1">
                                     <span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase inline-block ' +
                                       (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
@@ -887,8 +901,9 @@ export default function OwnerDashboard() {
                                       </p>
                                     )}
                                   </td>
-                                  <td className="p-3 text-right space-x-1">
-                                    {!isPaid && (
+
+                                  <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                                    {isHeadPerson && !isPaid && (
                                       <button
                                         onClick={() => handleSendReminderWA(t)}
                                         className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.7rem] font-bold rounded-lg cursor-pointer"
@@ -984,7 +999,7 @@ export default function OwnerDashboard() {
                   </div>
                 )}
 
-                {/* TAB 3: MATRIX KAMAR DENGAN PENCOCOKAN PRESISI */}
+                {/* TAB 3: MATRIX KAMAR */}
                 {activeTab === 'matrix' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="border-b pb-3">
@@ -999,13 +1014,11 @@ export default function OwnerDashboard() {
                         const targetRoomNum = idx + 1;
                         const roomLabel = `Kamar ${String(targetRoomNum).padStart(2, '0')}`;
 
-                        // PENCOCOKAN PRESISI: HANYA COCOK JIKA ANGKA KAMAR TEPAT SAMA DENGAN targetRoomNum
                         const occupant = tenants.find((t) => {
                           const pNum = parseRoomNumber(t.room_number);
                           if (pNum !== null) {
                             return pNum === targetRoomNum;
                           }
-                          // Fallback jika kamar ditulis string murni
                           const raw = (t.room_number || '').trim().toLowerCase();
                           return raw === roomLabel.toLowerCase() || raw === `kamar ${targetRoomNum}`.toLowerCase();
                         });

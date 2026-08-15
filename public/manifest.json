@@ -1,0 +1,18 @@
+{
+  "name": "Portal Digital Warga & RT Terpadu",
+  "short_name": "Portal RT",
+  "description": "Sistem Pelayanan Kependudukan Warga, Manajemen Kos & Iuran RT",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#065f46",
+  "theme_color": "#065f46",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://api.iconify.design/lucide:building-2.svg?color=%2310b981",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
