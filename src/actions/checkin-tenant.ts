@@ -10,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export async function getPublicPropertiesList() {
   const { data, error } = await supabase
     .from('properties')
-    .select('id, name, property_name, type, slug, address, house_rules, status, owner_name, owner_phone, pin_code, failed_pin_attempts, pin_locked_until')
+    .select('*')
     .order('created_at', { ascending: false });
 
   return { success: !error, properties: data || [], error: error?.message };
@@ -19,7 +19,7 @@ export async function getPublicPropertiesList() {
 export async function getPropertyRules(slug: string) {
   const { data, error } = await supabase
     .from('properties')
-    .select('id, name, property_name, house_rules, address, owner_name, owner_phone')
+    .select('*')
     .eq('slug', slug)
     .single();
 
@@ -34,7 +34,13 @@ export async function createProperty(
   house_rules: string,
   pin_code: string,
   owner_name?: string,
-  owner_phone?: string
+  owner_phone?: string,
+  manager_name?: string,
+  manager_phone?: string,
+  total_rooms: number = 1,
+  bank_name?: string,
+  bank_account_number?: string,
+  bank_account_holder?: string
 ) {
   if (!name || !pin_code) return { success: false, error: 'Nama properti & PIN wajib diisi.' };
 
@@ -52,6 +58,12 @@ export async function createProperty(
     pin_code,
     owner_name: owner_name || '',
     owner_phone: owner_phone || '',
+    manager_name: manager_name || '',
+    manager_phone: manager_phone || '',
+    total_rooms: total_rooms || 1,
+    bank_name: bank_name || '',
+    bank_account_number: bank_account_number || '',
+    bank_account_holder: bank_account_holder || '',
     status: 'PENDING'
   }).select();
 
@@ -71,6 +83,12 @@ export async function updateProperty(
     name?: string;
     owner_name?: string;
     owner_phone?: string;
+    manager_name?: string;
+    manager_phone?: string;
+    total_rooms?: number;
+    bank_name?: string;
+    bank_account_number?: string;
+    bank_account_holder?: string;
     address?: string;
     type?: string;
   }
@@ -82,6 +100,12 @@ export async function updateProperty(
       property_name: payload.name,
       owner_name: payload.owner_name,
       owner_phone: payload.owner_phone,
+      manager_name: payload.manager_name,
+      manager_phone: payload.manager_phone,
+      total_rooms: payload.total_rooms,
+      bank_name: payload.bank_name,
+      bank_account_number: payload.bank_account_number,
+      bank_account_holder: payload.bank_account_holder,
       address: payload.address,
       type: payload.type
     })
@@ -165,28 +189,45 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const property_id = formData.get('property_id') as string;
     const room_number = (formData.get('room_number') as string) || '';
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
+    const rent_price = parseInt((formData.get('rent_price') as string || '0').replace(/\D/g, ''), 10) || 0;
+    const marital_status = (formData.get('marital_status') as string) || 'Belum Menikah';
+    const occupation = (formData.get('occupation') as string) || '';
     const occupantsRaw = formData.get('occupants') as string;
 
     const household_id = `HH-${Date.now()}`;
     const registered_at = new Date().toISOString();
 
+    // Upload KTP
     const ktpData = formData.get('ktp');
     let ktp_path = '';
-
     if (ktpData && ktpData instanceof File && ktpData.size > 0) {
       const fileExt = ktpData.name.split('.').pop() || 'jpg';
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const fileName = `ktp_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
       const buffer = Buffer.from(await ktpData.arrayBuffer());
 
       const { data: uploadData, error: uploadErr } = await supabase.storage
         .from('ktp-documents')
-        .upload(fileName, buffer, {
-          contentType: ktpData.type || 'image/jpeg',
-          upsert: true,
-        });
+        .upload(fileName, buffer, { contentType: ktpData.type || 'image/jpeg', upsert: true });
 
       if (!uploadErr && uploadData) {
         ktp_path = uploadData.path;
+      }
+    }
+
+    // Upload Buku Nikah / KK jika ada
+    const marriageDoc = formData.get('marriage_doc');
+    let marriage_doc_url = '';
+    if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
+      const fileExt = marriageDoc.name.split('.').pop() || 'jpg';
+      const fileName = `doc_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const buffer = Buffer.from(await marriageDoc.arrayBuffer());
+
+      const { data: uploadDocData, error: uploadDocErr } = await supabase.storage
+        .from('ktp-documents')
+        .upload(fileName, buffer, { contentType: marriageDoc.type || 'image/jpeg', upsert: true });
+
+      if (!uploadDocErr && uploadDocData) {
+        marriage_doc_url = uploadDocData.path;
       }
     }
 
@@ -215,11 +256,16 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       entry_date,
       household_id,
       name: occ.name,
-      phone: occ.phone,
-      address_ktp: occ.address_ktp || occ.address || '',
+      phone: occ.phone || (index === 0 ? (formData.get('phone') as string) : ''),
+      address_ktp: occ.address_ktp || occ.address || (formData.get('address_ktp') as string) || '',
       relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
       is_head: index === 0,
+      marital_status: index === 0 ? marital_status : (occ.marital_status || 'Belum Menikah'),
+      occupation: index === 0 ? occupation : (occ.occupation || ''),
+      rent_price: index === 0 ? rent_price : 0,
+      payment_status: 'UNPAID',
       ktp_path: index === 0 ? ktp_path : null,
+      marriage_doc_url: index === 0 ? marriage_doc_url : null,
       status: 'PENDING',
     }));
 
@@ -240,6 +286,84 @@ export async function submitMultiTenantsStrict(formData: FormData) {
   }
 }
 
+export async function getTenantPortalData(phone: string) {
+  let cleaned = (phone || '').replace(/\D/g, '');
+  if (cleaned.startsWith('62')) cleaned = '0' + cleaned.slice(2);
+
+  const { data: tenantRecords, error } = await supabase
+    .from('tenants')
+    .select('*, properties(*)')
+    .or(`phone.eq.${cleaned},phone.eq.62${cleaned.slice(1)},phone.eq.${phone.trim()}`)
+    .order('created_at', { ascending: false });
+
+  if (error || !tenantRecords || tenantRecords.length === 0) {
+    return { success: false, error: 'Data nomor WhatsApp tidak ditemukan dalam buku register warga RT.' };
+  }
+
+  const primary = tenantRecords[0];
+
+  let householdMembers = [];
+  if (primary.household_id) {
+    const { data: members } = await supabase
+      .from('tenants')
+      .select('*')
+      .eq('household_id', primary.household_id)
+      .order('is_head', { ascending: false });
+    householdMembers = members || [];
+  } else {
+    householdMembers = [primary];
+  }
+
+  return { success: true, tenant: primary, household: householdMembers };
+}
+
+export async function uploadPendingDocument(tenantId: string, docType: 'marriage' | 'ktp', formData: FormData) {
+  const file = formData.get('file');
+  if (!file || !(file instanceof File)) {
+    return { success: false, error: 'Berkas tidak valid.' };
+  }
+
+  const fileExt = file.name.split('.').pop() || 'jpg';
+  const fileName = `${docType}_susulan_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const { data: uploadData, error: uploadErr } = await supabase.storage
+    .from('ktp-documents')
+    .upload(fileName, buffer, { contentType: file.type || 'image/jpeg', upsert: true });
+
+  if (uploadErr || !uploadData) {
+    return { success: false, error: 'Gagal mengunggah dokumen: ' + uploadErr?.message };
+  }
+
+  const updateField = docType === 'marriage' ? { marriage_doc_url: uploadData.path } : { ktp_path: uploadData.path };
+  const { error: dbErr } = await supabase.from('tenants').update(updateField).eq('id', tenantId);
+
+  if (dbErr) return { success: false, error: dbErr.message };
+
+  try {
+    revalidatePath('/portal-warga');
+    revalidatePath('/owner');
+    revalidatePath('/rt');
+  } catch (e) {}
+
+  return { success: true, path: uploadData.path };
+}
+
+export async function updateTenantPaymentStatus(tenantId: string, payment_status: 'PAID' | 'UNPAID') {
+  const { error } = await supabase
+    .from('tenants')
+    .update({ payment_status })
+    .eq('id', tenantId);
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+    } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
+}
+
 export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
   const { error } = await supabase
     .from('tenants')
@@ -256,6 +380,7 @@ export async function updateTenantData(
     phone?: string;
     room_number?: string;
     relation?: string;
+    rent_price?: number;
   }
 ) {
   const { error } = await supabase
@@ -267,6 +392,7 @@ export async function updateTenantData(
     try {
       revalidatePath('/owner');
       revalidatePath('/rt');
+      revalidatePath('/portal-warga');
     } catch (e) {}
   }
 
@@ -288,10 +414,10 @@ export async function updateHouseRules(propertyId: string, house_rules: string) 
 }
 
 export async function getTenantKtpUrl(filePath: string) {
-  if (!filePath) return { success: false, error: 'Path KTP kosong.' };
+  if (!filePath) return { success: false, error: 'Path berkas kosong.' };
   const cleanPath = filePath.replace(/^ktp-documents\//, '');
   const { data, error } = await supabase.storage.from('ktp-documents').createSignedUrl(cleanPath, 60);
 
-  if (error || !data?.signedUrl) return { success: false, error: 'Gagal membuat signed URL KTP.' };
+  if (error || !data?.signedUrl) return { success: false, error: 'Gagal membuat signed URL berkas.' };
   return { success: true, url: data.signedUrl };
 }
