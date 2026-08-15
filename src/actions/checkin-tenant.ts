@@ -197,7 +197,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const household_id = `HH-${Date.now()}`;
     const registered_at = new Date().toISOString();
 
-    // Upload KTP
     const ktpData = formData.get('ktp');
     let ktp_path = '';
     if (ktpData && ktpData instanceof File && ktpData.size > 0) {
@@ -214,7 +213,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
-    // Upload Buku Nikah / KK jika ada
     const marriageDoc = formData.get('marriage_doc');
     let marriage_doc_url = '';
     if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
@@ -256,7 +254,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       entry_date,
       household_id,
       name: occ.name,
-      phone: occ.phone || (index === 0 ? (formData.get('phone') as string) : ''),
+      phone: (occ.phone || (index === 0 ? (formData.get('phone') as string) : '')).trim(),
       address_ktp: occ.address_ktp || occ.address || (formData.get('address_ktp') as string) || '',
       relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
       is_head: index === 0,
@@ -286,18 +284,23 @@ export async function submitMultiTenantsStrict(formData: FormData) {
   }
 }
 
-export async function getTenantPortalData(phone: string) {
-  let cleaned = (phone || '').replace(/\D/g, '');
-  if (cleaned.startsWith('62')) cleaned = '0' + cleaned.slice(2);
+export async function getTenantPortalData(phoneInput: string) {
+  if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
+
+  const rawClean = phoneInput.replace(/\D/g, '');
+  const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
 
   const { data: tenantRecords, error } = await supabase
     .from('tenants')
     .select('*, properties(*)')
-    .or(`phone.eq.${cleaned},phone.eq.62${cleaned.slice(1)},phone.eq.${phone.trim()}`)
+    .or(`phone.ilike.%${suffix}%,phone.eq.${phoneInput.trim()},phone.eq.${rawClean}`)
     .order('created_at', { ascending: false });
 
   if (error || !tenantRecords || tenantRecords.length === 0) {
-    return { success: false, error: 'Data nomor WhatsApp tidak ditemukan dalam buku register warga RT.' };
+    return {
+      success: false,
+      error: `Nomor WhatsApp (${phoneInput}) belum terdaftar di sistem warga RT. Pastikan formulir lapor diri sudah dikirim.`
+    };
   }
 
   const primary = tenantRecords[0];
