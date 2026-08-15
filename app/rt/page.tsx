@@ -15,6 +15,7 @@ import {
   recordRtDues,
   getRtOfficers,
   addRtOfficer,
+  updateRtOfficer,
   deleteRtOfficer,
   resetOfficerPasswordBySuperAdmin,
 } from '../../src/actions/checkin-tenant';
@@ -41,7 +42,7 @@ export default function RtDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // Modal Dokumen Viewer (KTP & Buku Nikah)
+  // Modal Dokumen Viewer
   const [docModalTitle, setDocModalTitle] = useState('');
   const [docModalUrl, setDocModalUrl] = useState<string | null>(null);
   const [loadingDoc, setLoadingDoc] = useState(false);
@@ -58,12 +59,14 @@ export default function RtDashboardPage() {
   const [officerNewPassword, setOfficerNewPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
 
-  // Form Tambah Pengurus RT
+  // Form Tambah & Edit Pengurus RT
   const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
+  const [editingOfficer, setEditingOfficer] = useState<any | null>(null);
   const [officerName, setOfficerName] = useState('');
   const [officerRole, setOfficerRole] = useState('SEKRETARIS');
   const [officerPhone, setOfficerPhone] = useState('');
   const [officerEmail, setOfficerEmail] = useState('');
+  const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345');
   const [savingOfficer, setSavingOfficer] = useState(false);
 
   // Form Input Iuran Kas RT
@@ -198,25 +201,52 @@ export default function RtDashboardPage() {
     }
   };
 
-  const handleAddOfficerSubmit = async (e: React.FormEvent) => {
+  const handleOpenEditOfficer = (off: any) => {
+    setEditingOfficer(off);
+    setOfficerName(off.full_name);
+    setOfficerRole(off.role);
+    setOfficerPhone(off.phone_number || '');
+    setOfficerEmail(off.email || '');
+  };
+
+  const handleOfficerFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!officerName || !officerPhone) return;
+    if (!officerName || !officerPhone || !officerEmail) {
+      alert('Nama lengkap, No. WhatsApp, dan Email wajib diisi.');
+      return;
+    }
 
     setSavingOfficer(true);
-    const res = await addRtOfficer(officerName, officerRole, officerPhone, officerEmail);
-    setSavingOfficer(false);
 
-    if (res.success) {
-      setCopyMsg(`Pengurus RT baru "${officerName}" berhasil ditambahkan.`);
-      setTimeout(() => setCopyMsg(''), 3500);
-      setShowAddOfficerModal(false);
-      setOfficerName('');
-      setOfficerPhone('');
-      setOfficerEmail('');
-      const oRes = await getRtOfficers();
-      setOfficers(oRes.officers || []);
+    if (editingOfficer) {
+      const res = await updateRtOfficer(editingOfficer.id, officerName, officerRole, officerPhone, officerEmail);
+      setSavingOfficer(false);
+
+      if (res.success) {
+        setCopyMsg(`Data kontak pengurus "${officerName}" berhasil diperbarui!`);
+        setTimeout(() => setCopyMsg(''), 3500);
+        setEditingOfficer(null);
+        const oRes = await getRtOfficers();
+        setOfficers(oRes.officers || []);
+      } else {
+        alert('Gagal memperbarui pengurus: ' + res.error);
+      }
     } else {
-      alert('Gagal menambah pengurus: ' + res.error);
+      const res = await addRtOfficer(officerName, officerRole, officerPhone, officerEmail, officerInitialPassword);
+      setSavingOfficer(false);
+
+      if (res.success) {
+        setCopyMsg(`Pengurus RT baru "${officerName}" berhasil didaftarkan & akun login aktif!`);
+        setTimeout(() => setCopyMsg(''), 3500);
+        setShowAddOfficerModal(false);
+        setOfficerName('');
+        setOfficerPhone('');
+        setOfficerEmail('');
+        const oRes = await getRtOfficers();
+        setOfficers(oRes.officers || []);
+      } else {
+        alert('Gagal menambah pengurus: ' + res.error);
+      }
     }
   };
 
@@ -339,7 +369,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* 4 KOTAK REKAP KEPENDUDUKAN RT */}
+        {/* 4 KOTAK REKAP */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
           <div className="bg-white border-2 border-slate-200 p-4 md:p-5 rounded-3xl shadow-sm text-center">
             <span className="text-[1.6rem] font-black text-slate-900 block">{tenants.length}</span>
@@ -420,7 +450,7 @@ export default function RtDashboardPage() {
           </button>
         </div>
 
-        {/* TAB 1: BUKU REGISTER WARGA PENDATANG */}
+        {/* TAB 1: BUKU REGISTER WARGA */}
         {activeTab === 'warga' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
@@ -577,7 +607,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 2: DAFTAR PROPERTI & RESET PIN */}
+        {/* TAB 2: DAFTAR PROPERTI */}
         {activeTab === 'properti' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="border-b pb-3">
@@ -623,24 +653,30 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: ⚙️ KELOLA PENGURUS RT & RESET SANDI KHUSUS SUPER ADMIN */}
+        {/* TAB 3: ⚙️ KELOLA PENGURUS RT & EDIT NOMOR HP */}
         {activeTab === 'pengurus' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
               <div>
                 <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                  ⚙️ Struktur Akun & Manajemen Sandi Pengurus RT
+                  ⚙️ Struktur Akun & Manajemen Kontak Pengurus RT
                 </h3>
                 <p className="text-[0.75rem] text-slate-500">
-                  {isSuperAdmin
-                    ? 'Super Admin memiliki hak penuh menambah pengurus dan mereset kata sandi akun.'
-                    : 'Hanya Super Admin yang berwenang mereset kata sandi pengurus.'}
+                  Perbarui nomor WhatsApp pengurus jika berganti nomor, atau reset kata sandi login akun.
                 </p>
               </div>
 
               {isSuperAdmin && (
                 <button
-                  onClick={() => setShowAddOfficerModal(true)}
+                  onClick={() => {
+                    setEditingOfficer(null);
+                    setOfficerName('');
+                    setOfficerRole('SEKRETARIS');
+                    setOfficerPhone('');
+                    setOfficerEmail('');
+                    setOfficerInitialPassword('admin12345');
+                    setShowAddOfficerModal(true);
+                  }}
                   className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.8rem] rounded-2xl shadow cursor-pointer"
                 >
                   ➕ Tambah Pengurus Baru
@@ -658,12 +694,18 @@ export default function RtDashboardPage() {
                         {off.role}
                       </span>
                     </div>
-                    <p className="text-[0.75rem] font-mono text-slate-600">📱 {off.phone_number || '-'}</p>
-                    {off.email && <p className="text-[0.75rem] text-slate-600 font-mono">✉️ {off.email}</p>}
+                    <p className="text-[0.75rem] font-mono text-slate-800 font-bold">📱 WhatsApp: {off.phone_number || '-'}</p>
+                    {off.email && <p className="text-[0.75rem] text-slate-600 font-mono">✉️ Email Login: {off.email}</p>}
                   </div>
 
                   {isSuperAdmin && (
                     <div className="pt-2 border-t flex justify-end items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditOfficer(off)}
+                        className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[0.75rem] rounded-xl shadow-sm cursor-pointer"
+                      >
+                        ✏️ Edit Kontak / WA
+                      </button>
                       {off.email && (
                         <button
                           onClick={() => {
@@ -875,16 +917,23 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PENGURUS RT */}
-      {showAddOfficerModal && (
+      {/* MODAL TAMBAH & EDIT PENGURUS RT (EMAIL WAJIB LOGIN) */}
+      {(showAddOfficerModal || editingOfficer) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
             <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
-              <h3 className="text-[0.85rem] font-black">➕ Tambah Pengurus RT Baru</h3>
-              <button onClick={() => setShowAddOfficerModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none cursor-pointer">✕</button>
+              <h3 className="text-[0.85rem] font-black">
+                {editingOfficer ? '✏️ Edit Kontak Pengurus' : '➕ Tambah Pengurus RT Baru'}
+              </h3>
+              <button
+                onClick={() => { setShowAddOfficerModal(false); setEditingOfficer(null); }}
+                className="text-white hover:text-amber-300 font-bold text-lg leading-none cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
 
-            <form onSubmit={handleAddOfficerSubmit} className="p-5 space-y-3 text-[0.8rem]">
+            <form onSubmit={handleOfficerFormSubmit} className="p-5 space-y-3 text-[0.8rem]">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Nama Lengkap *</label>
                 <input
@@ -919,25 +968,41 @@ export default function RtDashboardPage() {
                   placeholder="08123456789"
                   value={officerPhone}
                   onChange={(e) => setOfficerPhone(e.target.value.replace(/\D/g, ''))}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono font-bold"
+                />
+                <p className="text-[0.7rem] text-slate-500 mt-0.5">Ubah kolom ini jika pengurus mengganti nomor HP.</p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Email Pengurus (Wajib Login) *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="pengurus@gmail.com"
+                  value={officerEmail}
+                  onChange={(e) => setOfficerEmail(e.target.value)}
                   className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono"
                 />
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Email (Opsional)</label>
-                <input
-                  type="email"
-                  placeholder="pengurus@gmail.com"
-                  value={officerEmail}
-                  onChange={(e) => setOfficerEmail(e.target.value)}
-                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white"
-                />
-              </div>
+              {!editingOfficer && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kata Sandi Awal *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="admin12345"
+                    value={officerInitialPassword}
+                    onChange={(e) => setOfficerInitialPassword(e.target.value)}
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono"
+                  />
+                </div>
+              )}
 
               <div className="pt-2 flex justify-end gap-2 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowAddOfficerModal(false)}
+                  onClick={() => { setShowAddOfficerModal(false); setEditingOfficer(null); }}
                   className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
@@ -947,7 +1012,7 @@ export default function RtDashboardPage() {
                   disabled={savingOfficer}
                   className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl shadow cursor-pointer"
                 >
-                  {savingOfficer ? 'Menyimpan...' : 'Simpan Pengurus'}
+                  {savingOfficer ? 'Menyimpan...' : editingOfficer ? 'Simpan Kontak' : 'Simpan Pengurus'}
                 </button>
               </div>
             </form>
@@ -955,7 +1020,7 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL DOCUMENT VIEWER PRIVAT (KTP / BUKU NIKAH) */}
+      {/* MODAL DOCUMENT VIEWER */}
       {(docModalTitle || loadingDoc) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">

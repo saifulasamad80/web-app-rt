@@ -27,21 +27,19 @@ export async function loginRtAdminAction(emailInput: string, passwordInput: stri
   return { success: true, user: data.user };
 }
 
-// RESET KATA SANDI EKSKLUSIF OLEH SUPER ADMIN DARI DALAM DASBOR RT
 export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newPassword: string, requesterEmail: string = 'ajipsas@gmail.com') {
   if (!targetEmail || !newPassword) {
     return { success: false, error: 'Email target dan kata sandi baru wajib diisi.' };
   }
 
   if (requesterEmail.trim().toLowerCase() !== 'ajipsas@gmail.com') {
-    return { success: false, error: '⛔ Akses Ditolak: Hanya Super Admin (ajipsas@gmail.com) yang berhak mereset sandi pengurus.' };
+    return { success: false, error: '⛔ Akses Ditolak: Hanya Super Admin yang berhak mereset sandi pengurus.' };
   }
 
   try {
     const { data: users, error: listErr } = await supabase.auth.admin.listUsers();
     
     if (listErr || !users) {
-      // Direct SQL Update fallback
       const cleanEmail = targetEmail.trim().toLowerCase();
       await supabase.rpc('reset_admin_password_direct', {
         target_email: cleanEmail,
@@ -61,7 +59,6 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
 
     if (updateErr) return { success: false, error: updateErr.message };
 
-    // Catat log jejak audit
     await supabase.from('dues_audit_logs').insert({
       action_type: 'RESET_PASSWORD',
       performed_by: 'Super Admin (ajipsas@gmail.com)',
@@ -96,12 +93,29 @@ export async function getRtOfficers() {
   return { success: true, officers: data };
 }
 
-export async function addRtOfficer(fullName: string, role: string, phone: string, email?: string) {
+export async function addRtOfficer(fullName: string, role: string, phone: string, email: string, initialPassword?: string) {
+  if (!fullName || !phone || !email) {
+    return { success: false, error: 'Nama lengkap, nomor WhatsApp, dan email wajib diisi.' };
+  }
+
+  // 1. Buat akun login auth jika ada password
+  if (initialPassword && initialPassword.length >= 6) {
+    try {
+      await supabase.auth.admin.createUser({
+        email: email.trim().toLowerCase(),
+        password: initialPassword,
+        email_confirm: true,
+        user_metadata: { name: fullName, role }
+      });
+    } catch (e) {}
+  }
+
+  // 2. Simpan profil
   const { data, error } = await supabase.from('profiles').insert({
     full_name: fullName,
     role,
-    phone_number: phone,
-    email: email || ''
+    phone_number: phone.trim(),
+    email: email.trim().toLowerCase()
   }).select();
 
   if (!error) {
@@ -109,6 +123,24 @@ export async function addRtOfficer(fullName: string, role: string, phone: string
   }
 
   return { success: !error, data: data ? data[0] : null, error: error?.message };
+}
+
+export async function updateRtOfficer(id: string, fullName: string, role: string, phone: string, email: string) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      full_name: fullName,
+      role,
+      phone_number: phone.trim(),
+      email: email.trim().toLowerCase()
+    })
+    .eq('id', id);
+
+  if (!error) {
+    try { revalidatePath('/rt'); } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
 }
 
 export async function deleteRtOfficer(id: string) {
