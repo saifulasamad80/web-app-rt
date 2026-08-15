@@ -16,6 +16,7 @@ import {
   getRtOfficers,
   addRtOfficer,
   deleteRtOfficer,
+  resetOfficerPasswordBySuperAdmin,
 } from '../../src/actions/checkin-tenant';
 
 const supabase = createClient(
@@ -29,6 +30,7 @@ export default function RtDashboardPage() {
   const [activeTab, setActiveTab] = useState<'warga' | 'properti' | 'pengurus' | 'kas' | 'audit'>('warga');
 
   const [authChecking, setAuthChecking] = useState(true);
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
   const [tenants, setTenants] = useState<any[]>([]);
   const [properties, setProperties] = useState<any[]>([]);
   const [officers, setOfficers] = useState<any[]>([]);
@@ -50,6 +52,11 @@ export default function RtDashboardPage() {
   const [newPin, setNewPin] = useState('1234');
   const [savingPin, setSavingPin] = useState(false);
   const [copyMsg, setCopyMsg] = useState('');
+
+  // Modal Reset Sandi Pengurus oleh Super Admin
+  const [resetOfficerTarget, setResetOfficerTarget] = useState<any | null>(null);
+  const [officerNewPassword, setOfficerNewPassword] = useState('');
+  const [resettingPassword, setResettingPassword] = useState(false);
 
   // Form Tambah Pengurus RT
   const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
@@ -81,6 +88,8 @@ export default function RtDashboardPage() {
         return;
       }
 
+      const emailActive = data.session?.user?.email || 'ajipsas@gmail.com';
+      setCurrentUserEmail(emailActive);
       setAuthChecking(false);
       await loadAllData();
     }
@@ -103,7 +112,6 @@ export default function RtDashboardPage() {
     setLoadingData(false);
   };
 
-  // KELUAR / LOGOUT: Mengarahkan Kembali ke Halaman Utama (/)
   const handleLogout = async () => {
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
@@ -170,6 +178,26 @@ export default function RtDashboardPage() {
     }
   };
 
+  const handleExecuteResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetOfficerTarget || !officerNewPassword) return;
+
+    setResettingPassword(true);
+    const res = await resetOfficerPasswordBySuperAdmin(resetOfficerTarget.email, officerNewPassword, currentUserEmail);
+    setResettingPassword(false);
+
+    if (res.success) {
+      setCopyMsg(`Kata sandi akun ${resetOfficerTarget.full_name} (${resetOfficerTarget.email}) berhasil direset!`);
+      setTimeout(() => setCopyMsg(''), 4000);
+      setResetOfficerTarget(null);
+      setOfficerNewPassword('');
+      const aRes = await getDuesAuditLogs();
+      setAuditLogs(aRes.logs || []);
+    } else {
+      alert('Gagal reset sandi: ' + res.error);
+    }
+  };
+
   const handleAddOfficerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!officerName || !officerPhone) return;
@@ -232,6 +260,8 @@ export default function RtDashboardPage() {
     );
   }
 
+  const isSuperAdmin = currentUserEmail.toLowerCase() === 'ajipsas@gmail.com';
+
   const filteredTenants = tenants.filter((t) => {
     const matchesSearch =
       (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -258,7 +288,7 @@ export default function RtDashboardPage() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH DENGAN WIDGET ZOOM & TOMBOL KELUAR KE HOME */}
+        {/* HEADER CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -266,7 +296,7 @@ export default function RtDashboardPage() {
               <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pengurus RT Terpadu</span></h1>
             </div>
             <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
-              Buku Register Warga, Verifikasi Dokumen UU PDP, Kelola Pengurus RT, & Kas Wilayah
+              Login Aktif: <b>{currentUserEmail}</b> {isSuperAdmin && <span className="text-amber-300 font-bold">(SUPER ADMIN)</span>}
             </p>
           </div>
 
@@ -332,7 +362,7 @@ export default function RtDashboardPage() {
           </div>
         </div>
 
-        {/* TAB NAVIGASI DASBOR RT TERMASUK TAB "KELOLA PENGURUS RT" */}
+        {/* TAB NAVIGASI DASBOR RT */}
         <div className="flex border-b-2 border-slate-200 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('warga')}
@@ -364,7 +394,7 @@ export default function RtDashboardPage() {
                 : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
             }`}
           >
-            ⚙️ Kelola Pengurus RT ({officers.length})
+            ⚙️ Kelola Pengurus & Sandi ({officers.length})
           </button>
 
           <button
@@ -593,46 +623,67 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: ⚙️ KELOLA PENGURUS RT */}
+        {/* TAB 3: ⚙️ KELOLA PENGURUS RT & RESET SANDI KHUSUS SUPER ADMIN */}
         {activeTab === 'pengurus' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
               <div>
                 <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                  ⚙️ Struktur & Hak Akses Pengurus RT
+                  ⚙️ Struktur Akun & Manajemen Sandi Pengurus RT
                 </h3>
-                <p className="text-[0.75rem] text-slate-500">Kelola akun dan nomor kontak pengurus RT, sekretaris, bendahara, dan hansip.</p>
+                <p className="text-[0.75rem] text-slate-500">
+                  {isSuperAdmin
+                    ? 'Super Admin memiliki hak penuh menambah pengurus dan mereset kata sandi akun.'
+                    : 'Hanya Super Admin yang berwenang mereset kata sandi pengurus.'}
+                </p>
               </div>
 
-              <button
-                onClick={() => setShowAddOfficerModal(true)}
-                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.8rem] rounded-2xl shadow cursor-pointer"
-              >
-                ➕ Tambah Pengurus Baru
-              </button>
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setShowAddOfficerModal(true)}
+                  className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.8rem] rounded-2xl shadow cursor-pointer"
+                >
+                  ➕ Tambah Pengurus Baru
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {officers.map((off) => (
-                <div key={off.id} className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 flex justify-between items-center">
+                <div key={off.id} className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-3 flex flex-col justify-between">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-900 text-[0.9rem]">{off.full_name}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-slate-900 text-[0.95rem]">{off.full_name}</span>
                       <span className="text-[0.65rem] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-md uppercase border border-emerald-300">
                         {off.role}
                       </span>
                     </div>
                     <p className="text-[0.75rem] font-mono text-slate-600">📱 {off.phone_number || '-'}</p>
-                    {off.email && <p className="text-[0.7rem] text-slate-500">✉️ {off.email}</p>}
+                    {off.email && <p className="text-[0.75rem] text-slate-600 font-mono">✉️ {off.email}</p>}
                   </div>
 
-                  {off.role !== 'SUPER_ADMIN' && (
-                    <button
-                      onClick={() => handleDeleteOfficer(off.id, off.full_name)}
-                      className="px-2.5 py-1 text-red-600 hover:bg-red-100 rounded-xl font-bold text-[0.75rem]"
-                    >
-                      Hapus
-                    </button>
+                  {isSuperAdmin && (
+                    <div className="pt-2 border-t flex justify-end items-center gap-2">
+                      {off.email && (
+                        <button
+                          onClick={() => {
+                            setResetOfficerTarget(off);
+                            setOfficerNewPassword('admin12345');
+                          }}
+                          className="px-3 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[0.75rem] rounded-xl shadow cursor-pointer"
+                        >
+                          🔑 Reset Sandi
+                        </button>
+                      )}
+                      {off.role !== 'SUPER_ADMIN' && (
+                        <button
+                          onClick={() => handleDeleteOfficer(off.id, off.full_name)}
+                          className="px-3 py-1.5 text-red-600 hover:bg-red-100 rounded-xl font-bold text-[0.75rem] cursor-pointer"
+                        >
+                          Hapus
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               ))}
@@ -729,7 +780,7 @@ export default function RtDashboardPage() {
               <h3 className="text-[1rem] font-black text-slate-900 uppercase">
                 Jejak Audit Iuran Kas RT (Audit Trail)
               </h3>
-              <p className="text-[0.75rem] text-slate-500">Mencatat transparansi setiap transaksi kas masuk RT.</p>
+              <p className="text-[0.75rem] text-slate-500">Mencatat transparansi setiap transaksi kas masuk & reset sandi pengurus.</p>
             </div>
 
             {auditLogs.length === 0 ? (
@@ -743,7 +794,7 @@ export default function RtDashboardPage() {
                     <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
                       <th className="p-3">Waktu</th>
                       <th className="p-3">Aksi</th>
-                      <th className="p-3">Petugas RT</th>
+                      <th className="p-3">Pelaksana</th>
                       <th className="p-3">Rincian Perubahan</th>
                     </tr>
                   </thead>
@@ -771,13 +822,66 @@ export default function RtDashboardPage() {
 
       </div>
 
+      {/* MODAL RESET SANDI OLEH SUPER ADMIN */}
+      {resetOfficerTarget && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.85rem] font-bold">🔑 Reset Sandi Pengurus RT</h3>
+              <button
+                onClick={() => setResetOfficerTarget(null)}
+                className="text-white hover:text-amber-300 font-bold text-lg leading-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleExecuteResetPassword} className="p-5 space-y-4 text-xs">
+              <div>
+                <p className="font-bold text-slate-800 text-sm">{resetOfficerTarget.full_name}</p>
+                <p className="text-slate-500 font-mono text-[11px]">{resetOfficerTarget.email}</p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Kata Sandi Baru *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Minimal 6 karakter"
+                  value={officerNewPassword}
+                  onChange={(e) => setOfficerNewPassword(e.target.value)}
+                  className="w-full p-3 border-2 border-slate-300 rounded-xl font-mono font-bold focus:border-emerald-600 outline-none text-sm"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setResetOfficerTarget(null)}
+                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingPassword || !officerNewPassword}
+                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow cursor-pointer disabled:bg-slate-300"
+                >
+                  {resettingPassword ? 'Menyimpan...' : 'Simpan Sandi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL TAMBAH PENGURUS RT */}
       {showAddOfficerModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
             <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
               <h3 className="text-[0.85rem] font-black">➕ Tambah Pengurus RT Baru</h3>
-              <button onClick={() => setShowAddOfficerModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none">✕</button>
+              <button onClick={() => setShowAddOfficerModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleAddOfficerSubmit} className="p-5 space-y-3 text-[0.8rem]">
@@ -834,7 +938,7 @@ export default function RtDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddOfficerModal(false)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
@@ -860,7 +964,7 @@ export default function RtDashboardPage() {
                 <span>🛡️ Dokumen Resmi (UU PDP):</span>
                 <span className="text-amber-300">{docModalTitle}</span>
               </h3>
-              <button onClick={() => { setDocModalUrl(null); setDocModalTitle(''); setDocError(''); }} className="text-white font-bold text-lg leading-none">✕</button>
+              <button onClick={() => { setDocModalUrl(null); setDocModalTitle(''); setDocError(''); }} className="text-white font-bold text-lg leading-none cursor-pointer">✕</button>
             </div>
             <div className="p-6 flex flex-col items-center justify-center min-h-[220px] bg-slate-50">
               {loadingDoc ? (
@@ -894,7 +998,7 @@ export default function RtDashboardPage() {
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
             <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
               <h3 className="text-xs font-bold">🔑 Reset PIN Unit Properti</h3>
-              <button onClick={() => setResetProp(null)} className="text-white font-bold text-lg leading-none">✕</button>
+              <button onClick={() => setResetProp(null)} className="text-white font-bold text-lg leading-none cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleSaveResetPin} className="p-5 space-y-4 text-xs">
@@ -916,7 +1020,7 @@ export default function RtDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setResetProp(null)}
-                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>

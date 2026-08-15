@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey, {
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
@@ -14,7 +14,7 @@ export async function loginRtAdminAction(emailInput: string, passwordInput: stri
     return { success: false, error: 'Email dan kata sandi pengurus wajib diisi.' };
   }
 
-  const clientAuth = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || supabaseKey);
+  const clientAuth = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || supabaseServiceKey);
   const { data, error } = await clientAuth.auth.signInWithPassword({
     email: emailInput.trim(),
     password: passwordInput,
@@ -25,6 +25,53 @@ export async function loginRtAdminAction(emailInput: string, passwordInput: stri
   }
 
   return { success: true, user: data.user };
+}
+
+// RESET KATA SANDI EKSKLUSIF OLEH SUPER ADMIN DARI DALAM DASBOR RT
+export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newPassword: string, requesterEmail: string = 'ajipsas@gmail.com') {
+  if (!targetEmail || !newPassword) {
+    return { success: false, error: 'Email target dan kata sandi baru wajib diisi.' };
+  }
+
+  if (requesterEmail.trim().toLowerCase() !== 'ajipsas@gmail.com') {
+    return { success: false, error: '⛔ Akses Ditolak: Hanya Super Admin (ajipsas@gmail.com) yang berhak mereset sandi pengurus.' };
+  }
+
+  try {
+    const { data: users, error: listErr } = await supabase.auth.admin.listUsers();
+    
+    if (listErr || !users) {
+      // Direct SQL Update fallback
+      const cleanEmail = targetEmail.trim().toLowerCase();
+      await supabase.rpc('reset_admin_password_direct', {
+        target_email: cleanEmail,
+        new_plain_password: newPassword
+      });
+      return { success: true };
+    }
+
+    const targetUser = users.users.find((u) => u.email?.toLowerCase() === targetEmail.trim().toLowerCase());
+    if (!targetUser) {
+      return { success: false, error: `Akun pengurus (${targetEmail}) tidak ditemukan.` };
+    }
+
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(targetUser.id, {
+      password: newPassword,
+    });
+
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    // Catat log jejak audit
+    await supabase.from('dues_audit_logs').insert({
+      action_type: 'RESET_PASSWORD',
+      performed_by: 'Super Admin (ajipsas@gmail.com)',
+      details: `Mereset kata sandi akun pengurus: ${targetEmail}`
+    });
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat mereset kata sandi.' };
+  }
 }
 
 export async function getRtOfficers() {
