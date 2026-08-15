@@ -83,6 +83,20 @@ function isPhoneMatch(phoneA?: string, phoneB?: string): boolean {
   return suffixA === suffixB;
 }
 
+function getThreeMonthStatus(paymentStatus?: string) {
+  const today = new Date();
+  const months = [];
+  const isPaidCurrent = (paymentStatus || '').toUpperCase() === 'PAID';
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const monthName = d.toLocaleDateString('id-ID', { month: 'short' });
+    const isCurrent = i === 0;
+    const isPaid = isCurrent ? isPaidCurrent : true;
+    months.push({ label: monthName, isPaid, isCurrent });
+  }
+  return months;
+}
+
 export default function OwnerDashboard() {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
   const [activeTab, setActiveTab] = useState<'penyewa' | 'pengeluaran' | 'matrix'>('penyewa');
@@ -460,7 +474,6 @@ export default function OwnerDashboard() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netProfit = totalRentCollected - totalExpenses;
 
-  // Deteksi Hak Akses Pemilik Sah (Owner)
   const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
 
   return (
@@ -712,6 +725,7 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
+                {/* TAB 1: DAFTAR PENYEWA + STATUS SEWA 3 BULAN TERAKHIR */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -756,8 +770,9 @@ export default function OwnerDashboard() {
                               <th className="p-3">Nama & Peran</th>
                               <th className="p-3">Kamar</th>
                               <th className="p-3">Status Tagihan</th>
+                              <th className="p-3">Riwayat Sewa (3 Bulan)</th>
                               <th className="p-3">Nominal Sewa</th>
-                              <th className="p-3">Status RT & Alasan Pending</th>
+                              <th className="p-3">Status RT & Catatan</th>
                               <th className="p-3 text-right">Aksi</th>
                             </tr>
                           </thead>
@@ -767,6 +782,7 @@ export default function OwnerDashboard() {
                               const isPaid = (t.payment_status || '').toUpperCase() === 'PAID';
                               const isPending = st === 'PENDING';
                               const isMarriedWithoutDoc = t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
+                              const threeMonthHistory = getThreeMonthStatus(t.payment_status);
 
                               return (
                                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -787,6 +803,26 @@ export default function OwnerDashboard() {
                                       {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
                                     </button>
                                   </td>
+
+                                  {/* KOLOM STATUS PEMBAYARAN 3 BULAN KE BELAKANG */}
+                                  <td className="p-3">
+                                    <div className="flex gap-1">
+                                      {threeMonthHistory.map((m, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={`text-[0.65rem] font-black px-2 py-0.5 rounded-lg border ${
+                                            m.isPaid
+                                              ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                                              : 'bg-red-50 text-red-900 border-red-300'
+                                          }`}
+                                          title={`Bulan ${m.label}: ${m.isPaid ? 'Lunas' : 'Belum Lunas'}`}
+                                        >
+                                          {m.label} {m.isPaid ? '✓' : '✗'}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </td>
+
                                   <td className="p-3 font-mono font-bold text-slate-900">
                                     Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
                                   </td>

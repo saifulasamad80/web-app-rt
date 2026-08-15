@@ -766,18 +766,33 @@ export async function getDuesAuditLogs() {
   return { success: !error, logs: data || [], error: error?.message };
 }
 
-export async function recordRtDues(payerName: string, blockNumber: string, amount: number, month: string, year: string, performedBy: string = 'Admin RT') {
+// FUNGSI SIMPAN IURAN KAS RT YANG SUDAH MENYESUAIKAN SKEMA TABEL DUES (KOLOM PERIOD WAJIB)
+export async function recordRtDues(
+  payerName: string,
+  blockNumber: string,
+  amount: number,
+  month: string,
+  year: string,
+  performedBy: string = 'Admin RT'
+) {
   if (!payerName || !amount) {
     return { success: false, error: 'Nama pembayar dan nominal iuran wajib diisi.' };
   }
 
+  const periodStr = `${month} ${year}`;
+
   const { data, error } = await supabase.from('dues').insert({
     payer_name: payerName,
+    resident_name: payerName,
     block_number: blockNumber,
+    house_number: blockNumber,
     amount,
+    period: periodStr,
+    period_month: month,
     month,
     year,
-    status: 'PAID'
+    status: 'PAID',
+    paid_at: new Date().toISOString()
   }).select();
 
   if (error) return { success: false, error: error.message };
@@ -786,7 +801,7 @@ export async function recordRtDues(payerName: string, blockNumber: string, amoun
     dues_id: data && data[0] ? data[0].id : null,
     action_type: 'INPUT_KAS',
     performed_by: performedBy,
-    details: `Mencatat iuran Rp ${amount.toLocaleString('id-ID')} (${month} ${year}) dari warga: ${payerName} (Unit: ${blockNumber})`
+    details: `Mencatat iuran Rp ${amount.toLocaleString('id-ID')} (${periodStr}) dari warga: ${payerName} (Unit: ${blockNumber})`
   });
 
   try {
