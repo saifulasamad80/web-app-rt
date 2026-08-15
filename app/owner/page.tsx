@@ -13,6 +13,7 @@ import {
   getTenantKtpUrl,
   deleteTenant,
   updateHouseRules,
+  updateTenantPaymentStatus,
 } from '../../src/actions/checkin-tenant';
 
 interface Tenant {
@@ -27,8 +28,13 @@ interface Tenant {
   full_address?: string;
   household_id?: string;
   is_head?: boolean;
+  rent_price?: number;
+  payment_status?: string;
+  marital_status?: string;
+  occupation?: string;
   ktp_url?: string;
   ktp_path?: string;
+  marriage_doc_url?: string;
   property_id?: string;
   properties?: { id: string; name: string; type: string; slug: string };
 }
@@ -44,16 +50,22 @@ interface Property {
   status?: string;
   owner_name?: string;
   owner_phone?: string;
+  manager_name?: string;
+  manager_phone?: string;
+  total_rooms?: number;
+  bank_name?: string;
+  bank_account_number?: string;
+  bank_account_holder?: string;
 }
 
 export default function OwnerDashboard() {
+  const [zoomPercent, setZoomPercent] = useState<number>(100);
+
   const [propertiesList, setPropertiesList] = useState<Property[]>([]);
   const [activeProperty, setActiveProperty] = useState<Property | null>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
   const [copyMsg, setCopyMsg] = useState('');
-
-  const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
 
   const [showPinModal, setShowPinModal] = useState<boolean>(false);
   const [targetPropForUnlock, setTargetPropForUnlock] = useState<Property | null>(null);
@@ -66,8 +78,14 @@ export default function OwnerDashboard() {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [propName, setPropName] = useState<string>('');
   const [propType, setPropType] = useState<'kos' | 'kontrakan'>('kos');
+  const [propTotalRooms, setPropTotalRooms] = useState<number>(10);
   const [propOwnerName, setPropOwnerName] = useState<string>('');
   const [propOwnerPhone, setPropOwnerPhone] = useState<string>('');
+  const [propManagerName, setPropManagerName] = useState<string>('');
+  const [propManagerPhone, setPropManagerPhone] = useState<string>('');
+  const [propBankName, setPropBankName] = useState<string>('BCA');
+  const [propBankAcc, setPropBankAcc] = useState<string>('');
+  const [propBankHolder, setPropBankHolder] = useState<string>('');
   const [propAddress, setPropAddress] = useState<string>('');
   const [propRules, setPropRules] = useState<string>('');
   const [propPin, setPropPin] = useState<string>('');
@@ -78,7 +96,8 @@ export default function OwnerDashboard() {
   const [tenantName, setTenantName] = useState('');
   const [tenantPhone, setTenantPhone] = useState('');
   const [tenantRoom, setTenantRoom] = useState('');
-  const [tenantRelation, setTenantRelation] = useState('');
+  const [tenantRelation, setTenantRelation] = useState('Istri');
+  const [tenantRentPrice, setTenantRentPrice] = useState('1500000');
   const [savingTenant, setSavingTenant] = useState(false);
 
   const [editingRulesProp, setEditingRulesProp] = useState<Property | null>(null);
@@ -91,6 +110,9 @@ export default function OwnerDashboard() {
   const [selectedTenantName, setSelectedTenantName] = useState<string>('');
   const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
   const [ktpErrorMsg, setKtpErrorMsg] = useState<string>('');
+
+  const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
+  const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
   const fetchPublicPropertyList = async () => {
     const res = await getPublicPropertiesList();
@@ -135,8 +157,14 @@ export default function OwnerDashboard() {
     setEditingProperty(prop);
     setPropName(prop.name || prop.property_name || '');
     setPropType((prop.type as 'kos' | 'kontrakan') || 'kos');
+    setPropTotalRooms(prop.total_rooms || 10);
     setPropOwnerName(prop.owner_name || '');
     setPropOwnerPhone(prop.owner_phone || '');
+    setPropManagerName(prop.manager_name || '');
+    setPropManagerPhone(prop.manager_phone || '');
+    setPropBankName(prop.bank_name || 'BCA');
+    setPropBankAcc(prop.bank_account_number || '');
+    setPropBankHolder(prop.bank_account_holder || '');
     setPropAddress(prop.address || '');
   };
 
@@ -149,18 +177,40 @@ export default function OwnerDashboard() {
     if (editingProperty) {
       const res = await updateProperty(editingProperty.id, {
         name: propName,
+        type: propType,
+        total_rooms: propTotalRooms,
         owner_name: propOwnerName,
         owner_phone: propOwnerPhone,
+        manager_name: propManagerName,
+        manager_phone: propManagerPhone,
+        bank_name: propBankName,
+        bank_account_number: propBankAcc,
+        bank_account_holder: propBankHolder,
         address: propAddress,
-        type: propType,
       });
       setSubmittingProp(false);
 
       if (res.success) {
-        setCopyMsg('Data unit properti berhasil diperbarui!');
+        setCopyMsg('Data unit properti & pengelola berhasil diperbarui!');
         setTimeout(() => setCopyMsg(''), 3000);
         setEditingProperty(null);
         await fetchPublicPropertyList();
+        if (activeProperty && activeProperty.id === editingProperty.id) {
+          setActiveProperty({
+            ...activeProperty,
+            name: propName,
+            type: propType,
+            total_rooms: propTotalRooms,
+            owner_name: propOwnerName,
+            owner_phone: propOwnerPhone,
+            manager_name: propManagerName,
+            manager_phone: propManagerPhone,
+            bank_name: propBankName,
+            bank_account_number: propBankAcc,
+            bank_account_holder: propBankHolder,
+            address: propAddress,
+          });
+        }
       } else {
         alert('Gagal update properti: ' + res.error);
       }
@@ -178,17 +228,27 @@ export default function OwnerDashboard() {
         propRules,
         propPin,
         propOwnerName,
-        propOwnerPhone
+        propOwnerPhone,
+        propManagerName,
+        propManagerPhone,
+        propTotalRooms,
+        propBankName,
+        propBankAcc,
+        propBankHolder
       );
       setSubmittingProp(false);
 
       if (res && res.success) {
-        setCopyMsg('Properti "' + propName + '" berhasil dibuat!');
+        setCopyMsg('Properti "' + propName + '" berhasil didaftarkan!');
         setTimeout(() => setCopyMsg(''), 4000);
         setShowAddPropModal(false);
         setPropName('');
         setPropOwnerName('');
         setPropOwnerPhone('');
+        setPropManagerName('');
+        setPropManagerPhone('');
+        setPropBankAcc('');
+        setPropBankHolder('');
         setPropAddress('');
         setPropRules('');
         setPropPin('');
@@ -204,7 +264,8 @@ export default function OwnerDashboard() {
     setTenantName(t.name);
     setTenantPhone(t.phone);
     setTenantRoom(t.room_number || '');
-    setTenantRelation(t.relation || '');
+    setTenantRelation(t.relation || 'Istri');
+    setTenantRentPrice(t.rent_price ? String(t.rent_price) : '1500000');
   };
 
   const handleSaveTenantSubmit = async (e: React.FormEvent) => {
@@ -212,11 +273,14 @@ export default function OwnerDashboard() {
     if (!editingTenant) return;
 
     setSavingTenant(true);
+    const parsedPrice = parseInt(tenantRentPrice.replace(/\D/g, ''), 10) || 0;
+
     const res = await updateTenantData(editingTenant.id, {
       name: tenantName,
       phone: tenantPhone,
       room_number: tenantRoom,
       relation: tenantRelation,
+      rent_price: parsedPrice,
     });
     setSavingTenant(false);
 
@@ -224,7 +288,7 @@ export default function OwnerDashboard() {
       setTenants((prev) =>
         prev.map((t) =>
           t.id === editingTenant.id
-            ? { ...t, name: tenantName, phone: tenantPhone, room_number: tenantRoom, relation: tenantRelation }
+            ? { ...t, name: tenantName, phone: tenantPhone, room_number: tenantRoom, relation: tenantRelation, rent_price: parsedPrice }
             : t
         )
       );
@@ -236,14 +300,37 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleTogglePaymentStatus = async (tenantId: string, currentStatus?: string) => {
+    const newStatus = (currentStatus || '').toUpperCase() === 'PAID' ? 'UNPAID' : 'PAID';
+    setTenants((prev) => prev.map((t) => (t.id === tenantId ? { ...t, payment_status: newStatus } : t)));
+    await updateTenantPaymentStatus(tenantId, newStatus);
+  };
+
   const handleShareWA = (prop: Property) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const checkinUrl = origin + '/checkin/' + prop.slug;
     const propNameStr = prop.name || prop.property_name;
 
-    const message = `Halo calon penghuni *${propNameStr}*,\n\nSesuai Peraturan Wajib Lapor Kependudukan RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut sebelum menempati unit:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih.`;
+    const message = `Halo calon penghuni *${propNameStr}*,\n\nSesuai Peraturan Wajib Lapor RT setempat, mohon melengkapi formulir lapor diri digital resmi melalui tautan berikut:\n\n👉 ${checkinUrl}\n\nProses ini wajib untuk pendataan kependudukan RT. Terima kasih.`;
 
     const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+  };
+
+  const handleSendReminderWA = (t: Tenant) => {
+    if (!activeProperty) return;
+    const rawPhone = (t.phone || '').replace(/\D/g, '');
+    const cleanPhone = rawPhone.startsWith('0') ? '62' + rawPhone.slice(1) : rawPhone;
+    const propNameStr = activeProperty.name || activeProperty.property_name;
+    const roomStr = t.room_number || 'Kamar Unit';
+    const nominalStr = Number(t.rent_price || 0).toLocaleString('id-ID');
+    const bankInfo = activeProperty.bank_account_number
+      ? `${activeProperty.bank_name} ${activeProperty.bank_account_number} a.n. ${activeProperty.bank_account_holder}`
+      : 'rekening pengelola';
+
+    const message = `Halo Kak *${t.name}*,\n\nMengingatkan tagihan sewa *${propNameStr}* (${roomStr}) sebesar *Rp ${nominalStr}* untuk periode bulan ini.\n\nPembayaran dapat ditransfer ke:\n🏦 *${bankInfo}*\n\nMohon konfirmasi jika telah melakukan transfer. Terima kasih.`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(waUrl, '_blank');
   };
 
@@ -309,7 +396,7 @@ export default function OwnerDashboard() {
     }
   };
 
-  const formatPhoneToWA = (phone: string) => {
+  const formatPhoneToWA = (phone?: string) => {
     let cleaned = (phone || '').replace(/\D/g, '');
     if (cleaned.startsWith('0')) cleaned = '62' + cleaned.slice(1);
     return cleaned;
@@ -317,91 +404,111 @@ export default function OwnerDashboard() {
 
   const countAll = tenants.length;
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
-  const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE').length;
-  const countCheckedOut = tenants.filter((t) => (t.status || '').toUpperCase() === 'CHECKED_OUT').length;
+  const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE' || (t.status || '').toUpperCase() === 'VERIFIED').length;
+  const totalRooms = activeProperty?.total_rooms || 10;
+  const emptyRooms = Math.max(totalRooms - countActive, 0);
 
-  const fontClass = textScale === 'lg' ? 'text-base' : textScale === 'sm' ? 'text-[11px]' : 'text-xs';
+  const totalRentCollected = tenants
+    .filter((t) => (t.payment_status || '').toUpperCase() === 'PAID')
+    .reduce((sum, t) => sum + (Number(t.rent_price) || 0), 0);
 
   return (
-    <main className={`min-h-screen p-3 md:p-8 bg-slate-100 text-slate-900 ${fontClass}`}>
+    <main
+      style={{ fontSize: `${zoomPercent}%` }}
+      className="min-h-screen p-3 md:p-8 bg-slate-50 text-slate-900 transition-all"
+    >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER */}
-        <div className="bg-emerald-950 text-white p-5 md:p-6 rounded-2xl shadow-xl border border-emerald-900 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl md:text-2xl font-extrabold text-white">Dasbor Pemilik Kos & Kontrakan</h1>
-              <p className="text-xs text-emerald-300 mt-0.5">
-                Portal Mandiri Terproteksi PIN 4-Digit Pemilik Unit
-              </p>
+        {/* HEADER BRANDING CERAH DENGAN WIDGET ZOOM BERTAHAP */}
+        <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[1.3rem]">🏢⚡</span>
+              <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pemilik & Pengelola Kos</span></h1>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="bg-emerald-900/80 p-1 rounded-xl border border-emerald-700/60 flex items-center gap-1">
-                <span className="text-[10px] font-bold px-2 text-emerald-300">Ukuran Teks:</span>
-                <button
-                  onClick={() => setTextScale('sm')}
-                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'sm' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
-                >
-                  A-
-                </button>
-                <button
-                  onClick={() => setTextScale('base')}
-                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'base' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
-                >
-                  A
-                </button>
-                <button
-                  onClick={() => setTextScale('lg')}
-                  className={`px-2 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'lg' ? 'bg-emerald-500 text-slate-950' : 'bg-emerald-950 text-emerald-200 hover:bg-emerald-800'}`}
-                >
-                  A+
-                </button>
-              </div>
-
-              <Link
-                href="/"
-                className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1"
-              >
-                <span>🚪 Keluar ke Halaman Utama</span>
-              </Link>
-            </div>
+            <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
+              Kelola Hunian, Penjaga Unit, Okupansi Kamar, & Tagihan Sewa Terintegrasi RT
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-emerald-900/80">
-            <button
-              onClick={() => { setPropName(''); setPropOwnerName(''); setPropOwnerPhone(''); setPropAddress(''); setShowAddPropModal(true); }}
-              className="px-4 py-2 bg-emerald-500 text-slate-950 font-bold text-xs rounded-xl hover:bg-emerald-400 transition-all shadow"
-            >
-              + Tambah Properti Baru
-            </button>
-
-            {isUnlocked && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* WIDGET ZOOM TEKS BERTAHAP MULTI-STEP */}
+            <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
+              <span className="text-[0.75rem] font-bold text-emerald-300 px-1 flex items-center">T↕</span>
               <button
-                onClick={() => { setIsUnlocked(false); setActiveProperty(null); setTenants([]); }}
-                className="px-3.5 py-2 bg-slate-800 text-slate-200 font-bold text-xs rounded-xl hover:bg-slate-700 border border-slate-700"
+                type="button"
+                onClick={handleZoomOut}
+                title="Kecilkan Teks"
+                className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
               >
-                🔒 Kunci Dasbor
+                A-
               </button>
-            )}
+              <span className="text-[0.7rem] font-mono font-black text-amber-300 px-1">
+                {zoomPercent}%
+              </span>
+              <button
+                type="button"
+                onClick={handleZoomIn}
+                title="Perbesar Teks"
+                className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
+              >
+                A+
+              </button>
+            </div>
+
+            <Link
+              href="/"
+              className="px-4 py-2 bg-emerald-950 hover:bg-emerald-900 text-white font-bold text-[0.75rem] rounded-2xl border border-emerald-700 shadow"
+            >
+              🚪 Keluar
+            </Link>
           </div>
+        </header>
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button
+            onClick={() => {
+              setEditingProperty(null);
+              setPropName('');
+              setPropOwnerName('');
+              setPropOwnerPhone('');
+              setPropManagerName('');
+              setPropManagerPhone('');
+              setPropBankAcc('');
+              setPropBankHolder('');
+              setPropAddress('');
+              setShowAddPropModal(true);
+            }}
+            className="px-5 py-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[0.85rem] rounded-2xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+          >
+            <span>➕ Daftarkan Properti Kos Baru</span>
+          </button>
+
+          {isUnlocked && (
+            <button
+              onClick={() => { setIsUnlocked(false); setActiveProperty(null); setTenants([]); }}
+              className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[0.8rem] rounded-2xl border border-slate-300"
+            >
+              🔒 Kunci Dasbor
+            </button>
+          )}
         </div>
 
         {copyMsg && (
-          <div className="p-3 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold">
+          <div className="p-3.5 bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center">
             {copyMsg}
           </div>
         )}
 
-        {/* PILIH PROPERTI */}
-        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4">
-          <div className="flex justify-between items-center">
+        {/* DAFTAR KARTU PROPERTI (CERAH & DETAIL PENGELOLA) */}
+        <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+          <div className="flex justify-between items-center border-b pb-3">
             <div>
-              <h2 className="text-base font-bold text-slate-900">Pilih Unit Properti Anda</h2>
-              <p className="text-xs text-slate-500">Gunakan PIN 4-Digit untuk membuka data penyewa.</p>
+              <h2 className="text-[1.1rem] font-black text-slate-900">Pilih Properti Kos Anda</h2>
+              <p className="text-[0.8rem] text-slate-500">Buka kunci unit menggunakan PIN 4-Digit untuk mengelola penyewa.</p>
             </div>
-            <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-              {propertiesList.length} Unit
+            <span className="text-[0.75rem] font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
+              {propertiesList.length} Properti Terdaftar
             </span>
           </div>
 
@@ -412,71 +519,76 @@ export default function OwnerDashboard() {
               return (
                 <div
                   key={prop.id}
-                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
-                    isCurrentActive ? 'bg-emerald-50/60 border-emerald-500 ring-2 ring-emerald-500/20' : 'bg-slate-50 border-slate-200'
+                  className={`p-5 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                    isCurrentActive ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-400/20' : 'bg-slate-50 border-slate-200'
                   }`}
                 >
-                  <div>
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded uppercase">
-                        {prop.type}
+                      <span className="text-[0.7rem] font-black px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-full uppercase">
+                        {prop.type} • {prop.total_rooms || 10} Kamar
                       </span>
 
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => handleOpenEditProp(prop)}
-                          className="px-2 py-0.5 bg-slate-200 text-slate-800 hover:bg-slate-300 rounded text-[10px] font-bold"
+                          className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded-xl text-[0.7rem] font-bold shadow-sm cursor-pointer"
                         >
-                          ✏️ Edit Unit
+                          ✏️ Edit & Pengelola
                         </button>
                         {prop.status === 'APPROVED' ? (
-                          <span className="text-[9px] font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">
-                            ✅ VERIFIED
+                          <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
+                            ✅ VERIFIED RT
                           </span>
                         ) : (
-                          <span className="text-[9px] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded">
+                          <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full">
                             ⚠️ MENUNGGU
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <h3 className="font-bold text-base mt-2 text-slate-900">{prop.name || prop.property_name}</h3>
-                    {prop.owner_name && (
-                      <p className="text-xs text-emerald-800 font-semibold mt-0.5">👤 Pemilik: {prop.owner_name} {prop.owner_phone ? `(${prop.owner_phone})` : ''}</p>
-                    )}
-                    <p className="text-xs text-slate-500 font-mono break-all mt-1">/checkin/{prop.slug}</p>
-                    <p className="text-xs text-slate-600 mt-0.5">{prop.address || 'Alamat belum diatur'}</p>
+                    <h3 className="font-black text-[1.1rem] text-slate-900">{prop.name || prop.property_name}</h3>
+
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 text-[0.75rem] space-y-1 text-slate-700">
+                      <p>👤 <b>Pemilik Sah:</b> {prop.owner_name || '-'} {prop.owner_phone ? `(${prop.owner_phone})` : ''}</p>
+                      <p>🔑 <b>Pengelola / Penjaga:</b> {prop.manager_name || 'Dikelola Pemilik'} {prop.manager_phone ? `(${prop.manager_phone})` : ''}</p>
+                      {prop.bank_account_number && (
+                        <p className="text-emerald-800 font-semibold">💳 {prop.bank_name}: {prop.bank_account_number} a.n. {prop.bank_account_holder}</p>
+                      )}
+                    </div>
+
+                    <p className="text-[0.75rem] text-slate-500 font-mono break-all">/checkin/{prop.slug}</p>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-200 space-y-2">
-                    <div className="flex items-center gap-1.5">
+                  <div className="pt-3 border-t-2 border-slate-200 space-y-2">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleShareWA(prop)}
-                        className="flex-1 px-2.5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-sm flex items-center justify-center gap-1"
+                        className="flex-1 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-bold rounded-2xl transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <span>💬 Kirim WA</span>
+                        <span>💬 Kirim Link WA</span>
                       </button>
 
                       <button
                         onClick={() => setPosterProp(prop)}
-                        className="px-3 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-900 transition-all shadow-sm flex items-center gap-1"
+                        className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-[0.75rem] font-bold rounded-2xl transition-all shadow flex items-center gap-1 cursor-pointer"
                       >
                         <span>🖨️ Poster QR</span>
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between">
+                    <div>
                       {isCurrentActive ? (
-                        <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 w-full justify-center py-1 bg-emerald-100/50 rounded-lg">
-                          <span>🔓 Dasbor Aktif</span>
-                        </span>
+                        <div className="text-[0.8rem] font-black text-amber-950 flex items-center justify-center py-2.5 bg-amber-300 rounded-2xl shadow-sm">
+                          <span>🔓 Dasbor Aktif Terbuka</span>
+                        </div>
                       ) : (
                         <button
                           onClick={() => handleOpenUnlockModal(prop)}
-                          className="w-full py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-all shadow-sm flex items-center justify-center gap-1"
+                          className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[0.8rem] font-black rounded-2xl transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <span>🔒 Buka Dasbor (PIN)</span>
+                          <span>🔒 Buka Dasbor Kos (PIN)</span>
                         </button>
                       )}
                     </div>
@@ -487,355 +599,344 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        {/* DASBOR PENYEWA TERVERIFIKASI PIN */}
+        {/* DASBOR PEMILIK BERGAYA SUPERKOS TERVERIFIKASI PIN */}
         {isUnlocked && activeProperty ? (
-          <div className="space-y-6">
+          <div className="space-y-5">
 
-            <div className="bg-emerald-900 text-white p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div>
-                <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500 text-slate-950 rounded uppercase">
-                  DASBOR KHUSUS UNIT TERVERIFIKASI PIN
+            {/* HERO STAT CARD PENDAPATAN BULAN INI */}
+            <div className="bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 p-6 md:p-8 rounded-3xl shadow-xl text-slate-950 relative overflow-hidden">
+              <div className="relative z-10 space-y-2">
+                <span className="text-[0.7rem] font-black uppercase tracking-widest text-slate-900 bg-white/50 px-3 py-1 rounded-full">
+                  Ringkasan Finansial Kos • {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
                 </span>
-                <h2 className="text-lg font-bold mt-1 text-white">{activeProperty.name || activeProperty.property_name}</h2>
-                {activeProperty.owner_name && <p className="text-xs text-emerald-200 mt-0.5">Pemilik Resmi: {activeProperty.owner_name}</p>}
+                <p className="text-[0.85rem] font-bold text-slate-800 mt-2">Total Uang Sewa Terkumpul (Lunas):</p>
+                <h3 className="text-[1.8rem] md:text-[2.2rem] font-black text-slate-950 tracking-tight">
+                  Rp {totalRentCollected.toLocaleString('id-ID')}
+                </h3>
+                <div className="pt-2 flex flex-wrap items-center gap-2 text-[0.8rem] font-bold text-slate-900">
+                  <span>📈 Okupansi: {Math.round((countActive / totalRooms) * 100)}%</span>
+                  <span>•</span>
+                  <span>{countActive} Kamar Terisi</span>
+                  <span>•</span>
+                  <span className="text-emerald-950">{emptyRooms} Kamar Kosong</span>
+                </div>
               </div>
-              <button
-                onClick={() => handleOpenRulesModal(activeProperty)}
-                className="px-3.5 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-lg hover:bg-slate-700 border border-slate-700"
-              >
-                📜 Atur Tata Tertib Hunian
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <span className="text-xs text-slate-500 font-bold uppercase">Total Terdaftar</span>
-                <p className="text-2xl font-black text-slate-800 mt-1">{countAll}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-amber-200 bg-amber-50/30 shadow-sm">
-                <span className="text-xs text-amber-700 font-bold uppercase">Menunggu</span>
-                <p className="text-2xl font-black text-amber-600 mt-1">{countPending}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-green-200 bg-green-50/30 shadow-sm">
-                <span className="text-xs text-green-700 font-bold uppercase">Aktif</span>
-                <p className="text-2xl font-black text-green-600 mt-1">{countActive}</p>
-              </div>
-              <div className="bg-white p-4 rounded-xl border border-slate-200 bg-slate-100/50 shadow-sm">
-                <span className="text-xs text-slate-600 font-bold uppercase">Out</span>
-                <p className="text-2xl font-black text-slate-600 mt-1">{countCheckedOut}</p>
+              <div className="absolute -right-8 -bottom-8 opacity-15 text-[8rem] select-none">
+                🏠
               </div>
             </div>
 
-            <div className="bg-white p-4 md:p-6 rounded-2xl shadow border border-slate-200 space-y-4">
-              <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-                Daftar Penghuni / Penyewa Khusus: {activeProperty.name || activeProperty.property_name}
-              </h3>
+            {/* 4 STATISTIK KOTAK OKUPANSI */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+              <div className="bg-amber-50 border-2 border-amber-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+                <span className="text-[1.6rem] font-black text-amber-950 block">{countAll}</span>
+                <span className="text-[0.75rem] font-black text-amber-800 mt-1 block">Total Penghuni</span>
+              </div>
+
+              <div className="bg-blue-50 border-2 border-blue-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+                <span className="text-[1.6rem] font-black text-blue-950 block">{totalRooms}</span>
+                <span className="text-[0.75rem] font-black text-blue-800 mt-1 block">Kapasitas Kamar</span>
+              </div>
+
+              <div className="bg-purple-50 border-2 border-purple-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+                <span className="text-[1.6rem] font-black text-purple-950 block">{countActive}</span>
+                <span className="text-[0.75rem] font-black text-purple-800 mt-1 block">Kamar Terisi</span>
+              </div>
+
+              <div className="bg-emerald-50 border-2 border-emerald-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+                <span className="text-[1.6rem] font-black text-emerald-950 block">{emptyRooms}</span>
+                <span className="text-[0.75rem] font-black text-emerald-800 mt-1 block">Kamar Kosong</span>
+              </div>
+            </div>
+
+            {/* TABEL DAFTAR PENYEWA & PENGATURAN STATUS BAYAR */}
+            <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b-2 border-slate-100 pb-4">
+                <div>
+                  <h3 className="text-[1rem] font-black text-slate-900 uppercase tracking-wider">
+                    Daftar Penyewa: {activeProperty.name || activeProperty.property_name}
+                  </h3>
+                  <p className="text-[0.8rem] text-slate-500 font-medium">Kelola status sewa, tagihan WA, kamar, dan berkas KTP</p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleOpenRulesModal(activeProperty)}
+                    className="px-3.5 py-2 bg-slate-800 text-white text-[0.75rem] font-bold rounded-2xl hover:bg-slate-700 cursor-pointer"
+                  >
+                    📜 Tata Tertib
+                  </button>
+                </div>
+              </div>
 
               {tenants.length === 0 ? (
-                <div className="p-8 text-center border-2 border-dashed rounded-xl bg-slate-50">
-                  <p className="text-xs text-slate-500">Belum ada penyewa yang mendaftar di unit ini.</p>
+                <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                  <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada penyewa yang mendaftar di unit ini.</p>
                 </div>
               ) : (
-                <>
-                  <div className="block md:hidden space-y-3">
-                    {tenants.map((t) => {
-                      const st = (t.status || '').toUpperCase();
-                      const waNumber = formatPhoneToWA(t.phone);
-                      const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-[0.8rem]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                        <th className="p-3">Nama & Peran</th>
+                        <th className="p-3">Kamar / Lokasi</th>
+                        <th className="p-3">Status Tagihan</th>
+                        <th className="p-3">Nominal Sewa</th>
+                        <th className="p-3">Dokumen</th>
+                        <th className="p-3">Status RT</th>
+                        <th className="p-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {tenants.map((t) => {
+                        const st = (t.status || '').toUpperCase();
+                        const isPaid = (t.payment_status || '').toUpperCase() === 'PAID';
+                        const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
 
-                      return (
-                        <div key={t.id} className="p-4 bg-slate-50 border rounded-xl space-y-3">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h4 className="font-bold text-slate-900 text-sm">{t.name}</h4>
-                              <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 text-slate-800 rounded inline-block mt-1">
+                        return (
+                          <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3">
+                              <div className="font-black text-slate-900">{t.name}</div>
+                              <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200 inline-block mt-0.5">
                                 {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
                               </span>
-                            </div>
-                            <span className={'text-[10px] font-extrabold px-2 py-0.5 rounded uppercase ' +
-                              (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
-                               st === 'CHECKED_OUT' ? 'bg-slate-200 text-slate-800' : 'bg-amber-100 text-amber-800')}>
-                              {st}
-                            </span>
-                          </div>
-
-                          <div className="text-xs space-y-1 text-slate-600 font-medium border-t pt-2 border-slate-200">
-                            <p>🏠 <b>Lokasi:</b> {locationLabel}</p>
-                            <p>📅 <b>Masuk:</b> {t.entry_date}</p>
-                          </div>
-
-                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                            <button
-                              onClick={() => handleOpenEditTenant(t)}
-                              className="px-2.5 py-2 bg-amber-600 text-white text-[11px] font-bold rounded-lg"
-                            >
-                              ✏️ Edit
-                            </button>
-                            <a
-                              href={`https://wa.me/${waNumber}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex-1 py-2 bg-emerald-600 text-white text-[11px] rounded-lg font-bold text-center"
-                            >
-                              💬 Chat WA
-                            </a>
-                            <button
-                              onClick={() => handleViewKtp(t)}
-                              className="px-3 py-2 bg-slate-800 text-white text-[11px] rounded-lg font-bold"
-                            >
-                              🪪 KTP
-                            </button>
-                            {st !== 'ACTIVE' && (
+                            </td>
+                            <td className="p-3 font-bold text-emerald-900">{locationLabel}</td>
+                            <td className="p-3">
                               <button
-                                onClick={() => handleStatusChange(t.id, 'active')}
-                                className="px-3 py-2 bg-green-600 text-white text-[11px] font-bold rounded-lg"
+                                onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)}
+                                className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black transition-all shadow-sm cursor-pointer ${
+                                  isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
+                                }`}
                               >
-                                Aktif
+                                {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
                               </button>
-                            )}
-                            {st !== 'CHECKED_OUT' && (
+                            </td>
+                            <td className="p-3 font-mono font-bold text-slate-900">
+                              Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
+                            </td>
+                            <td className="p-3">
                               <button
-                                onClick={() => handleStatusChange(t.id, 'checked_out')}
-                                className="px-3 py-2 bg-red-600 text-white text-[11px] font-bold rounded-lg"
+                                onClick={() => handleViewKtp(t)}
+                                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[0.7rem] rounded-xl font-bold"
                               >
-                                Out
+                                🪪 KTP
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(t.id, t.name)}
-                              className="p-2 bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg"
-                            >
-                              🗑️
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                          <th className="p-3">Nama & Peran</th>
-                          <th className="p-3">Lokasi / Kamar</th>
-                          <th className="p-3">WhatsApp Direct</th>
-                          <th className="p-3">Dokumen KTP</th>
-                          <th className="p-3">Tanggal Masuk</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3 text-right">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {tenants.map((t) => {
-                          const st = (t.status || '').toUpperCase();
-                          const waNumber = formatPhoneToWA(t.phone);
-                          const locationLabel = t.room_number ? `Kamar: ${t.room_number}` : (t.full_address || activeProperty.name);
-
-                          return (
-                            <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="p-3 font-medium">
-                                <div className="font-bold text-slate-900">{t.name}</div>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded border border-slate-200 inline-block mt-0.5">
-                                  {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
-                                </span>
-                              </td>
-                              <td className="p-3 text-slate-700 font-semibold">{locationLabel}</td>
-                              <td className="p-3 font-mono">
-                                <a
-                                  href={`https://wa.me/${waNumber}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2 py-1 bg-emerald-600 text-white text-[10px] rounded font-bold hover:bg-emerald-700 inline-flex items-center gap-1 shadow-sm"
-                                >
-                                  💬 Chat WA ({t.phone})
-                                </a>
-                              </td>
-                              <td className="p-3">
+                            </td>
+                            <td className="p-3">
+                              <span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase ' +
+                                (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
+                                 st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
+                                {st}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right space-x-1">
+                              {!isPaid && (
                                 <button
-                                  onClick={() => handleViewKtp(t)}
-                                  className="px-2.5 py-1 bg-slate-800 text-white text-[10px] rounded font-bold hover:bg-slate-900"
+                                  onClick={() => handleSendReminderWA(t)}
+                                  className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.7rem] font-bold rounded-lg"
                                 >
-                                  🪪 Lihat KTP
+                                  💬 Tagih WA
                                 </button>
-                              </td>
-                              <td className="p-3 font-mono">{t.entry_date}</td>
-                              <td className="p-3">
-                                <span className={'text-[9px] font-extrabold px-2 py-0.5 rounded uppercase ' +
-                                  (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
-                                   st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
-                                  {st}
-                                </span>
-                              </td>
-                              <td className="p-3 text-right space-x-1">
-                                <button
-                                  onClick={() => handleOpenEditTenant(t)}
-                                  className="px-2 py-1 bg-amber-600 text-white text-[10px] font-bold rounded hover:bg-amber-700"
-                                >
-                                  ✏️ Edit
-                                </button>
-                                {st !== 'ACTIVE' && (
-                                  <button
-                                    onClick={() => handleStatusChange(t.id, 'active')}
-                                    className="px-2 py-1 bg-green-600 text-white text-[10px] font-bold rounded hover:bg-green-700"
-                                  >
-                                    Aktifkan
-                                  </button>
-                                )}
-                                {st !== 'CHECKED_OUT' && (
-                                  <button
-                                    onClick={() => handleStatusChange(t.id, 'checked_out')}
-                                    className="px-2 py-1 bg-red-600 text-white text-[10px] font-bold rounded hover:bg-red-700"
-                                  >
-                                    Out
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleDelete(t.id, t.name)}
-                                  className="px-2 py-1 bg-slate-200 text-slate-700 text-[10px] font-bold rounded hover:bg-red-100 hover:text-red-700"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
+                              )}
+                              <button
+                                onClick={() => handleOpenEditTenant(t)}
+                                className="px-2 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.7rem] font-black rounded-lg"
+                              >
+                                ✏️ Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(t.id, t.name)}
+                                className="px-2 py-1 bg-slate-200 text-slate-700 text-[0.7rem] font-bold rounded-lg hover:bg-red-100 hover:text-red-700"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 
           </div>
         ) : (
-          <div className="p-10 text-center bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
-            <p className="text-3xl">🔒</p>
-            <h3 className="text-base font-bold text-slate-800">Dasbor Penyewa Masih Terkunci</h3>
-            <p className="text-xs text-slate-500">
-              Pilih salah satu unit properti Anda di atas lalu klik tombol <b>"🔒 Buka Dasbor (PIN)"</b> untuk memverifikasi hak akses Anda.
+          <div className="p-12 text-center bg-white rounded-3xl border-2 border-slate-200 shadow-sm space-y-3">
+            <p className="text-5xl">🔒</p>
+            <h3 className="text-[1.1rem] font-black text-slate-900">Dasbor Kos Masih Terkunci</h3>
+            <p className="text-[0.8rem] text-slate-500 max-w-md mx-auto">
+              Pilih salah satu unit properti Anda di atas lalu klik tombol <b>"🔒 Buka Dasbor Kos (PIN)"</b> untuk memverifikasi hak akses kepemilikan Anda.
             </p>
           </div>
         )}
 
       </div>
 
-      {/* MODAL TAMBAH & EDIT PROPERTI */}
+      {/* MODAL TAMBAH & EDIT PROPERTI DENGAN FORM PENGELOLA LENGKAP */}
       {(showAddPropModal || editingProperty) && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-emerald-950 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">
-                {editingProperty ? '✏️ Edit Data Unit Properti' : '🏢 Daftarkan Properti Kos / Kontrakan Baru'}
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="p-5 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.95rem] font-black">
+                {editingProperty ? '✏️ Edit Properti & Pengelola' : '🏢 Daftarkan Properti Kos Baru'}
               </h3>
               <button
                 onClick={() => { setShowAddPropModal(false); setEditingProperty(null); }}
-                className="text-slate-400 hover:text-white font-bold text-lg leading-none"
+                className="text-white hover:text-amber-300 font-bold text-xl leading-none"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handlePropFormSubmit} className="p-5 space-y-3">
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Kontrakan Berkah"
-                  value={propName}
-                  onChange={(e) => setPropName(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
+            <form onSubmit={handlePropFormSubmit} className="p-5 md:p-6 space-y-4 text-[0.8rem]">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik</label>
+                  <label className="block font-bold text-slate-800 mb-1">Nama Unit Properti *</label>
                   <input
                     type="text"
-                    placeholder="Contoh: Bpk. Hj. Ahmad"
-                    value={propOwnerName}
-                    onChange={(e) => setPropOwnerName(e.target.value)}
-                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                    required
+                    placeholder="Contoh: Kos Melati 1"
+                    value={propName}
+                    onChange={(e) => setPropName(e.target.value)}
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none focus:border-emerald-600 bg-white font-bold"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik</label>
+                  <label className="block font-bold text-slate-800 mb-1">Tipe & Total Kamar *</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={propType}
+                      onChange={(e) => setPropType(e.target.value as 'kos' | 'kontrakan')}
+                      className="p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold text-slate-800"
+                    >
+                      <option value="kos">Kos</option>
+                      <option value="kontrakan">Kontrakan</option>
+                    </select>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      placeholder="Jml Kamar"
+                      value={propTotalRooms}
+                      onChange={(e) => setPropTotalRooms(parseInt(e.target.value, 10) || 1)}
+                      className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* SEKSI PEMILIK SAH */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-200 space-y-2">
+                <span className="text-[0.7rem] font-black text-slate-600 uppercase block">1. DATA PEMILIK SAH BANGUNAN:</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nama Pemilik (Bpk. H. Ahmad)"
+                    value={propOwnerName}
+                    onChange={(e) => setPropOwnerName(e.target.value)}
+                    className="p-2 border-2 border-slate-200 rounded-xl bg-white"
+                  />
                   <input
                     type="tel"
-                    placeholder="08123456789"
+                    placeholder="No. WA Pemilik"
                     value={propOwnerPhone}
                     onChange={(e) => setPropOwnerPhone(e.target.value)}
-                    className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none font-mono"
+                    className="p-2 border-2 border-slate-200 rounded-xl bg-white font-mono"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Tipe Properti *</label>
-                <select
-                  value={propType}
-                  onChange={(e) => setPropType(e.target.value as 'kos' | 'kontrakan')}
-                  className="w-full text-xs p-2.5 border rounded-xl bg-white font-semibold text-slate-800"
-                >
-                  <option value="kos">Kos-kosan (Per Kamar)</option>
-                  <option value="kontrakan">Kontrakan (1 Rumah / Unit)</option>
-                </select>
+              {/* SEKSI PENGELOLA / PENJAGA KOS (FOTO 4) */}
+              <div className="bg-amber-50 p-3.5 rounded-2xl border-2 border-amber-300 space-y-2">
+                <span className="text-[0.7rem] font-black text-amber-950 uppercase block">2. DATA PENGELOLA / PENJAGA LAPANGAN:</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nama Pengelola (Mas Joko)"
+                    value={propManagerName}
+                    onChange={(e) => setPropManagerName(e.target.value)}
+                    className="p-2 border-2 border-amber-200 rounded-xl bg-white font-bold"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="No. WA Pengelola"
+                    value={propManagerPhone}
+                    onChange={(e) => setPropManagerPhone(e.target.value)}
+                    className="p-2 border-2 border-amber-200 rounded-xl bg-white font-mono"
+                  />
+                </div>
+                <p className="text-[0.7rem] text-amber-800 font-medium">Kontak ini yang akan dihubungi langsung oleh penyewa saat butuh bantuan.</p>
+              </div>
+
+              {/* SEKSI REKENING PEMBAYARAN SEWA */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-200 space-y-2">
+                <span className="text-[0.7rem] font-black text-slate-600 uppercase block">3. REKENING RESMI UNTUK MENERIMA SEWA:</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <input
+                    type="text"
+                    placeholder="Bank (BCA/BRI)"
+                    value={propBankName}
+                    onChange={(e) => setPropBankName(e.target.value)}
+                    className="p-2 border-2 border-slate-200 rounded-xl bg-white font-bold uppercase"
+                  />
+                  <input
+                    type="text"
+                    placeholder="No. Rekening"
+                    value={propBankAcc}
+                    onChange={(e) => setPropBankAcc(e.target.value)}
+                    className="col-span-2 p-2 border-2 border-slate-200 rounded-xl bg-white font-mono font-bold"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Atas Nama Pemilik Rekening"
+                  value={propBankHolder}
+                  onChange={(e) => setPropBankHolder(e.target.value)}
+                  className="w-full p-2 border-2 border-slate-200 rounded-xl bg-white font-medium"
+                />
               </div>
 
               {!editingProperty && (
                 <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">Buat PIN 4-Digit Rahasia *</label>
+                  <label className="block font-bold text-slate-800 mb-1">Buat PIN 4-Digit Rahasia *</label>
                   <input
                     type="password"
                     maxLength={4}
                     required
-                    placeholder="Contoh: 8821"
+                    placeholder="Contoh: 1234"
                     value={propPin}
                     onChange={(e) => setPropPin(e.target.value.replace(/\D/g, ''))}
-                    className="w-full text-xs p-2.5 border rounded-xl font-mono tracking-widest focus:ring-2 focus:ring-emerald-600 outline-none"
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-mono tracking-widest text-center text-lg font-bold"
                   />
-                  <p className="text-[10px] text-slate-500 mt-0.5">PIN ini digunakan untuk membuka data penyewa Anda.</p>
                 </div>
               )}
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Alamat Lengkap Unit</label>
+                <label className="block font-bold text-slate-800 mb-1">Alamat Lengkap Unit</label>
                 <input
                   type="text"
                   placeholder="Contoh: Jl. Melati No. 88 RT 02/RW 05"
                   value={propAddress}
                   onChange={(e) => setPropAddress(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none"
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white"
                 />
               </div>
 
-              {!editingProperty && (
-                <div>
-                  <label className="block text-xs font-bold mb-1 text-slate-700">Tata Tertib Khusus Unit (Opsional)</label>
-                  <textarea
-                    rows={2}
-                    placeholder="Tuliskan aturan khusus..."
-                    value={propRules}
-                    onChange={(e) => setPropRules(e.target.value)}
-                    className="w-full text-xs p-2 border rounded-xl font-mono outline-none"
-                  ></textarea>
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-2 flex justify-end gap-2 border-t">
                 <button
                   type="button"
                   onClick={() => { setShowAddPropModal(false); setEditingProperty(null); }}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                  className="px-4 py-2.5 bg-slate-200 text-slate-700 text-[0.8rem] font-bold rounded-2xl hover:bg-slate-300"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={submittingProp}
-                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
+                  className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[0.8rem] font-black rounded-2xl shadow disabled:bg-slate-300 cursor-pointer"
                 >
                   {submittingProp ? 'Menyimpan...' : editingProperty ? 'Simpan Perubahan' : 'Daftarkan Properti'}
                 </button>
@@ -847,73 +948,88 @@ export default function OwnerDashboard() {
 
       {/* MODAL EDIT PENYEWA */}
       {editingTenant && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">✏️ Edit Data Penyewa</h3>
-              <button onClick={() => setEditingTenant(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.85rem] font-black">✏️ Edit Data Penyewa</h3>
+              <button onClick={() => setEditingTenant(null)} className="text-white hover:text-amber-300 font-bold text-lg leading-none">✕</button>
             </div>
 
-            <form onSubmit={handleSaveTenantSubmit} className="p-5 space-y-3">
+            <form onSubmit={handleSaveTenantSubmit} className="p-5 space-y-3 text-[0.8rem]">
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Penyewa *</label>
+                <label className="block font-bold mb-1 text-slate-700">Nama Penyewa *</label>
                 <input
                   type="text"
                   required
                   value={tenantName}
                   onChange={(e) => setTenantName(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none font-bold"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp *</label>
+                <label className="block font-bold mb-1 text-slate-700">No. WhatsApp *</label>
                 <input
                   type="tel"
                   required
                   value={tenantPhone}
                   onChange={(e) => setTenantPhone(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-mono"
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nomor Kamar / Lokasi Unit</label>
+                <label className="block font-bold mb-1 text-slate-700">Nomor Kamar / Unit</label>
                 <input
                   type="text"
-                  placeholder="Contoh: Kamar 04"
+                  placeholder="Kamar 04"
                   value={tenantRoom}
                   onChange={(e) => setTenantRoom(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-semibold text-emerald-800"
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none font-black text-emerald-900"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">Ubah ini jika penyewa berpindah kamar.</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Peran / Hubungan</label>
+                <label className="block font-bold mb-1 text-slate-700">Harga Sewa Kamar (Rp) *</label>
                 <input
                   type="text"
-                  placeholder="Contoh: Penanggung Jawab"
-                  value={tenantRelation}
-                  onChange={(e) => setTenantRelation(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                  required
+                  value={tenantRentPrice}
+                  onChange={(e) => setTenantRentPrice(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl outline-none font-mono font-bold"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div>
+                <label className="block font-bold mb-1 text-slate-700">Hubungan / Peran</label>
+                <select
+                  value={tenantRelation}
+                  onChange={(e) => setTenantRelation(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
+                >
+                  <option value="Penanggung Jawab">Penanggung Jawab</option>
+                  <option value="Istri">Istri</option>
+                  <option value="Suami">Suami</option>
+                  <option value="Anak">Anak</option>
+                  <option value="Saudara">Saudara</option>
+                  <option value="Rekan / Teman">Rekan / Teman</option>
+                </select>
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t">
                 <button
                   type="button"
                   onClick={() => setEditingTenant(null)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={savingTenant}
-                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow"
+                  className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black rounded-xl shadow cursor-pointer"
                 >
-                  {savingTenant ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  {savingTenant ? 'Menyimpan...' : 'Simpan Data'}
                 </button>
               </div>
             </form>
@@ -924,25 +1040,25 @@ export default function OwnerDashboard() {
       {/* MODAL CETAK POSTER QR CODE */}
       {posterProp && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center print:hidden">
-              <h3 className="text-xs font-bold">🖨️ Poster Resmi QR Code Wajib Lapor RT</h3>
-              <button onClick={() => setPosterProp(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center print:hidden">
+              <h3 className="text-[0.85rem] font-bold">🖨️ Poster Resmi QR Wajib Lapor RT</h3>
+              <button onClick={() => setPosterProp(null)} className="text-white hover:text-amber-300 font-bold text-xl leading-none">✕</button>
             </div>
 
             <div className="p-6 text-center space-y-4 bg-white" id="printable-poster">
               <div className="border-b-2 border-slate-900 pb-3">
-                <span className="text-[10px] font-extrabold px-2 py-0.5 bg-emerald-800 text-white rounded uppercase tracking-wider">
-                  TERAKREDITASI PENGURUS RT
+                <span className="text-[10px] font-extrabold px-2 py-0.5 bg-slate-900 text-white rounded uppercase">
+                  TERDAFTAR PENGURUS RT
                 </span>
                 <h2 className="text-xl font-black text-slate-900 mt-2 uppercase">WAJIB LAPOR DIRI</h2>
                 <p className="text-xs text-slate-600 font-bold">WARGA PENDATANG SEMENTARA</p>
               </div>
 
               <div className="py-2">
-                <h3 className="text-lg font-bold text-emerald-900">{posterProp.name || posterProp.property_name}</h3>
-                {posterProp.owner_name && <p className="text-xs text-slate-700 font-semibold">Pemilik: {posterProp.owner_name}</p>}
-                <p className="text-xs text-slate-500">{posterProp.address || 'Wilayah Lingkungan RT'}</p>
+                <h3 className="text-lg font-bold text-slate-900">{posterProp.name || posterProp.property_name}</h3>
+                <p className="text-xs text-slate-600">Pengelola: {posterProp.manager_name || posterProp.owner_name || '-'}</p>
+                <p className="text-xs text-slate-500">{posterProp.address || 'Lingkungan RT Setempat'}</p>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 inline-block shadow-inner">
@@ -951,26 +1067,22 @@ export default function OwnerDashboard() {
                     (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + posterProp.slug
                   )}`}
                   alt="QR Code Check-in"
-                  className="w-48 h-48 mx-auto rounded-lg"
+                  className="w-48 h-48 mx-auto rounded-xl"
                 />
               </div>
 
-              <div className="text-left bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
-                <p className="font-bold">📢 PERHATIAN PENGHUNI BARU:</p>
+              <div className="text-left bg-amber-50 p-3 rounded-2xl border border-amber-200 text-[11px] text-amber-900 space-y-1 font-semibold">
+                <p className="font-bold">📢 INSTRUKSI PENGHUNI BARU:</p>
                 <p>1. Pindai QR Code di atas menggunakan kamera HP Anda.</p>
                 <p>2. Lengkapi formulir pendaftaran & unggah KTP dalam 1x24 jam.</p>
                 <p>3. Data disimpan aman sesuai aturan UU PDP No. 27 Tahun 2022.</p>
               </div>
-
-              <div className="pt-2 border-t text-[10px] text-slate-400 font-mono">
-                Sistem Informasi Kependudukan Digital RT
-              </div>
             </div>
 
             <div className="p-3 bg-slate-100 flex justify-end gap-2 print:hidden">
-              <button onClick={() => setPosterProp(null)} className="px-4 py-2 bg-slate-300 text-slate-700 text-xs font-bold rounded-xl">Tutup</button>
-              <button onClick={() => window.print()} className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow">
-                🖨️ Cetak Poster (A4/A5)
+              <button onClick={() => setPosterProp(null)} className="px-4 py-2 bg-slate-300 text-slate-700 text-xs font-bold rounded-2xl">Tutup</button>
+              <button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-2xl hover:bg-slate-800 shadow">
+                🖨️ Cetak Poster
               </button>
             </div>
           </div>
@@ -979,50 +1091,48 @@ export default function OwnerDashboard() {
 
       {/* MODAL INPUT PIN 4-DIGIT */}
       {showPinModal && targetPropForUnlock && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">🔒 Verifikasi PIN 4-Digit Pemilik</h3>
-              <button onClick={() => setShowPinModal(false)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.85rem] font-bold">🔒 Verifikasi PIN 4-Digit</h3>
+              <button onClick={() => setShowPinModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none">✕</button>
             </div>
 
             <form onSubmit={handleUnlockWithPin} className="p-5 space-y-4">
               <div className="text-center space-y-1">
-                <h4 className="font-bold text-slate-900 text-sm">{targetPropForUnlock.name || targetPropForUnlock.property_name}</h4>
-                <p className="text-[11px] text-slate-500">Masukkan PIN 4-digit rahasia unit ini:</p>
+                <h4 className="font-black text-slate-900 text-sm">{targetPropForUnlock.name || targetPropForUnlock.property_name}</h4>
+                <p className="text-[0.75rem] text-slate-500">Masukkan PIN 4-digit unit ini:</p>
               </div>
 
               {pinError && (
-                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold text-center">
+                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs font-bold text-center">
                   {pinError}
                 </div>
               )}
 
-              <div>
-                <input
-                  type="password"
-                  maxLength={4}
-                  required
-                  autoFocus
-                  placeholder="• • • •"
-                  value={inputPin}
-                  onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
-                  className="w-full text-center text-2xl tracking-[0.5em] p-3 border-2 border-slate-300 rounded-xl font-mono focus:border-emerald-600 outline-none"
-                />
-              </div>
+              <input
+                type="password"
+                maxLength={4}
+                required
+                autoFocus
+                placeholder="• • • •"
+                value={inputPin}
+                onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full text-center text-2xl tracking-[0.5em] p-3 border-2 border-slate-300 rounded-2xl font-mono font-bold focus:border-emerald-600 outline-none"
+              />
 
               <div className="flex gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowPinModal(false)}
-                  className="flex-1 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-2xl hover:bg-slate-300"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
                   disabled={verifyingPin || inputPin.length !== 4}
-                  className="flex-1 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
+                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black rounded-2xl shadow disabled:bg-slate-300 cursor-pointer"
                 >
                   {verifyingPin ? 'Memeriksa...' : 'Buka Dasbor'}
                 </button>
@@ -1032,25 +1142,25 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL EDIT TATA TERTIB */}
+      {/* MODAL TATA TERTIB */}
       {editingRulesProp && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">📜 Atur Tata Tertib Hunian</h3>
-              <button onClick={() => setEditingRulesProp(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">📜 Tata Tertib Hunian</h3>
+              <button onClick={() => setEditingRulesProp(null)} className="text-white font-bold text-lg leading-none">✕</button>
             </div>
             <div className="p-4 space-y-3 bg-slate-50">
               <textarea
                 rows={7}
                 value={rulesText}
                 onChange={(e) => setRulesText(e.target.value)}
-                className="w-full text-xs p-3 border rounded-xl font-mono bg-white focus:ring-2 focus:ring-emerald-600 outline-none leading-relaxed"
+                className="w-full text-xs p-3 border rounded-2xl font-mono bg-white focus:ring-2 focus:ring-emerald-600 outline-none leading-relaxed"
               ></textarea>
             </div>
-            <div className="p-3 bg-slate-100 flex justify-end gap-2">
-              <button onClick={() => setEditingRulesProp(null)} className="px-4 py-1.5 bg-slate-300 text-slate-700 text-xs font-bold rounded-xl">Batal</button>
-              <button onClick={handleSaveRules} disabled={savingRules} className="px-4 py-1.5 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 disabled:bg-slate-400">
+            <div className="p-3 bg-slate-100 flex justify-end gap-2 border-t">
+              <button onClick={() => setEditingRulesProp(null)} className="px-4 py-2 bg-slate-300 text-slate-700 text-xs font-bold rounded-2xl">Batal</button>
+              <button onClick={handleSaveRules} disabled={savingRules} className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-2xl hover:bg-emerald-800">
                 {savingRules ? 'Menyimpan...' : 'Simpan Tata Tertib'}
               </button>
             </div>
@@ -1060,14 +1170,14 @@ export default function OwnerDashboard() {
 
       {/* MODAL KTP VIEWER */}
       {(selectedTenantName || loadingKtp) && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
               <h3 className="text-xs font-bold flex items-center gap-2">
-                <span>🛡️ Dokumen KTP PDP Compliant:</span>
-                <span className="text-emerald-400">{selectedTenantName}</span>
+                <span>🛡️ Dokumen KTP (UU PDP):</span>
+                <span className="text-amber-300">{selectedTenantName}</span>
               </h3>
-              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
+              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="text-white font-bold text-lg leading-none">✕</button>
             </div>
             <div className="p-6 flex flex-col items-center justify-center min-h-[220px] bg-slate-50">
               {loadingKtp ? (
@@ -1076,20 +1186,20 @@ export default function OwnerDashboard() {
                   <p className="text-xs text-slate-500 font-semibold">Memuat Tautan Aman KTP...</p>
                 </div>
               ) : ktpErrorMsg ? (
-                <div className="text-center space-y-2 p-4 bg-amber-50 border border-amber-200 rounded-xl max-w-md">
+                <div className="text-center space-y-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl max-w-md">
                   <p className="text-xs font-semibold text-amber-800">{ktpErrorMsg}</p>
                 </div>
               ) : selectedKtpUrl ? (
                 <div className="space-y-3 w-full text-center">
-                  <img src={selectedKtpUrl} alt="Dokumen KTP Penghuni" className="max-h-[350px] w-auto mx-auto rounded-xl border shadow-sm object-contain" />
-                  <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200 font-semibold">
+                  <img src={selectedKtpUrl} alt="Dokumen KTP Penghuni" className="max-h-[350px] w-auto mx-auto rounded-2xl border shadow-sm object-contain" />
+                  <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-xl border border-amber-200 font-semibold">
                     🔒 Tautan privat ini akan kedaluwarsa secara otomatis dalam 60 detik (UU PDP).
                   </p>
                 </div>
               ) : null}
             </div>
-            <div className="p-3 bg-slate-100 text-right">
-              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-xl">Tutup Dokumen</button>
+            <div className="p-3 bg-slate-100 text-right border-t">
+              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-2xl">Tutup Dokumen</button>
             </div>
           </div>
         </div>

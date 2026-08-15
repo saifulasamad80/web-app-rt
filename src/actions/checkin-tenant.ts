@@ -197,6 +197,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const household_id = `HH-${Date.now()}`;
     const registered_at = new Date().toISOString();
 
+    // Upload KTP Penanggung Jawab
     const ktpData = formData.get('ktp');
     let ktp_path = '';
     if (ktpData && ktpData instanceof File && ktpData.size > 0) {
@@ -213,6 +214,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
+    // Upload Buku Nikah / KK jika ada
     const marriageDoc = formData.get('marriage_doc');
     let marriage_doc_url = '';
     if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
@@ -248,29 +250,54 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       occupants = [{ name, phone, address_ktp, relation: 'Penanggung Jawab', is_head: true }];
     }
 
-    const insertPayload = occupants.map((occ: any, index: number) => ({
-      property_id,
-      room_number,
-      entry_date,
-      household_id,
-      name: occ.name,
-      phone: (occ.phone || (index === 0 ? (formData.get('phone') as string) : '')).trim(),
-      address_ktp: occ.address_ktp || occ.address || (formData.get('address_ktp') as string) || '',
-      relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
-      is_head: index === 0,
-      marital_status: index === 0 ? marital_status : (occ.marital_status || 'Belum Menikah'),
-      occupation: index === 0 ? occupation : (occ.occupation || ''),
-      rent_price: index === 0 ? rent_price : 0,
-      payment_status: 'UNPAID',
-      ktp_path: index === 0 ? ktp_path : null,
-      marriage_doc_url: index === 0 ? marriage_doc_url : null,
-      status: 'PENDING',
-    }));
+    // Proses KTP Anggota (jika usia >= 17)
+    const insertPayload = [];
+    for (let index = 0; index < occupants.length; index++) {
+      const occ = occupants[index];
+      let member_ktp_path = index === 0 ? ktp_path : null;
+
+      if (index > 0) {
+        const memberKtpFile = formData.get(`member_ktp_${index}`);
+        if (memberKtpFile && memberKtpFile instanceof File && memberKtpFile.size > 0) {
+          const fileExt = memberKtpFile.name.split('.').pop() || 'jpg';
+          const fileName = `ktp_member_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+          const buffer = Buffer.from(await memberKtpFile.arrayBuffer());
+
+          const { data: upData, error: upErr } = await supabase.storage
+            .from('ktp-documents')
+            .upload(fileName, buffer, { contentType: memberKtpFile.type || 'image/jpeg', upsert: true });
+
+          if (!upErr && upData) {
+            member_ktp_path = upData.path;
+          }
+        }
+      }
+
+      insertPayload.push({
+        property_id,
+        room_number,
+        entry_date,
+        household_id,
+        name: occ.name,
+        phone: (occ.phone || (index === 0 ? (formData.get('phone') as string) : '')).trim(),
+        address_ktp: occ.address_ktp || occ.address || (formData.get('address_ktp') as string) || '',
+        relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
+        is_head: index === 0,
+        birth_date: occ.birth_date || (index === 0 ? (formData.get('birth_date') as string) : null),
+        marital_status: index === 0 ? marital_status : (occ.marital_status || 'Belum Menikah'),
+        occupation: index === 0 ? occupation : (occ.occupation || ''),
+        rent_price: index === 0 ? rent_price : 0,
+        payment_status: 'UNPAID',
+        ktp_path: member_ktp_path,
+        marriage_doc_url: index === 0 ? marriage_doc_url : null,
+        status: 'PENDING',
+      });
+    }
 
     const { data, error } = await supabase.from('tenants').insert(insertPayload).select();
 
     if (error) {
-      return { success: false, data: [], household_id: '', registered_at: '', error: 'Gagal menyimpan data penyewa: ' + error.message };
+      return { success: false, data: [], household_id: '', registered_at: '', error: 'Gagal menyimpan data: ' + error.message };
     }
 
     try {
