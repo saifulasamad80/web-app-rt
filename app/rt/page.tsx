@@ -2,412 +2,250 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getRtDashboardData, verifyTenantByRt, approvePropertyByRt, resetPropertyPinByRt } from '../../src/actions/rt-actions';
-import { getTenantKtpUrl, updateProperty, deleteProperty } from '../../src/actions/checkin-tenant';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 import {
-  submitDuesPayment,
-  getDuesHistory,
-  deleteDuesRecord,
+  getAllTenantsForRt,
+  getPublicPropertiesList,
+  updateTenantStatus,
+  updateProperty,
+  getDocumentSignedUrl,
+  deleteTenant,
   getDuesAuditLogs,
-  DuesItem,
-  DuesAuditLog,
-} from '../../src/actions/manage-dues';
-import { logoutAdminRT, getAllRtAdmins, createRtAdmin, updateRtAdmin, deleteRtAdmin, getCurrentAdminSession } from '../../src/actions/auth';
+  recordRtDues,
+} from '../../src/actions/checkin-tenant';
 
-interface Tenant {
-  id: string;
-  name: string;
-  phone: string;
-  address_ktp: string;
-  entry_date: string;
-  status: string;
-  relation?: string;
-  room_number?: string;
-  full_address?: string;
-  household_id?: string;
-  is_head?: boolean;
-  birth_date?: string;
-  ktp_url?: string;
-  ktp_path?: string;
-  property_id?: string;
-  properties?: { id: string; name: string; type: string; slug: string };
-}
-
-interface Property {
-  id: string;
-  name: string;
-  property_name?: string;
-  type: string;
-  slug: string;
-  address?: string;
-  status?: string;
-  pin_code?: string;
-  failed_pin_attempts?: number;
-  pin_locked_until?: string;
-  owner_name?: string;
-  owner_phone?: string;
-}
-
-interface AdminUser {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  role: string;
-  created_at?: string;
-}
-
-const MONTH_OPTIONS = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-];
-
-const YEAR_OPTIONS = ['2025', '2026', '2027', '2028', '2029', '2030'];
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 export default function RtDashboardPage() {
-  const [properties, setProperties] = useState<Property[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [duesList, setDuesList] = useState<DuesItem[]>([]);
-  const [duesLogs, setDuesLogs] = useState<DuesAuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProperty, setSelectedProperty] = useState('ALL');
-  const [selectedStatus, setSelectedStatus] = useState('ALL');
+  const router = useRouter();
+  const [zoomPercent, setZoomPercent] = useState<number>(100);
+  const [activeTab, setActiveTab] = useState<'warga' | 'properti' | 'kas' | 'audit'>('warga');
 
-  const [currentAdmin, setCurrentAdmin] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [tenants, setTenants] = useState<any[]>([]);
+  const [properties, setProperties] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const [textScale, setTextScale] = useState<'sm' | 'base' | 'lg'>('base');
+  // Filter Buku Register Warga
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
-  const [selectedTenantName, setSelectedTenantName] = useState<string>('');
-  const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
-  const [ktpErrorMsg, setKtpErrorMsg] = useState<string>('');
+  // Modal Dokumen Viewer (KTP & Buku Nikah)
+  const [docModalTitle, setDocModalTitle] = useState('');
+  const [docModalUrl, setDocModalUrl] = useState<string | null>(null);
+  const [loadingDoc, setLoadingDoc] = useState(false);
+  const [docError, setDocError] = useState('');
 
-  const [resetPinProp, setResetPinProp] = useState<Property | null>(null);
-  const [newPinInput, setNewPinInput] = useState('1234');
-  const [resetMsg, setResetMsg] = useState('');
-  const [resettingPin, setResettingPin] = useState(false);
+  // Modal Reset PIN Properti
+  const [resetProp, setResetProp] = useState<any | null>(null);
+  const [newPin, setNewPin] = useState('1234');
+  const [savingPin, setSavingPin] = useState(false);
+  const [copyMsg, setCopyMsg] = useState('');
 
-  // Edit Properti
-  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
-  const [propName, setPropName] = useState('');
-  const [propOwnerName, setPropOwnerName] = useState('');
-  const [propOwnerPhone, setPropOwnerPhone] = useState('');
-  const [propAddress, setPropAddress] = useState('');
-  const [savingProp, setSavingProp] = useState(false);
-
-  // Form Iuran Kas RT
-  const [duesName, setDuesName] = useState('');
-  const [duesHouse, setDuesHouse] = useState('');
+  // Form Input Iuran Kas RT
+  const [payerName, setPayerName] = useState('');
+  const [blockNumber, setBlockNumber] = useState('');
   const [duesAmount, setDuesAmount] = useState('50000');
-  const [selectedMonth, setSelectedMonth] = useState('Agustus');
-  const [selectedYear, setSelectedYear] = useState('2026');
-  const [duesMsg, setDuesMsg] = useState('');
-  const [submittingDues, setSubmittingDues] = useState(false);
+  const [duesMonth, setDuesMonth] = useState('Agustus');
+  const [duesYear, setDuesYear] = useState('2026');
+  const [savingDues, setSavingDues] = useState(false);
 
-  // Modal Kelola & Edit Akun Pengurus RT
-  const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminList, setAdminList] = useState<AdminUser[]>([]);
-  const [newAdminName, setNewAdminName] = useState('');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPhone, setNewAdminPhone] = useState('');
-  const [newAdminPass, setNewAdminPass] = useState('');
-  const [savingAdmin, setSavingAdmin] = useState(false);
+  const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
+  const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
-  const [editingAdminUser, setEditingAdminUser] = useState<AdminUser | null>(null);
-  const [editAdminName, setEditAdminName] = useState('');
-  const [editAdminEmail, setEditAdminEmail] = useState('');
-  const [editAdminPhone, setEditAdminPhone] = useState('');
-  const [editAdminPass, setEditAdminPass] = useState('');
-  const [updatingAdmin, setUpdatingAdmin] = useState(false);
-
-  const loadData = async () => {
-    setLoading(true);
-    const session = await getCurrentAdminSession();
-    setCurrentAdmin(session);
-
-    const res = await getRtDashboardData();
-    setProperties(res.properties || []);
-    setTenants(res.tenants || []);
-
-    const duesRes = await getDuesHistory();
-    setDuesList(duesRes.dues || []);
-
-    const logRes = await getDuesAuditLogs();
-    setDuesLogs(logRes.logs || []);
-
-    setLoading(false);
-  };
-
+  // AUTH GUARD: Periksa Sesi Login Pengurus RT
   useEffect(() => {
-    loadData();
+    async function checkAuthAndLoad() {
+      const { data } = await supabase.auth.getSession();
+      const localFlag = typeof window !== 'undefined' ? localStorage.getItem('rt_admin_logged_in') : null;
+
+      if (!data.session && !localFlag) {
+        window.location.href = '/login';
+        return;
+      }
+
+      setAuthChecking(false);
+      await loadAllData();
+    }
+    checkAuthAndLoad();
   }, []);
 
-  const loadAdminUsers = async () => {
-    const res = await getAllRtAdmins();
-    setAdminList(res.admins || []);
+  const loadAllData = async () => {
+    setLoadingData(true);
+    const [tRes, pRes, aRes] = await Promise.all([
+      getAllTenantsForRt(),
+      getPublicPropertiesList(),
+      getDuesAuditLogs(),
+    ]);
+
+    setTenants(tRes.tenants || []);
+    setProperties(pRes.properties || []);
+    setAuditLogs(aRes.logs || []);
+    setLoadingData(false);
   };
 
-  const handleOpenAdminModal = () => {
-    setShowAdminModal(true);
-    loadAdminUsers();
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('rt_admin_logged_in');
+    }
+    window.location.href = '/login';
   };
 
-  const handleCreateAdminSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAdminName || !newAdminEmail || !newAdminPass) return;
+  const handleVerifyTenant = async (id: string, status: 'verified' | 'rejected') => {
+    const label = status === 'verified' ? 'SETUJUI data warga ini?' : 'TOLAK data pendaftaran warga ini?';
+    if (confirm(label)) {
+      setTenants((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, status: status === 'verified' ? 'VERIFIED' : 'REJECTED' } : t))
+      );
+      await updateTenantStatus(id, status);
+      setCopyMsg(`Status warga berhasil diperbarui menjadi: ${status === 'verified' ? 'SAH TERVERIFIKASI' : 'DITOLAK'}`);
+      setTimeout(() => setCopyMsg(''), 3000);
+    }
+  };
 
-    setSavingAdmin(true);
-    const res = await createRtAdmin(newAdminName, newAdminEmail, newAdminPass, newAdminPhone, 'ADMIN');
-    setSavingAdmin(false);
+  const handleDeleteTenant = async (id: string, name: string) => {
+    if (confirm(`Hapus permanen warga "${name}" dari buku register RT?`)) {
+      setTenants((prev) => prev.filter((t) => t.id !== id));
+      await deleteTenant(id);
+      setCopyMsg(`Data "${name}" telah dihapus.`);
+      setTimeout(() => setCopyMsg(''), 3000);
+    }
+  };
 
-    if (res.success) {
-      setNewAdminName('');
-      setNewAdminEmail('');
-      setNewAdminPhone('');
-      setNewAdminPass('');
-      await loadAdminUsers();
+  const handleViewDocument = async (filePath: string, title: string) => {
+    setDocModalTitle(title);
+    setLoadingDoc(true);
+    setDocError('');
+    setDocModalUrl(null);
+
+    const res = await getDocumentSignedUrl(filePath);
+    setLoadingDoc(false);
+
+    if (res.success && res.url) {
+      setDocModalUrl(res.url);
     } else {
-      alert('Gagal menambah akun pengurus: ' + res.error);
+      setDocError(res.error || 'Gagal memuat dokumen privat.');
     }
   };
 
-  const handleOpenEditAdmin = (adm: AdminUser) => {
-    setEditingAdminUser(adm);
-    setEditAdminName(adm.name);
-    setEditAdminEmail(adm.email);
-    setEditAdminPhone(adm.phone || '');
-    setEditAdminPass('');
-  };
-
-  const handleUpdateAdminSubmit = async (e: React.FormEvent) => {
+  const handleSaveResetPin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAdminUser) return;
+    if (!resetProp || !newPin || newPin.length !== 4) {
+      alert('PIN harus berupa 4-digit angka');
+      return;
+    }
 
-    setUpdatingAdmin(true);
-    const res = await updateRtAdmin(editingAdminUser.id, {
-      name: editAdminName,
-      email: editAdminEmail,
-      phone: editAdminPhone,
-      password: editAdminPass || undefined,
-    });
-    setUpdatingAdmin(false);
+    setSavingPin(true);
+    const res = await updateProperty(resetProp.id, { pin_code: newPin });
+    setSavingPin(false);
 
     if (res.success) {
-      setEditingAdminUser(null);
-      await loadAdminUsers();
-    } else {
-      alert('Gagal memperbarui akun pengurus: ' + res.error);
-    }
-  };
-
-  const handleDeleteAdmin = async (id: string, name: string) => {
-    if (confirm(`Apakah Anda yakin ingin menghapus akun pengurus RT "${name}"?`)) {
-      await deleteRtAdmin(id);
-      await loadAdminUsers();
-    }
-  };
-
-  const handleOpenEditProperty = (p: Property) => {
-    setEditingProperty(p);
-    setPropName(p.name || p.property_name || '');
-    setPropOwnerName(p.owner_name || '');
-    setPropOwnerPhone(p.owner_phone || '');
-    setPropAddress(p.address || '');
-  };
-
-  const handleSavePropertySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingProperty || !propName) return;
-
-    setSavingProp(true);
-    const res = await updateProperty(editingProperty.id, {
-      name: propName,
-      owner_name: propOwnerName,
-      owner_phone: propOwnerPhone,
-      address: propAddress,
-    });
-    setSavingProp(false);
-
-    if (res.success) {
-      setResetMsg(`Data properti "${propName}" berhasil diperbarui!`);
-      setTimeout(() => setResetMsg(''), 4000);
-      setEditingProperty(null);
-      await loadData();
-    } else {
-      alert('Gagal memperbarui properti: ' + res.error);
-    }
-  };
-
-  const handleDeletePropertyClick = async (p: Property) => {
-    if (confirm(`Hapus unit properti "${p.name || p.property_name}" beserta seluruh data penyewanya?`)) {
-      setProperties((prev) => prev.filter((item) => item.id !== p.id));
-      await deleteProperty(p.id);
-      await loadData();
-    }
-  };
-
-  const handleVerifyTenant = async (id: string, newStatus: 'VERIFIED' | 'REJECTED' | 'ACTIVE') => {
-    setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, status: newStatus } : t)));
-    await verifyTenantByRt(id, newStatus);
-    await loadData();
-  };
-
-  const handleResetPinSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetPinProp || !newPinInput) return;
-
-    setResettingPin(true);
-    const res = await resetPropertyPinByRt(resetPinProp.id, newPinInput);
-    setResettingPin(false);
-
-    if (res.success) {
-      setResetMsg(`🔑 PIN untuk ${resetPinProp.name || resetPinProp.property_name} berhasil direset ke: ${newPinInput}`);
-      setTimeout(() => setResetMsg(''), 4000);
-      setResetPinProp(null);
-      await loadData();
+      setProperties((prev) => prev.map((p) => (p.id === resetProp.id ? { ...p, pin_code: newPin } : p)));
+      setCopyMsg(`PIN unit "${resetProp.name || resetProp.property_name}" berhasil direset menjadi: ${newPin}`);
+      setTimeout(() => setCopyMsg(''), 4000);
+      setResetProp(null);
     } else {
       alert('Gagal reset PIN: ' + res.error);
     }
   };
 
-  const handleViewKtp = async (tenant: Tenant) => {
-    const targetPath = tenant.ktp_url || tenant.ktp_path;
-    setSelectedTenantName(tenant.name);
-    setLoadingKtp(true);
-    setKtpErrorMsg('');
-    setSelectedKtpUrl(null);
-
-    if (!targetPath) {
-      setLoadingKtp(false);
-      setKtpErrorMsg('Warga ini tidak memiliki lampiran foto KTP.');
-      return;
-    }
-
-    const res = await getTenantKtpUrl(targetPath);
-    setLoadingKtp(false);
-
-    if (res && res.success && res.url) {
-      setSelectedKtpUrl(res.url);
-    } else {
-      setKtpErrorMsg(res?.error || 'Gagal membuka berkas KTP.');
-    }
-  };
-
-  const handleDuesSubmit = async (e: React.FormEvent) => {
+  const handleRecordDuesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!duesName || !duesAmount) return;
-    setSubmittingDues(true);
+    if (!payerName || !duesAmount) return;
 
-    const periodMonthFormatted = `${selectedMonth} ${selectedYear}`;
+    setSavingDues(true);
+    const parsedAmount = parseInt(duesAmount.replace(/\D/g, ''), 10) || 0;
 
-    const formData = new FormData();
-    formData.append('resident_name', duesName);
-    formData.append('house_number', duesHouse || 'Griya Alfatihah 78');
-    formData.append('amount', duesAmount);
-    formData.append('period_month', periodMonthFormatted);
+    const res = await recordRtDues(payerName, blockNumber, parsedAmount, duesMonth, duesYear, 'Pengurus RT');
+    setSavingDues(false);
 
-    const res = await submitDuesPayment(formData);
-    setSubmittingDues(false);
-
-    if (res && res.success) {
-      setDuesMsg(`Pembayaran iuran kas atas nama "${duesName}" (${periodMonthFormatted}) berhasil dicatat!`);
-      setDuesName('');
-      setDuesHouse('');
-      setTimeout(() => setDuesMsg(''), 4000);
-      await loadData();
+    if (res.success) {
+      setCopyMsg(`Iuran Rp ${parsedAmount.toLocaleString('id-ID')} dari ${payerName} berhasil dicatat.`);
+      setTimeout(() => setCopyMsg(''), 3500);
+      setPayerName('');
+      setBlockNumber('');
+      const aRes = await getDuesAuditLogs();
+      setAuditLogs(aRes.logs || []);
     } else {
-      alert('Gagal mencatat iuran: ' + (res?.error || 'Kesalahan teknis'));
+      alert('Gagal mencatat iuran: ' + res.error);
     }
   };
 
-  const handleDeleteDues = async (id: string, name: string) => {
-    if (confirm(`Hapus catatan iuran atas nama "${name}"?`)) {
-      setDuesList((prev) => prev.filter((d) => d.id !== id));
-      await deleteDuesRecord(id);
-      await loadData();
-    }
-  };
+  if (authChecking) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-bold text-slate-700">Memeriksa Hak Akses Pengurus RT...</p>
+        </div>
+      </main>
+    );
+  }
 
-  const formatPhoneToWA = (phone?: string) => {
-    if (!phone) return '';
-    let cleaned = phone.replace(/\D/g, '');
-    if (cleaned.startsWith('0')) cleaned = '62' + cleaned.slice(1);
-    return cleaned;
-  };
-
-  const handleLogout = async () => {
-    await logoutAdminRT();
-    window.location.href = '/';
-  };
-
+  // Filter Data Warga
   const filteredTenants = tenants.filter((t) => {
     const matchesSearch =
-      t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.phone.includes(searchTerm) ||
-      (t.address_ktp || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesProperty =
-      selectedProperty === 'ALL' || t.property_id === selectedProperty || t.properties?.id === selectedProperty;
+      (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.phone || '').includes(searchQuery) ||
+      (t.room_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.properties?.name || t.properties?.property_name || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const st = (t.status || '').toUpperCase();
-    const matchesStatus =
-      selectedStatus === 'ALL' ||
-      (selectedStatus === 'PENDING' && (st === 'PENDING' || st === 'ACTIVE')) ||
-      (selectedStatus === 'VERIFIED' && st === 'VERIFIED');
+    if (filterStatus === 'PENDING') return matchesSearch && st === 'PENDING';
+    if (filterStatus === 'VERIFIED') return matchesSearch && (st === 'VERIFIED' || st === 'ACTIVE');
+    if (filterStatus === 'DOC_PENDING') return matchesSearch && t.marital_status === 'Menikah' && !t.marriage_doc_url;
 
-    return matchesSearch && matchesProperty && matchesStatus;
+    return matchesSearch;
   });
 
-  const totalKasAmount = duesList.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const fontClass = textScale === 'lg' ? 'text-sm' : textScale === 'sm' ? 'text-[11px]' : 'text-xs';
-
-  const isSuperAdmin = currentAdmin?.role === 'SUPER_ADMIN';
+  const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
+  const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
+  const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && !t.marriage_doc_url).length;
 
   return (
-    <main className={`min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900 ${fontClass}`}>
-      <div className="max-w-7xl mx-auto space-y-6">
+    <main
+      style={{ fontSize: `${zoomPercent}%` }}
+      className="min-h-screen p-3 md:p-8 bg-slate-50 text-slate-900 transition-all font-sans"
+    >
+      <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER DASBOR RT */}
-        <div className="bg-slate-900 text-white p-5 md:p-6 rounded-2xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        {/* HEADER CERAH DENGAN WIDGET ZOOM & TOMBOL LOGOUT */}
+        <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="text-[10px] font-bold px-2.5 py-1 bg-emerald-500 text-slate-950 rounded uppercase">
-              PORTAL PENGURUS RT / KEPENDUDUKAN
-            </span>
-            <h1 className="text-xl md:text-2xl font-extrabold mt-2 text-white">Dasbor Pengurus RT Terpadu</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Buku Register Warga Pendatang, Verifikasi & Reset PIN Properti, Kas Iuran RT
-              {currentAdmin && <span className="text-emerald-400 block mt-0.5">👤 Login Sebagai: <b>{currentAdmin.name}</b> ({currentAdmin.role})</span>}
+            <div className="flex items-center gap-2">
+              <span className="text-[1.3rem]">🏛️🛡️</span>
+              <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pengurus RT</span></h1>
+            </div>
+            <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
+              Buku Register Warga Pendatang, Verifikasi Dokumen UU PDP, Reset PIN Unit, & Kas Lingkungan RT
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {isSuperAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
+              <span className="text-[0.75rem] font-bold text-emerald-300 px-1 flex items-center">T↕</span>
               <button
-                onClick={handleOpenAdminModal}
-                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 font-bold text-xs rounded-xl transition-all shadow flex items-center gap-1.5"
-              >
-                <span>⚙️ Kelola Pengurus</span>
-              </button>
-            )}
-
-            <div className="bg-slate-800/90 p-1 rounded-xl border border-slate-700 flex items-center gap-1 shadow-inner">
-              <span className="text-xs text-emerald-400 font-bold px-1.5">T↕</span>
-              <button
-                onClick={() => setTextScale('sm')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'sm' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
+                type="button"
+                onClick={handleZoomOut}
+                title="Kecilkan Teks"
+                className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
               >
                 A-
               </button>
+              <span className="text-[0.7rem] font-mono font-black text-amber-300 px-1">
+                {zoomPercent}%
+              </span>
               <button
-                onClick={() => setTextScale('base')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'base' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
-              >
-                A
-              </button>
-              <button
-                onClick={() => setTextScale('lg')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${textScale === 'lg' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-900 text-slate-300 hover:bg-slate-700'}`}
+                type="button"
+                onClick={handleZoomIn}
+                title="Perbesar Teks"
+                className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer"
               >
                 A+
               </button>
@@ -415,672 +253,501 @@ export default function RtDashboardPage() {
 
             <button
               onClick={handleLogout}
-              className="px-3.5 py-2 bg-red-600 text-white font-bold text-xs rounded-xl hover:bg-red-700 transition-all shadow flex items-center gap-1"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-[0.75rem] rounded-2xl shadow border border-red-400 cursor-pointer"
             >
-              🚪 Keluar ke Utama
+              🔒 Keluar (Logout)
             </button>
           </div>
-        </div>
+        </header>
 
-        {resetMsg && (
-          <div className="p-3 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold">
-            {resetMsg}
+        {copyMsg && (
+          <div className="p-3.5 bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center">
+            {copyMsg}
           </div>
         )}
 
-        {/* PANEL MANAJEMEN PIN & EDIT/HAPUS PROPERTI OLEH RT */}
-        <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
-          <div className="flex justify-between items-center border-b pb-2">
-            <h3 className="text-sm font-bold text-slate-900 uppercase">
-              🔑 Manajemen PIN Operasional & Pemilik Unit ({properties.length})
-            </h3>
-            <span className="text-[11px] text-slate-500">Fitur Kontak Pemilik & Bantuan RT</span>
+        {/* 4 KOTAK REKAP KEPENDUDUKAN RT */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <div className="bg-white border-2 border-slate-200 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+            <span className="text-[1.6rem] font-black text-slate-900 block">{tenants.length}</span>
+            <span className="text-[0.75rem] font-black text-slate-600 mt-1 block uppercase">Total Warga Terdata</span>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {properties.map((p) => {
-              const ownerWa = formatPhoneToWA(p.owner_phone);
+          <div className="bg-amber-50 border-2 border-amber-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+            <span className="text-[1.6rem] font-black text-amber-950 block">{countPending}</span>
+            <span className="text-[0.75rem] font-black text-amber-800 mt-1 block uppercase">Menunggu Verifikasi</span>
+          </div>
 
-              return (
-                <div key={p.id} className="p-3.5 bg-slate-50 border rounded-xl flex flex-col justify-between gap-2.5">
-                  <div>
+          <div className="bg-emerald-50 border-2 border-emerald-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+            <span className="text-[1.6rem] font-black text-emerald-950 block">{countVerified}</span>
+            <span className="text-[0.75rem] font-black text-emerald-800 mt-1 block uppercase">Resmi Terverifikasi</span>
+          </div>
+
+          <div className="bg-red-50 border-2 border-red-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
+            <span className="text-[1.6rem] font-black text-red-950 block">{countDocPending}</span>
+            <span className="text-[0.75rem] font-black text-red-800 mt-1 block uppercase">Dokumen Menyusul</span>
+          </div>
+        </div>
+
+        {/* TAB NAVIGASI DASBOR RT */}
+        <div className="flex border-b-2 border-slate-200 gap-2 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('warga')}
+            className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'warga'
+                ? 'bg-white border-slate-300 text-emerald-800 shadow-sm -mb-0.5'
+                : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            👥 Buku Register Warga ({tenants.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('properti')}
+            className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'properti'
+                ? 'bg-white border-slate-300 text-blue-800 shadow-sm -mb-0.5'
+                : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            🏢 Daftar Kos & Reset PIN ({properties.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('kas')}
+            className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'kas'
+                ? 'bg-white border-slate-300 text-amber-800 shadow-sm -mb-0.5'
+                : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            💰 Catat Iuran Kas RT
+          </button>
+
+          <button
+            onClick={() => setActiveTab('audit')}
+            className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'audit'
+                ? 'bg-white border-slate-300 text-purple-800 shadow-sm -mb-0.5'
+                : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            📋 Jejak Audit ({auditLogs.length})
+          </button>
+        </div>
+
+        {/* TAB 1: BUKU REGISTER WARGA PENDATANG */}
+        {activeTab === 'warga' && (
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
+              <div className="w-full md:w-auto flex-1 max-w-md">
+                <input
+                  type="text"
+                  placeholder="🔍 Cari nama warga, No WA, kamar, atau kos..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-2xl outline-none text-[0.85rem] bg-white font-medium focus:border-emerald-600"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 text-[0.75rem]">
+                <button
+                  onClick={() => setFilterStatus('ALL')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                    filterStatus === 'ALL' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  Semua ({tenants.length})
+                </button>
+                <button
+                  onClick={() => setFilterStatus('PENDING')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                    filterStatus === 'PENDING' ? 'bg-amber-400 text-slate-950 font-black' : 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+                  }`}
+                >
+                  Menunggu ({countPending})
+                </button>
+                <button
+                  onClick={() => setFilterStatus('DOC_PENDING')}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all ${
+                    filterStatus === 'DOC_PENDING' ? 'bg-red-700 text-white font-black' : 'bg-red-50 text-red-900 hover:bg-red-100'
+                  }`}
+                >
+                  Dokumen Kurang ({countDocPending})
+                </button>
+              </div>
+            </div>
+
+            {loadingData ? (
+              <div className="p-8 text-center space-y-2">
+                <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="text-[0.8rem] font-bold text-slate-600">Memuat Buku Register Warga RT...</p>
+              </div>
+            ) : filteredTenants.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                <p className="text-[0.8rem] text-slate-500 font-medium">Tidak ada data warga pendatang yang cocok dengan filter.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-[0.8rem]">
+                  <thead>
+                    <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                      <th className="p-3">Identitas & No WA</th>
+                      <th className="p-3">Lokasi Unit & Kamar</th>
+                      <th className="p-3">Status Pernikahan</th>
+                      <th className="p-3">Dokumen Resmi</th>
+                      <th className="p-3">Status RT</th>
+                      <th className="p-3 text-right">Aksi RT</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {filteredTenants.map((t) => {
+                      const st = (t.status || '').toUpperCase();
+                      const isPendingDoc = t.marital_status === 'Menikah' && !t.marriage_doc_url;
+
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3">
+                            <div className="font-black text-slate-900">{t.name}</div>
+                            <span className="text-[0.75rem] font-mono text-slate-600 block">{t.phone || '-'}</span>
+                            <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200 inline-block mt-0.5">
+                              {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
+                            </span>
+                          </td>
+
+                          <td className="p-3">
+                            <span className="font-bold text-slate-900 block">{t.properties?.name || t.properties?.property_name || 'Unit Kos'}</span>
+                            <span className="text-emerald-800 font-bold text-[0.75rem]">{t.room_number || '-'}</span>
+                          </td>
+
+                          <td className="p-3">
+                            <span className="font-semibold text-slate-800 block">{t.marital_status || 'Belum Menikah'}</span>
+                            {isPendingDoc && (
+                              <span className="text-[0.65rem] font-black px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md border border-amber-300 inline-block mt-0.5">
+                                ⚠️ Dokumen Menyusul
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="p-3 space-x-1">
+                            {t.ktp_path ? (
+                              <button
+                                onClick={() => handleViewDocument(t.ktp_path, `KTP: ${t.name}`)}
+                                className="px-2 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[0.7rem] rounded-lg font-bold cursor-pointer"
+                              >
+                                🪪 KTP
+                              </button>
+                            ) : (
+                              <span className="text-[0.7rem] text-slate-400 font-medium">KTP -</span>
+                            )}
+
+                            {t.marriage_doc_url && (
+                              <button
+                                onClick={() => handleViewDocument(t.marriage_doc_url, `Buku Nikah / KK: ${t.name}`)}
+                                className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[0.7rem] rounded-lg font-black cursor-pointer"
+                              >
+                                📎 Buku Nikah/KK
+                              </button>
+                            )}
+                          </td>
+
+                          <td className="p-3">
+                            <span className={'text-[0.65rem] font-black px-2.5 py-1 rounded-full uppercase ' +
+                              (st === 'VERIFIED' || st === 'ACTIVE' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' :
+                               st === 'REJECTED' ? 'bg-red-100 text-red-900 border border-red-300' : 'bg-amber-100 text-amber-900 border border-amber-300')}>
+                              {st === 'VERIFIED' ? '✅ SAH TERVERIFIKASI' : st === 'REJECTED' ? '❌ DITOLAK' : '⚠️ MENUNGGU RT'}
+                            </span>
+                          </td>
+
+                          <td className="p-3 text-right space-x-1">
+                            {st !== 'VERIFIED' && (
+                              <button
+                                onClick={() => handleVerifyTenant(t.id, 'verified')}
+                                className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[0.7rem] font-black rounded-lg shadow cursor-pointer"
+                              >
+                                ✓ Setujui
+                              </button>
+                            )}
+                            {st !== 'REJECTED' && (
+                              <button
+                                onClick={() => handleVerifyTenant(t.id, 'rejected')}
+                                className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-[0.7rem] font-bold rounded-lg cursor-pointer"
+                              >
+                                ✗ Tolak
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeleteTenant(t.id, t.name)}
+                              className="px-2 py-1 bg-slate-200 hover:bg-red-100 hover:text-red-700 text-slate-700 text-[0.7rem] font-bold rounded-lg cursor-pointer"
+                            >
+                              🗑️
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: DAFTAR PROPERTI & RESET PIN */}
+        {activeTab === 'properti' && (
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                Daftar Properti Kos & Manajemen PIN Unit
+              </h3>
+              <p className="text-[0.75rem] text-slate-500">Pengurus RT memegang hak reset PIN jika pemilik kos lupa kata sandi.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {properties.map((prop) => (
+                <div key={prop.id} className="p-5 rounded-3xl border-2 border-slate-200 bg-slate-50 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
                     <div className="flex justify-between items-start">
-                      <h4 className="font-bold text-xs text-slate-900">{p.name || p.property_name}</h4>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEditProperty(p)}
-                          className="px-1.5 py-0.5 bg-amber-100 text-amber-800 hover:bg-amber-200 text-[9px] font-bold rounded"
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeletePropertyClick(p)}
-                          className="px-1.5 py-0.5 bg-red-100 text-red-700 hover:bg-red-200 text-[9px] font-bold rounded"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                      <span className="text-[0.7rem] font-black px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-full uppercase">
+                        {prop.type} • {prop.total_rooms || 10} Kamar
+                      </span>
+                      <span className="text-[0.75rem] font-mono font-black text-amber-900 bg-amber-200 px-2.5 py-0.5 rounded-lg">
+                        PIN: {prop.pin_code || '1234'}
+                      </span>
                     </div>
 
-                    <p className="text-[11px] text-slate-600 font-medium mt-1">👤 Pemilik: <b>{p.owner_name || 'Belum Diisi'}</b></p>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[10px] font-mono text-slate-500">PIN: <b>{p.pin_code || '1234'}</b></span>
-                      {p.pin_locked_until && new Date(p.pin_locked_until) > new Date() && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-red-100 text-red-700 rounded">TERKUNCI</span>
-                      )}
+                    <h4 className="font-black text-[1.1rem] text-slate-900">{prop.name || prop.property_name}</h4>
+
+                    <div className="bg-white p-3 rounded-2xl border border-slate-200 text-[0.75rem] space-y-1 text-slate-700">
+                      <p>👤 <b>Pemilik Sah:</b> {prop.owner_name || '-'} ({prop.owner_phone || '-'})</p>
+                      <p>🔑 <b>Pengelola Lapangan:</b> {prop.manager_name || 'Dikelola Sendiri'} ({prop.manager_phone || '-'})</p>
+                      <p>📍 <b>Alamat:</b> {prop.address || 'Lingkungan RT'}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-slate-200">
-                    {ownerWa ? (
-                      <a
-                        href={`https://wa.me/${ownerWa}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 transition-colors flex items-center gap-1"
-                      >
-                        💬 WA Pemilik
-                      </a>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 italic">No WA -</span>
-                    )}
-
+                  <div className="pt-2 border-t flex justify-end gap-2">
                     <button
-                      onClick={() => { setResetPinProp(p); setNewPinInput(p.pin_code || '1234'); }}
-                      className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-900"
+                      onClick={() => { setResetProp(prop); setNewPin('1234'); }}
+                      className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-[0.75rem] font-bold rounded-xl shadow cursor-pointer"
                     >
-                      🔑 Reset PIN
+                      🔑 Reset PIN Unit
                     </button>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* TABEL DATA PENDUDUK RT */}
-        <div className="bg-white rounded-2xl shadow border border-slate-200 overflow-hidden">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-            <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Daftar Lengkap Warga Pendatang Sementara
-            </h2>
-            <span className="text-xs text-slate-500 font-semibold">
-              Menampilkan {filteredTenants.length} data
-            </span>
-          </div>
-
-          {loading ? (
-            <div className="p-8 text-center text-xs text-slate-500 font-semibold">Memuat data kependudukan RT...</div>
-          ) : filteredTenants.length === 0 ? (
-            <div className="p-12 text-center text-xs text-slate-500">
-              Tidak ada data warga pendatang yang cocok dengan kriteria pencarian.
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                    <th className="p-3">Nama Warga</th>
-                    <th className="p-3">Lokasi Unit & Kamar</th>
-                    <th className="p-3">Kota Asal KTP</th>
-                    <th className="p-3">Kontak WA</th>
-                    <th className="p-3">Dokumen KTP</th>
-                    <th className="p-3">Mulai Menetap</th>
-                    <th className="p-3">Status RT</th>
-                    <th className="p-3 text-right">Aksi Verifikasi RT</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {filteredTenants.map((t) => {
-                    const isVerified = (t.status || '').toUpperCase() === 'VERIFIED';
-                    const location = t.room_number ? `Kamar ${t.room_number}` : (t.full_address || 'Kos Melati 1');
-
-                    return (
-                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">{t.name}</td>
-                        <td className="p-3 font-semibold text-emerald-800">{location}</td>
-                        <td className="p-3 font-medium text-slate-700">{t.address_ktp || '-'}</td>
-                        <td className="p-3 font-mono text-slate-800">{t.phone}</td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleViewKtp(t)}
-                            className="px-2.5 py-1 bg-slate-800 text-white text-[10px] font-semibold rounded hover:bg-slate-900"
-                          >
-                            🪪 KTP
-                          </button>
-                        </td>
-                        <td className="p-3 font-mono">{t.entry_date}</td>
-                        <td className="p-3">
-                          {isVerified ? (
-                            <span className="text-[10px] font-extrabold px-2 py-1 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-300">
-                              ✅ VERIFIED
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-extrabold px-2 py-1 bg-amber-100 text-amber-800 rounded-full border border-amber-300">
-                              ⚠️ MENUNGGU
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3 text-right space-x-1.5">
-                          {!isVerified ? (
-                            <button
-                              onClick={() => handleVerifyTenant(t.id, 'VERIFIED')}
-                              className="px-3 py-1.5 bg-emerald-700 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-800 shadow-sm"
-                            >
-                              ✓ Setujui
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleVerifyTenant(t.id, 'ACTIVE')}
-                              className="px-2.5 py-1.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded-lg hover:bg-slate-300"
-                            >
-                              Batal
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* MODUL PENCATATAN & AUDIT KAS IURAN RT */}
-        <div className="bg-white p-5 md:p-6 rounded-2xl shadow border border-slate-200 space-y-6">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4">
-            <div>
-              <h2 className="text-base font-bold text-slate-900 uppercase">
-                Pencatatan & Riwayat Kas Iuran RT
-              </h2>
-              <p className="text-xs text-slate-500">Kelola dan pantau seluruh transaksi kas masuk iuran warga</p>
-            </div>
-
-            <div className="bg-emerald-950 text-white px-5 py-2.5 rounded-xl border border-emerald-800 flex items-center gap-3 shadow-md">
-              <span className="text-xl">💰</span>
-              <div>
-                <span className="text-[10px] font-bold uppercase text-emerald-400 block">Total Kas Terkumpul</span>
-                <span className="text-lg font-black text-white">
-                  Rp {totalKasAmount.toLocaleString('id-ID')}
-                </span>
-              </div>
+              ))}
             </div>
           </div>
+        )}
 
-          {duesMsg && (
-            <div className="p-3 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold">
-              {duesMsg}
-            </div>
-          )}
-
-          {/* FORM INPUT IURAN */}
-          <form onSubmit={handleDuesSubmit} className="grid grid-cols-1 md:grid-cols-6 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-            <div className="md:col-span-2">
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Warga / Pembayar *</label>
-              <input
-                type="text"
-                required
-                placeholder="Contoh: Saiful"
-                value={duesName}
-                onChange={(e) => setDuesName(e.target.value)}
-                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Rumah / Blok</label>
-              <input
-                type="text"
-                placeholder="Griya Alfatihah 78"
-                value={duesHouse}
-                onChange={(e) => setDuesHouse(e.target.value)}
-                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nominal (Rp) *</label>
-              <input
-                type="number"
-                required
-                value={duesAmount}
-                onChange={(e) => setDuesAmount(e.target.value)}
-                className="w-full p-2.5 border rounded-xl outline-none bg-white font-medium"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Bulan *</label>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="w-full p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
-              >
-                {MONTH_OPTIONS.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Tahun *</label>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(e.target.value)}
-                className="w-full p-2.5 border rounded-xl outline-none bg-white font-semibold text-slate-800"
-              >
-                {YEAR_OPTIONS.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-6 flex justify-end pt-1">
-              <button
-                type="submit"
-                disabled={submittingDues}
-                className="w-full md:w-auto px-6 py-2.5 bg-slate-900 text-white font-bold text-xs rounded-xl hover:bg-slate-800 transition-all disabled:bg-slate-400"
-              >
-                {submittingDues ? 'Mencatat...' : 'Catat Iuran Kas'}
-              </button>
-            </div>
-          </form>
-
-          {/* TABEL RIWAYAT TRANSAKSI KAS */}
-          <div className="space-y-3 pt-2">
-            <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-              📜 Riwayat Transaksi Kas Iuran Terdaftar ({duesList.length})
-            </h3>
-
-            {duesList.length === 0 ? (
-              <div className="p-8 text-center border-2 border-dashed rounded-xl bg-slate-50 text-xs text-slate-500">
-                Belum ada riwayat transaksi iuran kas yang dicatat.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[10px]">
-                      <th className="p-3">Nama Pembayar</th>
-                      <th className="p-3">Lokasi / Rumah</th>
-                      <th className="p-3">Periode Iuran</th>
-                      <th className="p-3">Nominal (Rp)</th>
-                      <th className="p-3">Tanggal Catat</th>
-                      <th className="p-3 text-right">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {duesList.map((d) => (
-                      <tr key={d.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">{d.resident_name || 'Warga'}</td>
-                        <td className="p-3 text-slate-600 font-medium">{d.house_number || '-'}</td>
-                        <td className="p-3 font-semibold text-emerald-800">{d.period_month || '-'}</td>
-                        <td className="p-3 font-mono font-bold text-slate-900">
-                          Rp {Number(d.amount).toLocaleString('id-ID')}
-                        </td>
-                        <td className="p-3 font-mono text-slate-500 text-[11px]">
-                          {d.paid_at ? new Date(d.paid_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => handleDeleteDues(d.id, d.resident_name || 'Warga')}
-                            className="px-2.5 py-1 bg-red-100 text-red-700 hover:bg-red-200 text-[10px] font-bold rounded-lg transition-colors"
-                          >
-                            🗑️ Hapus
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* TABEL LOG AKTIVITAS AUDIT IURAN */}
-          <div className="space-y-3 pt-4 border-t border-slate-200">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <span>🛡️ Log Aktivitas Audit Iuran (Audit Trail)</span>
+        {/* TAB 3: CATAT IURAN KAS RT */}
+        {activeTab === 'kas' && (
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                Pencatatan Iuran Kas Lingkungan RT
               </h3>
-              <span className="text-[10px] font-mono text-slate-500">{duesLogs.length} Entri Terakhir</span>
+              <p className="text-[0.75rem] text-slate-500">Catat pemasukan iuran sampah, keamanan, dan kas RT dari warga atau pemilik kos.</p>
             </div>
 
-            {duesLogs.length === 0 ? (
-              <div className="p-6 text-center border rounded-xl bg-slate-50 text-xs text-slate-500">
-                Belum ada aktivitas audit iuran yang terekam.
-              </div>
-            ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-900 text-white font-bold uppercase text-[9px]">
-                      <th className="p-2.5">Waktu Exec</th>
-                      <th className="p-2.5">Aksi</th>
-                      <th className="p-2.5">Pengurus / Eksekutor</th>
-                      <th className="p-2.5">Detail Log Aktivitas Audit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200">
-                    {duesLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-slate-50">
-                        <td className="p-2.5 font-mono text-slate-500 text-[10px]">
-                          {log.created_at ? new Date(log.created_at).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-'}
-                        </td>
-                        <td className="p-2.5">
-                          {log.action_type === 'CREATE' ? (
-                            <span className="text-[9px] font-extrabold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded">
-                              ➕ CATAT
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-extrabold px-2 py-0.5 bg-red-100 text-red-800 rounded">
-                              🗑️ HAPUS
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2.5 font-semibold text-slate-900">{log.performed_by}</td>
-                        <td className="p-2.5 text-slate-700 font-medium">{log.details}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* MODAL EDIT PROPERTI OLEH RT */}
-      {editingProperty && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full overflow-hidden border border-slate-200">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold">✏️ Edit Informasi Properti</h3>
-              <button onClick={() => setEditingProperty(null)} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
-            </div>
-
-            <form onSubmit={handleSavePropertySubmit} className="p-5 space-y-3">
+            <form onSubmit={handleRecordDuesSubmit} className="max-w-lg space-y-3 text-[0.8rem]">
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Unit Properti *</label>
+                <label className="block font-bold text-slate-800 mb-1">Nama Pembayar / Warga *</label>
                 <input
                   type="text"
                   required
-                  value={propName}
-                  onChange={(e) => setPropName(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                  placeholder="Contoh: Saiful Anwar / Pemilik Kos Melati"
+                  value={payerName}
+                  onChange={(e) => setPayerName(e.target.value)}
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Nama Pemilik Properti</label>
+                <label className="block font-bold text-slate-800 mb-1">Nomor Rumah / Unit Kos</label>
                 <input
                   type="text"
-                  value={propOwnerName}
-                  onChange={(e) => setPropOwnerName(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
+                  placeholder="Contoh: Blok B No. 12 / Kos 69"
+                  value={blockNumber}
+                  onChange={(e) => setBlockNumber(e.target.value)}
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none bg-white"
                 />
               </div>
 
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Nominal (Rp) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={duesAmount}
+                    onChange={(e) => setDuesAmount(e.target.value)}
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl font-mono font-bold bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Bulan *</label>
+                  <select
+                    value={duesMonth}
+                    onChange={(e) => setDuesMonth(e.target.value)}
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold"
+                  >
+                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Tahun *</label>
+                  <input
+                    type="text"
+                    required
+                    value={duesYear}
+                    onChange={(e) => setDuesYear(e.target.value)}
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl font-mono font-bold bg-white"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={savingDues}
+                className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.85rem] rounded-2xl shadow cursor-pointer disabled:bg-slate-300"
+              >
+                {savingDues ? 'Menyimpan...' : '➕ Simpan Transaksi Kas RT'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* TAB 4: JEJAK AUDIT */}
+        {activeTab === 'audit' && (
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b pb-3">
+              <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                Jejak Audit Iuran Kas RT (Audit Trail)
+              </h3>
+              <p className="text-[0.75rem] text-slate-500">Mencatat transparansi setiap transaksi kas masuk RT.</p>
+            </div>
+
+            {auditLogs.length === 0 ? (
+              <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada aktivitas kas yang tercatat.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-[0.8rem]">
+                  <thead>
+                    <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                      <th className="p-3">Waktu</th>
+                      <th className="p-3">Aksi</th>
+                      <th className="p-3">Petugas RT</th>
+                      <th className="p-3">Rincian Perubahan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-mono text-[0.75rem] text-slate-600">
+                          {new Date(log.created_at).toLocaleString('id-ID')}
+                        </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 bg-blue-100 text-blue-900 rounded font-black text-[0.7rem]">
+                            {log.action_type}
+                          </span>
+                        </td>
+                        <td className="p-3 font-bold text-slate-900">{log.performed_by}</td>
+                        <td className="p-3 font-medium text-slate-700">{log.details}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* MODAL DOCUMENT VIEWER PRIVAT (KTP / BUKU NIKAH) */}
+      {(docModalTitle || loadingDoc) && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold flex items-center gap-2">
+                <span>🛡️ Dokumen Resmi (UU PDP):</span>
+                <span className="text-amber-300">{docModalTitle}</span>
+              </h3>
+              <button onClick={() => { setDocModalUrl(null); setDocModalTitle(''); setDocError(''); }} className="text-white font-bold text-lg leading-none">✕</button>
+            </div>
+            <div className="p-6 flex flex-col items-center justify-center min-h-[220px] bg-slate-50">
+              {loadingDoc ? (
+                <div className="text-center space-y-2">
+                  <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                  <p className="text-xs text-slate-500 font-semibold">Membuat Tautan Privat Dokumen...</p>
+                </div>
+              ) : docError ? (
+                <div className="text-center space-y-2 p-4 bg-red-50 border border-red-200 rounded-2xl max-w-md">
+                  <p className="text-xs font-semibold text-red-800">{docError}</p>
+                </div>
+              ) : docModalUrl ? (
+                <div className="space-y-3 w-full text-center">
+                  <img src={docModalUrl} alt="Dokumen Resmi Warga" className="max-h-[350px] w-auto mx-auto rounded-2xl border shadow-sm object-contain" />
+                  <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-xl border border-amber-200 font-semibold">
+                    🔒 Tautan privat ini aman & kedaluwarsa otomatis dalam 60 detik sesuai UU PDP No. 27/2022.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <div className="p-3 bg-slate-100 text-right border-t">
+              <button onClick={() => { setDocModalUrl(null); setDocModalTitle(''); setDocError(''); }} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-2xl cursor-pointer">Tutup Dokumen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL RESET PIN PROPERTI */}
+      {resetProp && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">🔑 Reset PIN Unit Properti</h3>
+              <button onClick={() => setResetProp(null)} className="text-white font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleSaveResetPin} className="p-5 space-y-4 text-xs">
               <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">No. WhatsApp Pemilik</label>
-                <input
-                  type="tel"
-                  value={propOwnerPhone}
-                  onChange={(e) => setPropOwnerPhone(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none font-mono"
-                />
+                <p className="font-bold text-slate-800">Unit: {resetProp.name || resetProp.property_name}</p>
+                <p className="text-slate-500 text-[11px]">Masukkan PIN 4-Digit baru untuk unit ini:</p>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold mb-1 text-slate-700">Alamat Lengkap</label>
-                <input
-                  type="text"
-                  value={propAddress}
-                  onChange={(e) => setPropAddress(e.target.value)}
-                  className="w-full text-xs p-2.5 border rounded-xl outline-none"
-                />
-              </div>
+              <input
+                type="text"
+                maxLength={4}
+                required
+                value={newPin}
+                onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full text-center text-2xl tracking-[0.4em] p-3 border-2 border-slate-300 rounded-2xl font-mono font-bold focus:border-emerald-600 outline-none"
+              />
 
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="flex gap-2 pt-2">
                 <button
                   type="button"
-                  onClick={() => setEditingProperty(null)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-300"
+                  onClick={() => setResetProp(null)}
+                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  disabled={savingProp}
-                  className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow"
+                  disabled={savingPin || newPin.length !== 4}
+                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-xl shadow cursor-pointer"
                 >
-                  {savingProp ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  {savingPin ? 'Menyimpan...' : 'Simpan PIN Baru'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL KELOLA AKUN PENGURUS RT & EDIT AKUN PENGURUS */}
-      {showAdminModal && isSuperAdmin && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 space-y-0">
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold flex items-center gap-2">
-                <span>⚙️ Kelola Akun Pengurus RT (Hak Akses Super Admin)</span>
-              </h3>
-              <button onClick={() => { setShowAdminModal(false); setEditingAdminUser(null); }} className="text-slate-400 hover:text-white font-bold text-lg leading-none">✕</button>
-            </div>
-
-            <div className="p-5 space-y-5 bg-slate-50 max-h-[80vh] overflow-y-auto">
-              
-              {editingAdminUser ? (
-                <form onSubmit={handleUpdateAdminSubmit} className="bg-amber-50 p-4 rounded-xl border border-amber-300 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-bold text-amber-900 uppercase">✏️ Edit Akun Pengurus: {editingAdminUser.name}</h4>
-                    <button
-                      type="button"
-                      onClick={() => setEditingAdminUser(null)}
-                      className="text-[10px] font-bold text-slate-500 hover:text-slate-800"
-                    >
-                      Batal Edit
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Lengkap</label>
-                      <input
-                        type="text"
-                        required
-                        value={editAdminName}
-                        onChange={(e) => setEditAdminName(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Login</label>
-                      <input
-                        type="email"
-                        required
-                        value={editAdminEmail}
-                        onChange={(e) => setEditAdminEmail(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. WhatsApp</label>
-                      <input
-                        type="tel"
-                        placeholder="08123456789"
-                        value={editAdminPhone}
-                        onChange={(e) => setEditAdminPhone(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none bg-white font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Kata Sandi Baru (Opsional)</label>
-                      <input
-                        type="password"
-                        placeholder="Isi jika ingin ubah sandi..."
-                        value={editAdminPass}
-                        onChange={(e) => setEditAdminPass(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex justify-end gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setEditingAdminUser(null)}
-                      className="px-3 py-1.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-lg"
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={updatingAdmin}
-                      className="px-4 py-1.5 bg-amber-700 text-white text-xs font-bold rounded-lg hover:bg-amber-800 shadow"
-                    >
-                      {updatingAdmin ? 'Menyimpan...' : 'Simpan Akun Pengurus'}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <form onSubmit={handleCreateAdminSubmit} className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-                  <h4 className="text-xs font-bold text-slate-900 uppercase">➕ Tambah Akun Pengurus Baru</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Nama Lengkap *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Contoh: Pak RT Budi"
-                        value={newAdminName}
-                        onChange={(e) => setNewAdminName(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Email Login *</label>
-                      <input
-                        type="email"
-                        required
-                        placeholder="pakt.budi@gmail.com"
-                        value={newAdminEmail}
-                        onChange={(e) => setNewAdminEmail(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">No. WhatsApp</label>
-                      <input
-                        type="tel"
-                        placeholder="08123456789"
-                        value={newAdminPhone}
-                        onChange={(e) => setNewAdminPhone(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Kata Sandi Baru *</label>
-                      <input
-                        type="password"
-                        required
-                        placeholder="Buat kata sandi..."
-                        value={newAdminPass}
-                        onChange={(e) => setNewAdminPass(e.target.value)}
-                        className="w-full text-xs p-2 border rounded-lg outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={savingAdmin}
-                    className="w-full py-2 bg-emerald-700 text-white text-xs font-bold rounded-lg hover:bg-emerald-800 disabled:bg-slate-300 transition-all shadow"
-                  >
-                    {savingAdmin ? 'Menyimpan...' : 'Daftarkan Akun Pengurus'}
-                  </button>
-                </form>
-              )}
-
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-800 uppercase">📋 Daftar Pengurus Terdaftar ({adminList.length})</h4>
-                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100 border-b text-slate-700 font-bold uppercase text-[9px]">
-                        <th className="p-2.5">Nama & Peran</th>
-                        <th className="p-2.5">Email & No. WA</th>
-                        <th className="p-2.5 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      {adminList.map((adm) => {
-                        const isSelf = adm.id === currentAdmin?.id;
-
-                        return (
-                          <tr key={adm.id} className="hover:bg-slate-50">
-                            <td className="p-2.5 font-bold text-slate-900">
-                              <div>{adm.name}</div>
-                              <span className="text-[9px] font-normal px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded">
-                                {adm.role}
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-slate-600 font-mono text-[11px]">
-                              <div>{adm.email}</div>
-                              {adm.phone && <div className="text-emerald-700 font-semibold mt-0.5">📱 WA: {adm.phone}</div>}
-                            </td>
-                            <td className="p-2.5 text-right space-x-1">
-                              <button
-                                onClick={() => handleOpenEditAdmin(adm)}
-                                className="px-2 py-1 bg-amber-100 text-amber-800 hover:bg-amber-200 text-[10px] font-bold rounded transition-colors"
-                              >
-                                ✏️ Edit
-                              </button>
-                              {!isSelf ? (
-                                <button
-                                  onClick={() => handleDeleteAdmin(adm.id, adm.name)}
-                                  className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 text-[10px] font-bold rounded transition-colors"
-                                >
-                                  🗑️ Hapus
-                                </button>
-                              ) : (
-                                <span className="text-[9px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                  Aktif
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-            </div>
-
-            <div className="p-3 bg-slate-100 text-right border-t">
-              <button
-                onClick={() => { setShowAdminModal(false); setEditingAdminUser(null); }}
-                className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-xl"
-              >
-                Selesai
-              </button>
-            </div>
           </div>
         </div>
       )}
