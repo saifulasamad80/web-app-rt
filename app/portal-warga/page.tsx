@@ -29,13 +29,9 @@ export default function TenantPortalPage() {
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
 
-  // Modal Bantuan Darurat Terpadu
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
-
-  // Accordion Tata Tertib
   const [showRulesAccordion, setShowRulesAccordion] = useState(false);
 
-  // Modal Tambah Anggota Susulan
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [memberName, setMemberName] = useState('');
   const [memberPhone, setMemberPhone] = useState('');
@@ -170,7 +166,7 @@ export default function TenantPortalPage() {
     >
       <div className="max-w-xl mx-auto space-y-5">
 
-        {/* HEADER CERAH DENGAN WIDGET ZOOM */}
+        {/* HEADER CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-6 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
             <span className="text-[0.75rem] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
@@ -216,7 +212,7 @@ export default function TenantPortalPage() {
         )}
 
         {!tenantData ? (
-          /* FORM LOGIN NOMOR WHATSAPP */
+          /* FORM LOGIN NOMOR WHATSAPP (BERSIH TANPA CONTOH NOMOR) */
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">
               📱
@@ -240,7 +236,7 @@ export default function TenantPortalPage() {
                 <input
                   type="tel"
                   required
-                  placeholder="Contoh: 082113546883"
+                  placeholder="08xxxxxxxxxx"
                   value={phoneInput}
                   onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ''))}
                   className="w-full p-3.5 border-2 border-slate-200 focus:border-emerald-600 rounded-2xl outline-none font-mono text-[1rem] font-bold bg-white"
@@ -315,11 +311,9 @@ export default function TenantPortalPage() {
 
               {/* LIST ANGGOTA SEKELUARGA / SEKAMAR */}
               <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
-                <div className="flex justify-between items-center">
-                  <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
-                    👥 Daftar Anggota Kamar Ini ({household.length} Orang):
-                  </span>
-                </div>
+                <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
+                  👥 Daftar Anggota Kamar Ini ({household.length} Orang):
+                </span>
 
                 <div className="space-y-2">
                   {household.map((m, idx) => (
@@ -341,7 +335,7 @@ export default function TenantPortalPage() {
                         {!m.is_head && (
                           <button
                             onClick={() => handleDeleteMember(m.id, m.name)}
-                            className="p-1 text-red-600 hover:bg-red-50 rounded-lg font-bold text-[0.75rem]"
+                            className="p-1 text-red-600 hover:bg-red-50 rounded-lg font-bold text-[0.75rem] cursor-pointer"
                             title="Hapus Anggota"
                           >
                             ✕ Hapus
@@ -354,11 +348,11 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 3. RINCIAN TAGIHAN & PEMBAYARAN SEWA + REKAP 3 BULAN */}
+            {/* 3. RINCIAN TAGIHAN & PEMBAYARAN SEWA (HARGA SPESIFIK KAMAR INI) */}
             <div className="bg-white p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
               <div className="flex justify-between items-center border-b-2 border-slate-100 pb-2">
                 <h3 className="font-black text-slate-900 text-[0.9rem] uppercase">
-                  💳 Tagihan Sewa Periode Ini
+                  💳 Tagihan Sewa Kamar Ini
                 </h3>
                 <span className={`text-[0.75rem] font-black px-3 py-1 rounded-full uppercase ${
                   isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -368,7 +362,7 @@ export default function TenantPortalPage() {
               </div>
 
               <div className="flex justify-between items-baseline py-1">
-                <span className="text-slate-600 font-bold">Nominal Sewa:</span>
+                <span className="text-slate-600 font-bold">Nominal Sewa Kamar:</span>
                 <span className="text-[1.3rem] font-black text-slate-900">
                   Rp {Number(tenantData.rent_price || 0).toLocaleString('id-ID')}
                 </span>
@@ -536,7 +530,7 @@ export default function TenantPortalPage() {
                 <input
                   type="text"
                   required
-                  placeholder="Contoh: Rian Hidayat"
+                  placeholder="Nama Lengkap"
                   value={memberName}
                   onChange={(e) => setMemberName(e.target.value)}
                   className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
@@ -575,7 +569,7 @@ export default function TenantPortalPage() {
                 <label className="block font-bold text-slate-800 mb-1">Nomor WhatsApp (Opsional)</label>
                 <input
                   type="tel"
-                  placeholder="08123456789"
+                  placeholder="08xxxxxxxxxx"
                   value={memberPhone}
                   onChange={(e) => setMemberPhone(e.target.value.replace(/\D/g, ''))}
                   className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono"
@@ -601,7 +595,7 @@ export default function TenantPortalPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddMemberModal(false)}
-                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl"
+                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl cursor-pointer"
                 >
                   Batal
                 </button>
@@ -627,45 +621,45 @@ export default function TenantPortalPage() {
                 <span className="text-[1.2rem]">🛡️🚨</span>
                 <h3 className="text-[0.95rem] font-black">Kontak Darurat Lingkungan</h3>
               </div>
-              <button onClick={() => setShowEmergencyModal(false)} className="text-white hover:text-amber-300 font-bold text-xl leading-none">✕</button>
+              <button onClick={() => setShowEmergencyModal(false)} className="text-white hover:text-amber-300 font-bold text-xl leading-none cursor-pointer">✕</button>
             </div>
 
             <div className="p-5 space-y-3 text-[0.8rem]">
-              <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 flex justify-between items-center">
+              <div className="bg-red-50 p-3.5 rounded-2xl border border-red-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-black text-emerald-950 text-[0.85rem]">👮 Pos Hansip & Satpam</h4>
-                  <p className="text-[0.7rem] text-emerald-800">Keamanan, parkir liar, & ronda 24 jam</p>
+                  <h4 className="font-black text-red-950 text-[0.85rem]">🚒 Pemadam Kebakaran</h4>
+                  <p className="text-[0.7rem] text-red-800">Darurat kebakaran & evakuasi</p>
                 </div>
-                <a href="tel:081299887766" className="px-3 py-1.5 bg-emerald-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 Telepon</a>
+                <a href="tel:113" className="px-3 py-1.5 bg-red-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 113</a>
               </div>
 
               <div className="bg-blue-50 p-3.5 rounded-2xl border border-blue-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-black text-blue-950 text-[0.85rem]">🚓 Babinsa & Polsek</h4>
-                  <p className="text-[0.7rem] text-blue-800">Tindak kriminal & kamtibmas</p>
+                  <h4 className="font-black text-blue-950 text-[0.85rem]">🚓 Kepolisian RI</h4>
+                  <p className="text-[0.7rem] text-blue-800">Kamtibmas & tindak pidana</p>
                 </div>
                 <a href="tel:110" className="px-3 py-1.5 bg-blue-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 110</a>
               </div>
 
-              <div className="bg-slate-100 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center">
+              <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-black text-slate-900 text-[0.85rem]">🏛️ Pengurus RT</h4>
-                  <p className="text-[0.7rem] text-slate-600">Pelayanan warga & administrasi</p>
+                  <h4 className="font-black text-emerald-950 text-[0.85rem]">🚑 Ambulans / Medis</h4>
+                  <p className="text-[0.7rem] text-emerald-800">Pertolongan gawat darurat</p>
                 </div>
-                <a href="https://wa.me/628111222333" target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-slate-800 text-white rounded-xl font-bold text-[0.75rem] shadow">💬 WA RT</a>
+                <a href="tel:119" className="px-3 py-1.5 bg-emerald-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 119</a>
               </div>
 
-              <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex justify-between items-center">
+              <div className="bg-slate-100 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-black text-amber-950 text-[0.85rem]">🚑 Ambulans / Damkar</h4>
-                  <p className="text-[0.7rem] text-amber-800">Panggilan Darurat Terpadu</p>
+                  <h4 className="font-black text-slate-900 text-[0.85rem]">👮 Pos Hansip / Satpam RT</h4>
+                  <p className="text-[0.7rem] text-slate-600">Pelayanan lingkungan 24 Jam</p>
                 </div>
-                <a href="tel:112" className="px-3 py-1.5 bg-amber-600 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 112</a>
+                <a href="tel:081299887766" className="px-3 py-1.5 bg-slate-800 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 Telepon</a>
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 text-right border-t">
-              <button onClick={() => setShowEmergencyModal(false)} className="px-4 py-2 bg-slate-200 text-slate-700 text-[0.75rem] font-bold rounded-xl">Tutup</button>
+              <button onClick={() => setShowEmergencyModal(false)} className="px-4 py-2 bg-slate-200 text-slate-700 text-[0.75rem] font-bold rounded-xl cursor-pointer">Tutup</button>
             </div>
           </div>
         </div>

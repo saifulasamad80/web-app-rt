@@ -403,8 +403,8 @@ export default function OwnerDashboard() {
             : t
         )
       );
-      setCopyMsg('Data penyewa berhasil diperbarui!');
-      setTimeout(() => setCopyMsg(''), 3000);
+      setCopyMsg(`Data kamar ${tenantRoom || 'Penyewa'} (${tenantName}) berhasil disetel ke Rp ${parsedPrice.toLocaleString('id-ID')}!`);
+      setTimeout(() => setCopyMsg(''), 3500);
       setEditingTenant(null);
     } else {
       alert('Gagal update data penyewa: ' + res.error);
@@ -456,8 +456,29 @@ export default function OwnerDashboard() {
     setEditingRulesProp(prop);
     setRulesText(
       prop.house_rules ||
-        '1. Wajib menjaga ketertiban dan ketenangan lingkungan.\n2. Dilarang membawa barang terlarang.\n3. Pembayaran sewa tepat waktu.'
+        `1. Wajib menjaga ketertiban, ketenangan, dan kebersihan lingkungan.
+2. Dilarang membawa barang terlarang (narkoba, miras, senjata tajam).
+3. Jam bertamu maksimal pukul 22.00 WIB demi keamanan lingkungan.
+4. Pembayaran sewa paling lambat tanggal 5 setiap bulannya.`
     );
+  };
+
+  const handleSaveRules = async () => {
+    if (!editingRulesProp) return;
+    setSavingRules(true);
+    const res = await updateHouseRules(editingRulesProp.id, rulesText);
+    setSavingRules(false);
+
+    if (res && res.success) {
+      setCopyMsg('Tata tertib hunian berhasil diperbarui!');
+      setTimeout(() => setCopyMsg(''), 3000);
+      setEditingRulesProp(null);
+      if (activeProperty) {
+        setActiveProperty({ ...activeProperty, house_rules: rulesText });
+      }
+    } else {
+      alert('Gagal menyimpan tata tertib: ' + (res?.error || 'Kesalahan database'));
+    }
   };
 
   const countAll = tenants.length;
@@ -481,7 +502,7 @@ export default function OwnerDashboard() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER BRANDING CERAH */}
+        {/* HEADER CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -591,7 +612,7 @@ export default function OwnerDashboard() {
         ) : (
           <div className="space-y-5">
 
-            {/* DROPDOWN UNIT AKTIF MULTI-PROPERTI INTERAKTIF */}
+            {/* DROPDOWN UNIT AKTIF */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
@@ -735,18 +756,21 @@ export default function OwnerDashboard() {
 
                       <div className="flex gap-2">
                         <button
+                          type="button"
                           onClick={() => handleShareWA(activeProperty)}
                           className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-bold rounded-2xl shadow flex items-center gap-1 cursor-pointer"
                         >
                           💬 Link WA Check-in
                         </button>
                         <button
+                          type="button"
                           onClick={() => setPosterProp(activeProperty)}
                           className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[0.75rem] font-bold rounded-2xl shadow flex items-center gap-1 cursor-pointer"
                         >
                           🖨️ Poster QR
                         </button>
                         <button
+                          type="button"
                           onClick={() => handleOpenRulesModal(activeProperty)}
                           className="px-3 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.75rem] font-black rounded-2xl shadow cursor-pointer"
                         >
@@ -943,7 +967,7 @@ export default function OwnerDashboard() {
                       <h3 className="text-[1rem] font-black text-slate-900 uppercase">
                         Matrix Okupansi Kamar ({activeProperty.total_rooms || 10} Total Unit)
                       </h3>
-                      <p className="text-[0.75rem] text-slate-500">Peta ketersediaan kamar kos secara visual.</p>
+                      <p className="text-[0.75rem] text-slate-500">Peta ketersediaan dan nominal sewa masing-masing kamar.</p>
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
@@ -972,7 +996,9 @@ export default function OwnerDashboard() {
                             {occupant ? (
                               <div className="text-[0.75rem] space-y-0.5">
                                 <p className="font-bold text-slate-900 truncate">👤 {occupant.name}</p>
-                                <p className="font-mono text-emerald-800 font-bold">Rp {Number(occupant.rent_price || 0).toLocaleString('id-ID')}</p>
+                                <p className="font-mono text-emerald-800 font-bold">
+                                  Rp {Number(occupant.rent_price || 0).toLocaleString('id-ID')} /bln
+                                </p>
                               </div>
                             ) : (
                               <p className="text-[0.75rem] font-medium text-slate-400 pt-2">Siap ditempati</p>
@@ -992,7 +1018,121 @@ export default function OwnerDashboard() {
 
       </div>
 
-      {/* MODAL EDIT PROPERTI, PENGELOLA, & PIN UNIT */}
+      {/* 1. MODAL POSTER CETAK RESMI QR CODE (AKTIF) */}
+      {posterProp && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center print:hidden">
+              <h3 className="text-[0.85rem] font-bold">🖨️ Poster Resmi QR Wajib Lapor RT</h3>
+              <button
+                type="button"
+                onClick={() => setPosterProp(null)}
+                className="text-white hover:text-amber-300 font-bold text-xl leading-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 text-center space-y-4 bg-white">
+              <div className="border-b-2 border-slate-900 pb-3">
+                <span className="text-[10px] font-extrabold px-2.5 py-0.5 bg-slate-900 text-white rounded-md uppercase">
+                  TERDAFTAR PENGURUS RT
+                </span>
+                <h2 className="text-xl font-black text-slate-900 mt-2 uppercase">WAJIB LAPOR DIRI</h2>
+                <p className="text-xs text-slate-600 font-bold">WARGA PENDATANG SEMENTARA</p>
+              </div>
+
+              <div className="py-2 space-y-1">
+                <h3 className="text-lg font-black text-slate-900">{posterProp.name || posterProp.property_name}</h3>
+                <p className="text-xs text-slate-600">Pengelola: {posterProp.manager_name || posterProp.owner_name || '-'}</p>
+                <p className="text-xs text-slate-500">{posterProp.address || 'Lingkungan RT Setempat'}</p>
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 inline-block shadow-inner">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                    (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + posterProp.slug
+                  )}`}
+                  alt="QR Code Check-in"
+                  className="w-48 h-48 mx-auto rounded-xl"
+                />
+              </div>
+
+              <div className="text-left bg-amber-50 p-3 rounded-2xl border border-amber-200 text-[11px] text-amber-900 space-y-1 font-semibold">
+                <p className="font-bold">📢 INSTRUKSI PENGHUNI BARU:</p>
+                <p>1. Pindai QR Code di atas menggunakan kamera HP Anda.</p>
+                <p>2. Lengkapi formulir pendaftaran & persetujuan RT dalam 1x24 jam.</p>
+                <p>3. Data disimpan aman sesuai aturan UU PDP No. 27 Tahun 2022.</p>
+              </div>
+            </div>
+
+            <div className="p-3 bg-slate-100 flex justify-end gap-2 print:hidden border-t">
+              <button
+                type="button"
+                onClick={() => setPosterProp(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-black rounded-xl shadow cursor-pointer"
+              >
+                🖨️ Cetak Poster
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. MODAL TATA TERTIB HUNIAN (AKTIF & BISA DISUNTING OWNER) */}
+      {editingRulesProp && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-xs font-bold">📜 Tata Tertib Hunian ({editingRulesProp.name})</h3>
+              <button
+                type="button"
+                onClick={() => setEditingRulesProp(null)}
+                className="text-white hover:text-amber-300 font-bold text-lg leading-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-3 bg-slate-50">
+              <p className="text-[11px] text-slate-600 font-medium">
+                Tulis aturan hunian Anda. Teks ini akan langsung muncul di formulir lapor diri warga dan di portal penghuni.
+              </p>
+              <textarea
+                rows={7}
+                value={rulesText}
+                onChange={(e) => setRulesText(e.target.value)}
+                className="w-full text-xs p-3 border rounded-2xl font-mono bg-white focus:ring-2 focus:ring-emerald-600 outline-none leading-relaxed"
+              ></textarea>
+            </div>
+            <div className="p-3 bg-slate-100 flex justify-end gap-2 border-t">
+              <button
+                type="button"
+                onClick={() => setEditingRulesProp(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRules}
+                disabled={savingRules}
+                className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow cursor-pointer disabled:bg-slate-300"
+              >
+                {savingRules ? 'Menyimpan...' : 'Simpan Tata Tertib'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. MODAL EDIT PROPERTI, PENGELOLA, & PIN UNIT */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -1075,7 +1215,6 @@ export default function OwnerDashboard() {
                 </div>
               </div>
 
-              {/* KOLOM EDIT PIN UNIT PROPERTI OLEH OWNER */}
               <div className="bg-emerald-50 p-3.5 rounded-2xl border-2 border-emerald-300 space-y-1.5">
                 <span className="text-[0.7rem] font-black text-emerald-950 uppercase block">3. PIN 4-DIGIT AKSES UNIT PROPERTI INI:</span>
                 <input
@@ -1149,7 +1288,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL INPUT PENGELUARAN */}
+      {/* 4. MODAL INPUT PENGELUARAN */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -1232,18 +1371,18 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL EDIT PENYEWA */}
+      {/* 5. MODAL EDIT PENYEWA & PENETAPAN HARGA SEWA KAMAR */}
       {editingTenant && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
             <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
-              <h3 className="text-[0.85rem] font-black">✏️ Edit Data Penyewa</h3>
+              <h3 className="text-[0.85rem] font-black">✏️ Edit Kamar & Nominal Sewa</h3>
               <button onClick={() => setEditingTenant(null)} className="text-white font-bold text-lg leading-none cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleSaveTenantSubmit} className="p-5 space-y-3 text-[0.8rem]">
               <div>
-                <label className="block font-bold mb-1 text-slate-700">Nama *</label>
+                <label className="block font-bold mb-1 text-slate-700">Nama Penyewa *</label>
                 <input
                   type="text"
                   required
@@ -1254,7 +1393,7 @@ export default function OwnerDashboard() {
               </div>
 
               <div>
-                <label className="block font-bold mb-1 text-slate-700">WhatsApp *</label>
+                <label className="block font-bold mb-1 text-slate-700">No. WhatsApp *</label>
                 <input
                   type="tel"
                   required
@@ -1265,29 +1404,36 @@ export default function OwnerDashboard() {
               </div>
 
               <div>
-                <label className="block font-bold mb-1 text-slate-700">Kamar</label>
+                <label className="block font-bold mb-1 text-slate-700">Nomor / Lokasi Kamar</label>
                 <input
                   type="text"
                   value={tenantRoom}
                   onChange={(e) => setTenantRoom(e.target.value)}
-                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold bg-white"
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-bold bg-white text-emerald-900"
                 />
               </div>
 
-              <div>
-                <label className="block font-bold mb-1 text-slate-700">Harga Sewa (Rp)</label>
+              {/* KOLOM HARGA SEWA KHUSUS KAMAR INI */}
+              <div className="bg-emerald-50 p-3 rounded-xl border-2 border-emerald-300 space-y-1">
+                <label className="block font-black text-emerald-950 text-[0.75rem]">
+                  💰 Harga Sewa Kamar Ini (Rp) *
+                </label>
                 <input
                   type="text"
                   required
+                  placeholder="Contoh: 800000 atau 1000000"
                   value={tenantRentPrice}
                   onChange={(e) => setTenantRentPrice(e.target.value)}
-                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl font-mono font-bold bg-white"
+                  className="w-full p-2.5 border-2 border-emerald-400 rounded-xl font-mono font-black text-emerald-950 bg-white text-base"
                 />
+                <p className="text-[0.65rem] text-emerald-800 font-medium">
+                  Nominal ini langsung tampil di tagihan portal warga & pesan WhatsApp.
+                </p>
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t">
                 <button type="button" onClick={() => setEditingTenant(null)} className="px-4 py-2 bg-slate-200 font-bold rounded-xl cursor-pointer">Batal</button>
-                <button type="submit" disabled={savingTenant} className="px-4 py-2 bg-amber-400 font-black rounded-xl shadow cursor-pointer">Simpan</button>
+                <button type="submit" disabled={savingTenant} className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black rounded-xl shadow cursor-pointer">Simpan Harga</button>
               </div>
             </form>
           </div>
