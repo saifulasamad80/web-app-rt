@@ -9,6 +9,69 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: false }
 });
 
+export async function loginRtAdminAction(emailInput: string, passwordInput: string) {
+  if (!emailInput || !passwordInput) {
+    return { success: false, error: 'Email dan kata sandi pengurus wajib diisi.' };
+  }
+
+  const clientAuth = createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || supabaseKey);
+  const { data, error } = await clientAuth.auth.signInWithPassword({
+    email: emailInput.trim(),
+    password: passwordInput,
+  });
+
+  if (error || !data.user) {
+    return { success: false, error: error?.message || 'Email atau kata sandi pengurus RT tidak sesuai.' };
+  }
+
+  return { success: true, user: data.user };
+}
+
+export async function getRtOfficers() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error || !data || data.length === 0) {
+    return {
+      success: true,
+      officers: [
+        { id: '1', full_name: 'Saiful Anwar Samad (Ajip)', role: 'SUPER_ADMIN', phone_number: '082113546883', email: 'ajipsas@gmail.com' },
+        { id: '2', full_name: 'Bpk. H. Ahmad Fauzi', role: 'KETUA_RT', phone_number: '08111222333', email: 'ahmad.rt@gmail.com' },
+        { id: '3', full_name: 'Bpk. Hendra Wijaya', role: 'SEKRETARIS', phone_number: '081234567890', email: 'sekretaris.rt@gmail.com' },
+        { id: '4', full_name: 'Ibu Hj. Maryam', role: 'BENDAHARA', phone_number: '081398765432', email: 'bendahara.rt@gmail.com' },
+        { id: '5', full_name: 'Komandan Regu Hansip / Satpam', role: 'KEAMANAN_HANSIP', phone_number: '081299887766', email: 'hansip.rt@gmail.com' },
+      ]
+    };
+  }
+
+  return { success: true, officers: data };
+}
+
+export async function addRtOfficer(fullName: string, role: string, phone: string, email?: string) {
+  const { data, error } = await supabase.from('profiles').insert({
+    full_name: fullName,
+    role,
+    phone_number: phone,
+    email: email || ''
+  }).select();
+
+  if (!error) {
+    try { revalidatePath('/rt'); } catch (e) {}
+  }
+
+  return { success: !error, data: data ? data[0] : null, error: error?.message };
+}
+
+export async function deleteRtOfficer(id: string) {
+  const { error } = await supabase.from('profiles').delete().eq('id', id);
+  if (!error) {
+    try { revalidatePath('/rt'); } catch (e) {}
+  }
+  return { success: !error, error: error?.message };
+}
+
 export async function loginOwnerDashboard(phoneInput: string, pinInput: string) {
   if (!phoneInput || !pinInput) {
     return { success: false, properties: [], error: 'Nomor WhatsApp dan PIN 4-Digit wajib diisi.' };
@@ -594,10 +657,6 @@ export async function getDocumentSignedUrl(filePath: string) {
 
   if (error || !data?.signedUrl) return { success: false, error: 'Gagal membuat signed URL berkas.' };
   return { success: true, url: data.signedUrl };
-}
-
-export async function getTenantKtpUrl(filePath: string) {
-  return getDocumentSignedUrl(filePath);
 }
 
 export async function getDuesAuditLogs() {

@@ -13,6 +13,9 @@ import {
   deleteTenant,
   getDuesAuditLogs,
   recordRtDues,
+  getRtOfficers,
+  addRtOfficer,
+  deleteRtOfficer,
 } from '../../src/actions/checkin-tenant';
 
 const supabase = createClient(
@@ -23,11 +26,12 @@ const supabase = createClient(
 export default function RtDashboardPage() {
   const router = useRouter();
   const [zoomPercent, setZoomPercent] = useState<number>(100);
-  const [activeTab, setActiveTab] = useState<'warga' | 'properti' | 'kas' | 'audit'>('warga');
+  const [activeTab, setActiveTab] = useState<'warga' | 'properti' | 'pengurus' | 'kas' | 'audit'>('warga');
 
   const [authChecking, setAuthChecking] = useState(true);
   const [tenants, setTenants] = useState<any[]>([]);
   const [properties, setProperties] = useState<any[]>([]);
+  const [officers, setOfficers] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -46,6 +50,14 @@ export default function RtDashboardPage() {
   const [newPin, setNewPin] = useState('1234');
   const [savingPin, setSavingPin] = useState(false);
   const [copyMsg, setCopyMsg] = useState('');
+
+  // Form Tambah Pengurus RT
+  const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
+  const [officerName, setOfficerName] = useState('');
+  const [officerRole, setOfficerRole] = useState('SEKRETARIS');
+  const [officerPhone, setOfficerPhone] = useState('');
+  const [officerEmail, setOfficerEmail] = useState('');
+  const [savingOfficer, setSavingOfficer] = useState(false);
 
   // Form Input Iuran Kas RT
   const [payerName, setPayerName] = useState('');
@@ -77,24 +89,27 @@ export default function RtDashboardPage() {
 
   const loadAllData = async () => {
     setLoadingData(true);
-    const [tRes, pRes, aRes] = await Promise.all([
+    const [tRes, pRes, oRes, aRes] = await Promise.all([
       getAllTenantsForRt(),
       getPublicPropertiesList(),
+      getRtOfficers(),
       getDuesAuditLogs(),
     ]);
 
     setTenants(tRes.tenants || []);
     setProperties(pRes.properties || []);
+    setOfficers(oRes.officers || []);
     setAuditLogs(aRes.logs || []);
     setLoadingData(false);
   };
 
+  // KELUAR / LOGOUT: Mengarahkan Kembali ke Halaman Utama (/)
   const handleLogout = async () => {
     await supabase.auth.signOut();
     if (typeof window !== 'undefined') {
       localStorage.removeItem('rt_admin_logged_in');
     }
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const handleVerifyTenant = async (id: string, status: 'verified' | 'rejected') => {
@@ -155,6 +170,35 @@ export default function RtDashboardPage() {
     }
   };
 
+  const handleAddOfficerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!officerName || !officerPhone) return;
+
+    setSavingOfficer(true);
+    const res = await addRtOfficer(officerName, officerRole, officerPhone, officerEmail);
+    setSavingOfficer(false);
+
+    if (res.success) {
+      setCopyMsg(`Pengurus RT baru "${officerName}" berhasil ditambahkan.`);
+      setTimeout(() => setCopyMsg(''), 3500);
+      setShowAddOfficerModal(false);
+      setOfficerName('');
+      setOfficerPhone('');
+      setOfficerEmail('');
+      const oRes = await getRtOfficers();
+      setOfficers(oRes.officers || []);
+    } else {
+      alert('Gagal menambah pengurus: ' + res.error);
+    }
+  };
+
+  const handleDeleteOfficer = async (id: string, name: string) => {
+    if (confirm(`Hapus pengurus "${name}"?`)) {
+      setOfficers(officers.filter((o) => o.id !== id));
+      await deleteRtOfficer(id);
+    }
+  };
+
   const handleRecordDuesSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!payerName || !duesAmount) return;
@@ -188,7 +232,6 @@ export default function RtDashboardPage() {
     );
   }
 
-  // Filter Data Warga
   const filteredTenants = tenants.filter((t) => {
     const matchesSearch =
       (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -215,15 +258,15 @@ export default function RtDashboardPage() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH DENGAN WIDGET ZOOM & TOMBOL LOGOUT */}
+        {/* HEADER CERAH DENGAN WIDGET ZOOM & TOMBOL KELUAR KE HOME */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[1.3rem]">🏛️🛡️</span>
-              <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pengurus RT</span></h1>
+              <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pengurus RT Terpadu</span></h1>
             </div>
             <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
-              Buku Register Warga Pendatang, Verifikasi Dokumen UU PDP, Reset PIN Unit, & Kas Lingkungan RT
+              Buku Register Warga, Verifikasi Dokumen UU PDP, Kelola Pengurus RT, & Kas Wilayah
             </p>
           </div>
 
@@ -253,9 +296,9 @@ export default function RtDashboardPage() {
 
             <button
               onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-[0.75rem] rounded-2xl shadow border border-red-400 cursor-pointer"
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-[0.75rem] rounded-2xl shadow border border-red-400 cursor-pointer flex items-center gap-1.5"
             >
-              🔒 Keluar (Logout)
+              🚪 Keluar ke Utama
             </button>
           </div>
         </header>
@@ -289,7 +332,7 @@ export default function RtDashboardPage() {
           </div>
         </div>
 
-        {/* TAB NAVIGASI DASBOR RT */}
+        {/* TAB NAVIGASI DASBOR RT TERMASUK TAB "KELOLA PENGURUS RT" */}
         <div className="flex border-b-2 border-slate-200 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('warga')}
@@ -311,6 +354,17 @@ export default function RtDashboardPage() {
             }`}
           >
             🏢 Daftar Kos & Reset PIN ({properties.length})
+          </button>
+
+          <button
+            onClick={() => setActiveTab('pengurus')}
+            className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer whitespace-nowrap ${
+              activeTab === 'pengurus'
+                ? 'bg-white border-slate-300 text-slate-900 shadow-sm -mb-0.5'
+                : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            ⚙️ Kelola Pengurus RT ({officers.length})
           </button>
 
           <button
@@ -539,7 +593,54 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: CATAT IURAN KAS RT */}
+        {/* TAB 3: ⚙️ KELOLA PENGURUS RT */}
+        {activeTab === 'pengurus' && (
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                  ⚙️ Struktur & Hak Akses Pengurus RT
+                </h3>
+                <p className="text-[0.75rem] text-slate-500">Kelola akun dan nomor kontak pengurus RT, sekretaris, bendahara, dan hansip.</p>
+              </div>
+
+              <button
+                onClick={() => setShowAddOfficerModal(true)}
+                className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.8rem] rounded-2xl shadow cursor-pointer"
+              >
+                ➕ Tambah Pengurus Baru
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {officers.map((off) => (
+                <div key={off.id} className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 flex justify-between items-center">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-[0.9rem]">{off.full_name}</span>
+                      <span className="text-[0.65rem] font-black px-2 py-0.5 bg-emerald-100 text-emerald-900 rounded-md uppercase border border-emerald-300">
+                        {off.role}
+                      </span>
+                    </div>
+                    <p className="text-[0.75rem] font-mono text-slate-600">📱 {off.phone_number || '-'}</p>
+                    {off.email && <p className="text-[0.7rem] text-slate-500">✉️ {off.email}</p>}
+                  </div>
+
+                  {off.role !== 'SUPER_ADMIN' && (
+                    <button
+                      onClick={() => handleDeleteOfficer(off.id, off.full_name)}
+                      className="px-2.5 py-1 text-red-600 hover:bg-red-100 rounded-xl font-bold text-[0.75rem]"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: CATAT IURAN KAS RT */}
         {activeTab === 'kas' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="border-b pb-3">
@@ -621,7 +722,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 4: JEJAK AUDIT */}
+        {/* TAB 5: JEJAK AUDIT */}
         {activeTab === 'audit' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="border-b pb-3">
@@ -669,6 +770,86 @@ export default function RtDashboardPage() {
         )}
 
       </div>
+
+      {/* MODAL TAMBAH PENGURUS RT */}
+      {showAddOfficerModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.85rem] font-black">➕ Tambah Pengurus RT Baru</h3>
+              <button onClick={() => setShowAddOfficerModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleAddOfficerSubmit} className="p-5 space-y-3 text-[0.8rem]">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Nama Lengkap *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Bpk. Bambang"
+                  value={officerName}
+                  onChange={(e) => setOfficerName(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Jabatan / Peran *</label>
+                <select
+                  value={officerRole}
+                  onChange={(e) => setOfficerRole(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
+                >
+                  <option value="SEKRETARIS">Sekretaris RT</option>
+                  <option value="BENDAHARA">Bendahara RT</option>
+                  <option value="KEAMANAN_HANSIP">Seksi Keamanan / Hansip</option>
+                  <option value="ADMIN_RT">Staf Administrasi RT</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">No. WhatsApp *</label>
+                <input
+                  type="tel"
+                  required
+                  placeholder="08123456789"
+                  value={officerPhone}
+                  onChange={(e) => setOfficerPhone(e.target.value.replace(/\D/g, ''))}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Email (Opsional)</label>
+                <input
+                  type="email"
+                  placeholder="pengurus@gmail.com"
+                  value={officerEmail}
+                  onChange={(e) => setOfficerEmail(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowAddOfficerModal(false)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingOfficer}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl shadow cursor-pointer"
+                >
+                  {savingOfficer ? 'Menyimpan...' : 'Simpan Pengurus'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL DOCUMENT VIEWER PRIVAT (KTP / BUKU NIKAH) */}
       {(docModalTitle || loadingDoc) && (
