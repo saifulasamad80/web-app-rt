@@ -5,7 +5,9 @@ import { revalidatePath } from 'next/cache';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false }
+});
 
 export async function getPublicPropertiesList() {
   const { data, error } = await supabase
@@ -23,7 +25,7 @@ export async function getPropertyRules(slug: string) {
     .eq('slug', slug)
     .single();
 
-  if (error || !data) return { success: false, property: null, error: 'Properti tidak ditemukan.' };
+  if (error || !data) return { success: false, property: null, error: 'Properti tidak ditemukan: ' + (error?.message || '') };
   return { success: true, property: data, error: undefined };
 }
 
@@ -64,7 +66,7 @@ export async function createProperty(
     bank_name: bank_name || '',
     bank_account_number: bank_account_number || '',
     bank_account_holder: bank_account_holder || '',
-    status: 'PENDING'
+    status: 'APPROVED'
   }).select();
 
   if (error) return { success: false, error: error.message };
@@ -91,6 +93,7 @@ export async function updateProperty(
     bank_account_holder?: string;
     address?: string;
     type?: string;
+    pin_code?: string;
   }
 ) {
   const { error } = await supabase
@@ -107,7 +110,8 @@ export async function updateProperty(
       bank_account_number: payload.bank_account_number,
       bank_account_holder: payload.bank_account_holder,
       address: payload.address,
-      type: payload.type
+      type: payload.type,
+      pin_code: payload.pin_code
     })
     .eq('id', propertyId);
 
@@ -122,6 +126,7 @@ export async function updateProperty(
 }
 
 export async function deleteProperty(propertyId: string) {
+  await supabase.from('property_expenses').delete().eq('property_id', propertyId);
   await supabase.from('tenants').delete().eq('property_id', propertyId);
   const { error } = await supabase.from('properties').delete().eq('id', propertyId);
 
@@ -142,10 +147,10 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
     .eq('id', propertyId)
     .single();
 
-  if (propErr || !prop) return { success: false, property: null, tenants: [], error: 'Properti tidak ditemukan.' };
+  if (propErr || !prop) return { success: false, property: null, tenants: [], expenses: [], error: 'Properti tidak ditemukan.' };
 
   if (prop.pin_locked_until && new Date(prop.pin_locked_until) > new Date()) {
-    return { success: false, property: null, tenants: [], error: '🔒 Unit ini terkunci sementara akibat 3x PIN salah. Hubungi RT untuk reset PIN.' };
+    return { success: false, property: null, tenants: [], expenses: [], error: '🔒 Unit ini terkunci sementara akibat 3x PIN salah. Hubungi RT untuk reset PIN.' };
   }
 
   if (prop.pin_code !== pinInput) {
@@ -164,10 +169,10 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
       .eq('id', propertyId);
 
     if (attempts >= 3) {
-      return { success: false, property: null, tenants: [], error: '🔒 Terlalu banyak percobaan PIN salah. Terkunci 15 menit.' };
+      return { success: false, property: null, tenants: [], expenses: [], error: '🔒 Terlalu banyak percobaan PIN salah. Terkunci 15 menit.' };
     }
 
-    return { success: false, property: null, tenants: [], error: `🔒 PIN salah (${attempts}/3 percobaan).` };
+    return { success: false, property: null, tenants: [], expenses: [], error: `🔒 PIN salah (${attempts}/3 percobaan).` };
   }
 
   await supabase
@@ -181,7 +186,100 @@ export async function getTenantsByPropertyPin(propertyId: string, pinInput: stri
     .eq('property_id', propertyId)
     .order('entry_date', { ascending: false });
 
-  return { success: true, property: prop, tenants: tenants || [], error: tenErr?.message };
+  const { data: expenses } = await supabase
+    .from('property_expenses')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('expense_date', { ascending: false });
+
+  return { success: true, property: prop, tenants: tenants || [], expenses: expenses || [], error: tenErr?.message };
+}
+
+export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string, notes?: string) {
+  if (!propertyId || !title || !amount) {
+    return { success: false, error: 'Judul dan nominal biaya pengeluaran wajib diisi.' };
+  }
+
+  const { data, error } = await supabase.from('property_expenses').insert({
+    property_id: propertyId,
+    title,
+    category: category || 'Lainnya',
+    amount,
+    expense_date: expenseDate || new Date().toISOString().slice(0, 10),
+    notes: notes || ''
+  }).select();
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+    } catch (e) {}
+  }
+
+  return { success: !error, data: data ? data[0] : null, error: error?.message };
+}
+
+export async function deletePropertyExpense(expenseId: string) {
+  const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+    } catch (e) {}
+  }
+  return { success: !error, error: error?.message };
+}
+
+export async function getTenantPortalData(phoneInput: string) {
+  if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
+
+  const rawClean = phoneInput.replace(/\D/g, '');
+  const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
+
+  const { data: tenantRecords, error: tenantErr } = await supabase
+    .from('tenants')
+    .select('*')
+    .or(`phone.ilike.%${suffix}%,phone.eq.${phoneInput.trim()},phone.eq.${rawClean}`)
+    .order('created_at', { ascending: false });
+
+  if (tenantErr) {
+    return { success: false, error: `[Database Error]: ${tenantErr.message}` };
+  }
+
+  if (!tenantRecords || tenantRecords.length === 0) {
+    return {
+      success: false,
+      error: `Nomor WhatsApp (${phoneInput}) belum terdaftar di sistem warga RT. Pastikan data sudah masuk di tabel tenants.`
+    };
+  }
+
+  const primary = tenantRecords[0];
+
+  let propertyData = null;
+  if (primary.property_id) {
+    const { data: propData } = await supabase
+      .from('properties')
+      .select('*')
+      .eq('id', primary.property_id)
+      .single();
+    propertyData = propData;
+  }
+
+  let householdMembers = [primary];
+  if (primary.household_id) {
+    const { data: members } = await supabase
+      .from('tenants')
+      .select('*')
+      .eq('household_id', primary.household_id)
+      .order('is_head', { ascending: false });
+    if (members && members.length > 0) {
+      householdMembers = members;
+    }
+  }
+
+  return {
+    success: true,
+    tenant: { ...primary, properties: propertyData },
+    household: householdMembers
+  };
 }
 
 export async function submitMultiTenantsStrict(formData: FormData) {
@@ -197,7 +295,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const household_id = `HH-${Date.now()}`;
     const registered_at = new Date().toISOString();
 
-    // Upload KTP Penanggung Jawab
     const ktpData = formData.get('ktp');
     let ktp_path = '';
     if (ktpData && ktpData instanceof File && ktpData.size > 0) {
@@ -214,7 +311,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
-    // Upload Buku Nikah / KK jika ada
     const marriageDoc = formData.get('marriage_doc');
     let marriage_doc_url = '';
     if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
@@ -250,7 +346,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       occupants = [{ name, phone, address_ktp, relation: 'Penanggung Jawab', is_head: true }];
     }
 
-    // Proses KTP Anggota (jika usia >= 17)
     const insertPayload = [];
     for (let index = 0; index < occupants.length; index++) {
       const occ = occupants[index];
@@ -303,48 +398,13 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     try {
       revalidatePath('/owner');
       revalidatePath('/rt');
+      revalidatePath('/portal-warga');
     } catch (e) {}
 
     return { success: true, data: data || [], household_id, registered_at, error: undefined };
   } catch (err: any) {
     return { success: false, data: [], household_id: '', registered_at: '', error: err?.message || 'Terjadi kesalahan teknis.' };
   }
-}
-
-export async function getTenantPortalData(phoneInput: string) {
-  if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
-
-  const rawClean = phoneInput.replace(/\D/g, '');
-  const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
-
-  const { data: tenantRecords, error } = await supabase
-    .from('tenants')
-    .select('*, properties(*)')
-    .or(`phone.ilike.%${suffix}%,phone.eq.${phoneInput.trim()},phone.eq.${rawClean}`)
-    .order('created_at', { ascending: false });
-
-  if (error || !tenantRecords || tenantRecords.length === 0) {
-    return {
-      success: false,
-      error: `Nomor WhatsApp (${phoneInput}) belum terdaftar di sistem warga RT. Pastikan formulir lapor diri sudah dikirim.`
-    };
-  }
-
-  const primary = tenantRecords[0];
-
-  let householdMembers = [];
-  if (primary.household_id) {
-    const { data: members } = await supabase
-      .from('tenants')
-      .select('*')
-      .eq('household_id', primary.household_id)
-      .order('is_head', { ascending: false });
-    householdMembers = members || [];
-  } else {
-    householdMembers = [primary];
-  }
-
-  return { success: true, tenant: primary, household: householdMembers };
 }
 
 export async function uploadPendingDocument(tenantId: string, docType: 'marriage' | 'ktp', formData: FormData) {
@@ -388,17 +448,27 @@ export async function updateTenantPaymentStatus(tenantId: string, payment_status
   if (!error) {
     try {
       revalidatePath('/owner');
+      revalidatePath('/portal-warga');
     } catch (e) {}
   }
 
   return { success: !error, error: error?.message };
 }
 
-export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out') {
+export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out' | 'verified') {
+  const finalStatus = status === 'active' || status === 'verified' ? 'VERIFIED' : status.toUpperCase();
   const { error } = await supabase
     .from('tenants')
-    .update({ status: status.toUpperCase() })
+    .update({ status: finalStatus })
     .eq('id', tenantId);
+
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+      revalidatePath('/portal-warga');
+    } catch (e) {}
+  }
 
   return { success: !error, error: error?.message };
 }
@@ -431,6 +501,13 @@ export async function updateTenantData(
 
 export async function deleteTenant(tenantId: string) {
   const { error } = await supabase.from('tenants').delete().eq('id', tenantId);
+  if (!error) {
+    try {
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+      revalidatePath('/portal-warga');
+    } catch (e) {}
+  }
   return { success: !error, error: error?.message };
 }
 
