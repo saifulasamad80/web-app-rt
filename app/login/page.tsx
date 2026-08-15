@@ -2,86 +2,142 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { loginAdminRT } from '../../src/actions/auth';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+);
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const router = useRouter();
+  const [zoomPercent, setZoomPercent] = useState<number>(100);
+
+  const [email, setEmail] = useState('ajpsas@gmail.com');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
+  const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    if (!email || !password) return;
 
-    const res = await loginAdminRT(email, password);
+    setLoading(true);
+    setErrorMsg('');
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
     setLoading(false);
 
-    if (res && res.success) {
-      window.location.href = '/rt';
+    if (!error) {
+      router.push('/rt');
     } else {
-      setError(res?.error || 'Email atau kata sandi pengurus RT salah.');
+      setErrorMsg(error.message || 'Email atau kata sandi pengurus salah.');
     }
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-slate-100">
-      <div className="w-full max-w-sm space-y-4">
-        
-        <Link 
-          href="/" 
-          className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors mb-2"
-        >
-          <span>← Kembali ke Halaman Utama</span>
-        </Link>
+    <main
+      style={{ fontSize: `${zoomPercent}%` }}
+      className="min-h-screen bg-slate-50 p-4 md:p-8 flex items-center justify-center text-slate-900 transition-all font-sans"
+    >
+      <div className="max-w-md w-full space-y-5">
 
-        <div className="bg-slate-900 rounded-2xl shadow-2xl p-6 border border-slate-800 space-y-5">
-          <div className="text-center space-y-1">
-            <span className="text-3xl">🛡️</span>
-            <h1 className="text-lg font-black text-white">Portal Pengurus RT</h1>
-            <p className="text-xs text-slate-400">Masuk untuk mengelola data warga & iuran kas</p>
+        {/* HEADER CERAH DENGAN WIDGET ZOOM */}
+        <header className="bg-emerald-800 text-white p-5 md:p-6 rounded-3xl shadow-xl flex justify-between items-center">
+          <div>
+            <span className="text-[0.75rem] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
+              PORTAL OTORITAS RT
+            </span>
+            <h1 className="text-[1.3rem] font-black text-white mt-1">Masuk Pengurus RT</h1>
           </div>
 
-          {error && (
-            <div className="p-3 bg-red-950/80 border border-red-800 text-red-200 text-xs font-bold rounded-xl text-center">
-              {error}
+          <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
+            <span className="text-[0.75rem] font-bold text-emerald-300 px-1 flex items-center">T↕</span>
+            <button
+              type="button"
+              onClick={handleZoomOut}
+              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all"
+            >
+              A-
+            </button>
+            <span className="text-[0.7rem] font-mono font-black text-amber-300 px-1">
+              {zoomPercent}%
+            </span>
+            <button
+              type="button"
+              onClick={handleZoomIn}
+              className="px-2 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all"
+            >
+              A+
+            </button>
+          </div>
+        </header>
+
+        {/* CARD LOGIN CERAH */}
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+          <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">
+            🏛️
+          </div>
+
+          <div className="text-center">
+            <h2 className="text-[1.1rem] font-black text-slate-900">Autentikasi Pengurus</h2>
+            <p className="text-[0.8rem] text-slate-500 mt-1">
+              Gunakan email dan kata sandi akun resmi pengurus RT.
+            </p>
+          </div>
+
+          {errorMsg && (
+            <div className="p-3.5 bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl text-[0.8rem] font-bold text-center">
+              {errorMsg}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-200 mb-1">EMAIL PENGURUS</label>
+              <label className="block text-[0.85rem] font-bold text-slate-800 mb-1">Email Pengurus *</label>
               <input
                 type="email"
                 required
-                placeholder="Masukkan email resmi RT..."
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full text-xs p-3 bg-slate-950 border border-slate-700 text-white placeholder-slate-500 rounded-xl outline-none focus:border-emerald-500 font-medium"
+                className="w-full p-3.5 border-2 border-slate-200 rounded-2xl font-bold bg-white text-[0.95rem] outline-none focus:border-emerald-600 font-mono"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-200 mb-1">KATA SANDI</label>
+              <label className="block text-[0.85rem] font-bold text-slate-800 mb-1">Kata Sandi *</label>
               <input
                 type="password"
                 required
-                placeholder="Masukkan kata sandi..."
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full text-xs p-3 bg-slate-950 border border-slate-700 text-white placeholder-slate-500 rounded-xl outline-none focus:border-emerald-500 font-medium"
+                className="w-full p-3.5 border-2 border-slate-200 rounded-2xl font-bold bg-white text-[0.95rem] outline-none focus:border-emerald-600"
               />
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-950/50 disabled:bg-slate-800"
+              disabled={loading || !password}
+              className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[1rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
             >
-              {loading ? 'Memverifikasi...' : 'Masuk ke Dasbor RT'}
+              {loading ? 'Memverifikasi Akun...' : 'Masuk ke Dasbor RT →'}
             </button>
           </form>
+
+          <div className="pt-3 border-t-2 border-slate-100 text-center">
+            <Link href="/" className="text-[0.8rem] text-slate-500 hover:underline font-bold">
+              ← Kembali ke Halaman Utama
+            </Link>
+          </div>
         </div>
 
       </div>

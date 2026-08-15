@@ -2,7 +2,19 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { getTenantPortalData, uploadPendingDocument } from '../../src/actions/checkin-tenant';
+import { getTenantPortalData, uploadPendingDocument, addMemberSusulan, deleteTenant } from '../../src/actions/checkin-tenant';
+
+function calculateAge(birthDateString: string): number {
+  if (!birthDateString) return 0;
+  const today = new Date();
+  const birthDate = new Date(birthDateString);
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return isNaN(age) ? 0 : age;
+}
 
 export default function TenantPortalPage() {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
@@ -22,6 +34,15 @@ export default function TenantPortalPage() {
 
   // Accordion Tata Tertib
   const [showRulesAccordion, setShowRulesAccordion] = useState(false);
+
+  // Modal Tambah Anggota Susulan
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [memberName, setMemberName] = useState('');
+  const [memberPhone, setMemberPhone] = useState('');
+  const [memberBirth, setMemberBirth] = useState('');
+  const [memberRelation, setMemberRelation] = useState('Istri');
+  const [memberKtpFile, setMemberKtpFile] = useState<File | null>(null);
+  const [savingMember, setSavingMember] = useState(false);
 
   const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
   const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
@@ -63,20 +84,65 @@ export default function TenantPortalPage() {
     }
   };
 
+  const handleAddMemberSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tenantData || !memberName || !memberBirth) return;
+
+    const age = calculateAge(memberBirth);
+    if (age >= 17 && !memberKtpFile) {
+      alert(`Anggota berusia ${age} tahun (≥ 17 tahun) wajib melampirkan foto KTP.`);
+      return;
+    }
+
+    setSavingMember(true);
+    const formData = new FormData();
+    formData.append('household_id', tenantData.household_id || `HH-${Date.now()}`);
+    formData.append('property_id', tenantData.property_id);
+    formData.append('room_number', tenantData.room_number || '');
+    formData.append('name', memberName);
+    formData.append('phone', memberPhone);
+    formData.append('birth_date', memberBirth);
+    formData.append('relation', memberRelation);
+    if (memberKtpFile) formData.append('ktp', memberKtpFile);
+
+    const res = await addMemberSusulan(formData);
+    setSavingMember(false);
+
+    if (res.success && res.data) {
+      setHousehold([...household, res.data]);
+      setCopyMsg('Anggota kamar susulan berhasil didaftarkan ke RT!');
+      setTimeout(() => setCopyMsg(''), 4000);
+      setShowAddMemberModal(false);
+      setMemberName('');
+      setMemberPhone('');
+      setMemberBirth('');
+      setMemberKtpFile(null);
+    } else {
+      alert('Gagal menambah anggota: ' + res.error);
+    }
+  };
+
+  const handleDeleteMember = async (memberId: string, name: string) => {
+    if (confirm(`Hapus anggota "${name}" dari daftar kamar Anda?`)) {
+      setHousehold(household.filter((m) => m.id !== memberId));
+      await deleteTenant(memberId);
+      setCopyMsg(`Anggota "${name}" berhasil dihapus.`);
+      setTimeout(() => setCopyMsg(''), 3000);
+    }
+  };
+
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
     setCopyMsg(`${label} berhasil disalin ke clipboard!`);
     setTimeout(() => setCopyMsg(''), 3000);
   };
 
-  // Helper kalkulasi 3 bulan pembayaran
   const getThreeMonthsHistory = () => {
     const today = new Date();
     const months = [];
     for (let i = 0; i < 3; i++) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const monthName = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-      // Bulan 0 = status riil, Bulan 1 & 2 = LUNAS (asumsi historis berjalan)
       const isCurrent = i === 0;
       const isPaid = isCurrent ? (tenantData?.payment_status || '').toUpperCase() === 'PAID' : true;
       months.push({
@@ -94,10 +160,13 @@ export default function TenantPortalPage() {
   const isPaid = (tenantData?.payment_status || '').toUpperCase() === 'PAID';
   const paymentHistory = tenantData ? getThreeMonthsHistory() : [];
 
+  const memberAgeCalculated = calculateAge(memberBirth);
+  const isAdultMember = memberAgeCalculated >= 17 && memberBirth !== '';
+
   return (
     <main
       style={{ fontSize: `${zoomPercent}%` }}
-      className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 transition-all"
+      className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 transition-all font-sans"
     >
       <div className="max-w-xl mx-auto space-y-5">
 
@@ -112,7 +181,7 @@ export default function TenantPortalPage() {
 
           <div className="flex items-center gap-2">
             <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
-              <span className="text-[0.75rem] font-bold text-emerald-300 px-1.5 flex items-center">T↕</span>
+              <span className="text-[0.75rem] font-bold text-emerald-300 px-1 flex items-center">T↕</span>
               <button
                 type="button"
                 onClick={handleZoomOut}
@@ -191,7 +260,7 @@ export default function TenantPortalPage() {
           /* DASBOR PENGHUNI AKTIF */
           <div className="space-y-4">
 
-            {/* 1. KARTU STATUS KEPENDUDUKAN RT */}
+            {/* 1. STATUS KEPENDUDUKAN RT */}
             <div className={`p-6 rounded-3xl shadow-sm border-2 flex items-center justify-between ${
               isVerified ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-amber-50 border-amber-300 text-amber-950'
             }`}>
@@ -208,11 +277,23 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 2. INFO UNIT & KAMAR */}
+            {/* 2. INFO LENGKAP HUNIAN & DAFTAR ANGGOTA KAMAR */}
             <div className="bg-white p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-              <h3 className="font-black text-slate-900 text-[0.9rem] uppercase border-b-2 border-slate-100 pb-2">
-                🏠 Informasi Hunian & Kamar
-              </h3>
+              <div className="flex justify-between items-center border-b-2 border-slate-100 pb-2">
+                <div>
+                  <h3 className="font-black text-slate-900 text-[0.95rem] uppercase">
+                    🏠 Informasi Hunian & Kamar
+                  </h3>
+                  <p className="text-[0.75rem] text-slate-500">Penanggung Jawab: <b className="text-slate-900">{tenantData.name}</b></p>
+                </div>
+                <button
+                  onClick={() => setShowAddMemberModal(true)}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-2xl text-[0.75rem] font-black shadow cursor-pointer"
+                >
+                  ➕ Tambah Anggota
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-4 text-slate-800 font-medium">
                 <div>
                   <span className="text-[0.7rem] text-slate-400 block font-bold uppercase">NAMA PROPERTI</span>
@@ -229,6 +310,46 @@ export default function TenantPortalPage() {
                 <div>
                   <span className="text-[0.7rem] text-slate-400 block font-bold uppercase">STATUS PERNIKAHAN</span>
                   <span className="font-bold text-slate-800">{tenantData.marital_status || 'Belum Menikah'}</span>
+                </div>
+              </div>
+
+              {/* LIST ANGGOTA SEKELUARGA / SEKAMAR */}
+              <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
+                    👥 Daftar Anggota Kamar Ini ({household.length} Orang):
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {household.map((m, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-2xl border-2 border-slate-200 flex justify-between items-center text-[0.8rem]">
+                      <div>
+                        <span className="font-black text-slate-900 text-[0.85rem]">{m.name}</span>
+                        <div className="flex items-center gap-2 text-[0.7rem] text-slate-600 mt-0.5">
+                          <span className="font-bold text-emerald-800">Hubungan: {m.relation}</span>
+                          {m.phone && <span>• {m.phone}</span>}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[0.65rem] font-bold px-2.5 py-1 rounded-lg border ${
+                          m.is_head ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-700 border-slate-300'
+                        }`}>
+                          {m.is_head ? 'Penanggung Jawab' : 'Anggota'}
+                        </span>
+                        {!m.is_head && (
+                          <button
+                            onClick={() => handleDeleteMember(m.id, m.name)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded-lg font-bold text-[0.75rem]"
+                            title="Hapus Anggota"
+                          >
+                            ✕ Hapus
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -271,7 +392,7 @@ export default function TenantPortalPage() {
                 </div>
               )}
 
-              {/* REKAP STATUS PEMBAYARAN 3 BULAN TERAKHIR */}
+              {/* REKAP STATUS SEWA 3 BULAN */}
               <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
                 <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
                   📊 Riwayat Status Sewa (3 Bulan Terakhir):
@@ -300,7 +421,7 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 4. TATA TERTIB & ATURAN LINGKUNGAN RT */}
+            {/* 4. TATA TERTIB */}
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-3">
               <button
                 type="button"
@@ -329,9 +450,6 @@ export default function TenantPortalPage() {
 5. Pembayaran sewa paling lambat tanggal 5 setiap bulannya.`
                     )}
                   </div>
-                  <p className="text-[0.7rem] text-slate-500 font-semibold">
-                    * Warga yang melanggar tata tertib bersedia menerima sanksi teguran hingga pelaporan kamtibmas kelurahan.
-                  </p>
                 </div>
               )}
             </div>
@@ -365,7 +483,7 @@ export default function TenantPortalPage() {
               </div>
             )}
 
-            {/* 6. TOMBOL AKSI CEPAT (CHAT PENGELOLA & BANTUAN DARURAT RT) */}
+            {/* 6. TOMBOL AKSI CEPAT */}
             <div className="grid grid-cols-2 gap-3 pt-2">
               {property?.manager_phone ? (
                 <a
@@ -403,7 +521,104 @@ export default function TenantPortalPage() {
 
       </div>
 
-      {/* MODAL BANTUAN DARURAT TERPADU LINGKUNGAN */}
+      {/* MODAL TAMBAH ANGGOTA SUSULAN */}
+      {showAddMemberModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
+              <h3 className="text-[0.9rem] font-black">➕ Daftarkan Anggota Kamar Susulan</h3>
+              <button onClick={() => setShowAddMemberModal(false)} className="text-white hover:text-amber-300 font-bold text-xl leading-none">✕</button>
+            </div>
+
+            <form onSubmit={handleAddMemberSubmit} className="p-5 space-y-3 text-[0.8rem]">
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Nama Lengkap Anggota *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Rian Hidayat"
+                  value={memberName}
+                  onChange={(e) => setMemberName(e.target.value)}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Tanggal Lahir *</label>
+                  <input
+                    type="date"
+                    required
+                    value={memberBirth}
+                    onChange={(e) => setMemberBirth(e.target.value)}
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-800 mb-1">Hubungan *</label>
+                  <select
+                    value={memberRelation}
+                    onChange={(e) => setMemberRelation(e.target.value)}
+                    className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
+                  >
+                    <option value="Istri">Istri</option>
+                    <option value="Suami">Suami</option>
+                    <option value="Anak">Anak</option>
+                    <option value="Saudara">Saudara</option>
+                    <option value="Rekan / Teman">Rekan / Teman</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-800 mb-1">Nomor WhatsApp (Opsional)</label>
+                <input
+                  type="tel"
+                  placeholder="08123456789"
+                  value={memberPhone}
+                  onChange={(e) => setMemberPhone(e.target.value.replace(/\D/g, ''))}
+                  className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono"
+                />
+              </div>
+
+              {isAdultMember && (
+                <div className="bg-emerald-50 p-3 rounded-xl border-2 border-emerald-200 space-y-1">
+                  <label className="block font-black text-emerald-950 text-[0.75rem]">
+                    🪪 Foto KTP Anggota (Wajib karena usia {memberAgeCalculated} tahun ≥ 17 Tahun) *
+                  </label>
+                  <input
+                    type="file"
+                    required
+                    accept="image/*"
+                    onChange={(e) => setMemberKtpFile(e.target.files ? e.target.files[0] : null)}
+                    className="w-full p-2 border-2 border-emerald-300 rounded-xl bg-white text-[0.7rem] file:mr-2 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[0.7rem] file:font-bold file:bg-emerald-900 file:text-white"
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setShowAddMemberModal(false)}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingMember}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl shadow cursor-pointer"
+                >
+                  {savingMember ? 'Menyimpan...' : 'Daftarkan Anggota'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL BANTUAN DARURAT */}
       {showEmergencyModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -412,85 +627,45 @@ export default function TenantPortalPage() {
                 <span className="text-[1.2rem]">🛡️🚨</span>
                 <h3 className="text-[0.95rem] font-black">Kontak Darurat Lingkungan</h3>
               </div>
-              <button
-                onClick={() => setShowEmergencyModal(false)}
-                className="text-white hover:text-amber-300 font-bold text-xl leading-none"
-              >
-                ✕
-              </button>
+              <button onClick={() => setShowEmergencyModal(false)} className="text-white hover:text-amber-300 font-bold text-xl leading-none">✕</button>
             </div>
 
             <div className="p-5 space-y-3 text-[0.8rem]">
-              <p className="text-slate-600 text-[0.75rem] font-medium leading-tight">
-                Pilih kontak bantuan sesuai dengan jenis kebutuhan darurat Anda:
-              </p>
-
-              {/* 1. POS HANSIP / SATPAM */}
               <div className="bg-emerald-50 p-3.5 rounded-2xl border border-emerald-200 flex justify-between items-center">
                 <div>
                   <h4 className="font-black text-emerald-950 text-[0.85rem]">👮 Pos Hansip & Satpam</h4>
                   <p className="text-[0.7rem] text-emerald-800">Keamanan, parkir liar, & ronda 24 jam</p>
                 </div>
-                <a
-                  href="tel:081299887766"
-                  className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-[0.75rem] shadow"
-                >
-                  📞 Telepon
-                </a>
+                <a href="tel:081299887766" className="px-3 py-1.5 bg-emerald-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 Telepon</a>
               </div>
 
-              {/* 2. BABINSA / BHABINKAMTIBMAS */}
               <div className="bg-blue-50 p-3.5 rounded-2xl border border-blue-200 flex justify-between items-center">
                 <div>
                   <h4 className="font-black text-blue-950 text-[0.85rem]">🚓 Babinsa & Polsek</h4>
-                  <p className="text-[0.7rem] text-blue-800">Tindak kriminal & gangguan kamtibmas</p>
+                  <p className="text-[0.7rem] text-blue-800">Tindak kriminal & kamtibmas</p>
                 </div>
-                <a
-                  href="tel:110"
-                  className="px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-xl font-bold text-[0.75rem] shadow"
-                >
-                  📞 110
-                </a>
+                <a href="tel:110" className="px-3 py-1.5 bg-blue-700 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 110</a>
               </div>
 
-              {/* 3. PENGURUS RT SETEMPAT */}
               <div className="bg-slate-100 p-3.5 rounded-2xl border border-slate-200 flex justify-between items-center">
                 <div>
-                  <h4 className="font-black text-slate-900 text-[0.85rem]">🏛️ Pengurus RT Setempat</h4>
+                  <h4 className="font-black text-slate-900 text-[0.85rem]">🏛️ Pengurus RT</h4>
                   <p className="text-[0.7rem] text-slate-600">Pelayanan warga & administrasi</p>
                 </div>
-                <a
-                  href="https://wa.me/628111222333?text=Halo%20Pengurus%20RT%2C%20saya%20warga%20pendatang%20memerlukan%20informasi%20lingkungan."
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold text-[0.75rem] shadow"
-                >
-                  💬 WA RT
-                </a>
+                <a href="https://wa.me/628111222333" target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-slate-800 text-white rounded-xl font-bold text-[0.75rem] shadow">💬 WA RT</a>
               </div>
 
-              {/* 4. LAYANAN DARURAT NASIONAL */}
               <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 flex justify-between items-center">
                 <div>
                   <h4 className="font-black text-amber-950 text-[0.85rem]">🚑 Ambulans / Damkar</h4>
-                  <p className="text-[0.7rem] text-amber-800">Panggilan Darurat Terpadu (Gratis)</p>
+                  <p className="text-[0.7rem] text-amber-800">Panggilan Darurat Terpadu</p>
                 </div>
-                <a
-                  href="tel:112"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold text-[0.75rem] shadow"
-                >
-                  📞 112
-                </a>
+                <a href="tel:112" className="px-3 py-1.5 bg-amber-600 text-white rounded-xl font-bold text-[0.75rem] shadow">📞 112</a>
               </div>
             </div>
 
             <div className="p-3 bg-slate-50 text-right border-t">
-              <button
-                onClick={() => setShowEmergencyModal(false)}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-[0.75rem] font-bold rounded-xl"
-              >
-                Tutup
-              </button>
+              <button onClick={() => setShowEmergencyModal(false)} className="px-4 py-2 bg-slate-200 text-slate-700 text-[0.75rem] font-bold rounded-xl">Tutup</button>
             </div>
           </div>
         </div>
