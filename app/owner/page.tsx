@@ -210,6 +210,7 @@ export default function OwnerDashboard() {
     setPropBankAcc(prop.bank_account_number || '');
     setPropBankHolder(prop.bank_account_holder || '');
     setPropAddress(prop.address || '');
+    setPropPin(prop.pin_code || '1234');
     setShowAddPropModal(true);
   };
 
@@ -232,11 +233,12 @@ export default function OwnerDashboard() {
         bank_account_number: propBankAcc,
         bank_account_holder: propBankHolder,
         address: propAddress,
+        pin_code: propPin,
       });
       setSubmittingProp(false);
 
       if (res.success) {
-        setCopyMsg('Data properti & pengelola berhasil diperbarui!');
+        setCopyMsg('Data properti & PIN unit berhasil diperbarui!');
         setTimeout(() => setCopyMsg(''), 3000);
         setEditingProperty(null);
         setShowAddPropModal(false);
@@ -257,6 +259,7 @@ export default function OwnerDashboard() {
                 bank_account_number: propBankAcc,
                 bank_account_holder: propBankHolder,
                 address: propAddress,
+                pin_code: propPin,
               }
             : p
         );
@@ -277,6 +280,7 @@ export default function OwnerDashboard() {
             bank_account_number: propBankAcc,
             bank_account_holder: propBankHolder,
             address: propAddress,
+            pin_code: propPin,
           });
         }
       } else {
@@ -311,15 +315,9 @@ export default function OwnerDashboard() {
         setTimeout(() => setCopyMsg(''), 4000);
         setShowAddPropModal(false);
 
-        if (isLoggedIn) {
-          const newPropList = [res.data, ...myProperties];
-          setMyProperties(newPropList);
-          await handleSelectProperty(res.data);
-        } else {
-          setIsLoggedIn(true);
-          setMyProperties([res.data]);
-          await handleSelectProperty(res.data);
-        }
+        const newPropList = [res.data, ...myProperties];
+        setMyProperties(newPropList);
+        await handleSelectProperty(res.data);
 
         setPropName('');
         setPropOwnerName('');
@@ -593,28 +591,27 @@ export default function OwnerDashboard() {
         ) : (
           <div className="space-y-5">
 
+            {/* DROPDOWN UNIT AKTIF MULTI-PROPERTI INTERAKTIF */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
-                {myProperties.length === 1 ? (
-                  <span className="text-[1rem] font-black text-emerald-900 bg-emerald-100 px-3 py-1 rounded-xl">
-                    {myProperties[0].name || myProperties[0].property_name}
-                  </span>
-                ) : (
-                  <select
-                    value={activeProperty?.id || ''}
-                    onChange={(e) => {
-                      const selected = myProperties.find((p) => p.id === e.target.value);
-                      if (selected) handleSelectProperty(selected);
-                    }}
-                    className="p-2 border-2 border-emerald-300 rounded-xl font-black text-emerald-950 bg-emerald-50 text-[0.9rem]"
-                  >
-                    {myProperties.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name || p.property_name}</option>
-                    ))}
-                  </select>
-                )}
-                <span className={`text-[0.7rem] font-black px-2.5 py-1 rounded-full uppercase ml-2 ${
+                
+                <select
+                  value={activeProperty?.id || ''}
+                  onChange={(e) => {
+                    const selected = myProperties.find((p) => p.id === e.target.value);
+                    if (selected) handleSelectProperty(selected);
+                  }}
+                  className="p-2.5 border-2 border-emerald-400 focus:border-emerald-600 rounded-2xl font-black text-emerald-950 bg-emerald-50 text-[0.9rem] outline-none shadow-sm cursor-pointer"
+                >
+                  {myProperties.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      🏠 {p.name || p.property_name} ({p.type})
+                    </option>
+                  ))}
+                </select>
+
+                <span className={`text-[0.7rem] font-black px-3 py-1.5 rounded-full uppercase ${
                   isOwner ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-300'
                 }`}>
                   {isOwner ? '👑 PEMILIK (OWNER)' : '🔑 PENGELOLA'}
@@ -626,14 +623,14 @@ export default function OwnerDashboard() {
                   <button
                     type="button"
                     onClick={() => activeProperty && handleOpenEditProp(activeProperty)}
-                    className="px-3.5 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.75rem] font-black rounded-xl border border-amber-500 cursor-pointer shadow-sm"
+                    className="px-4 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.8rem] font-black rounded-xl border border-amber-500 cursor-pointer shadow-sm"
                   >
-                    ✏️ Edit Data & Pengelola
+                    ✏️ Edit Properti & Pengelola
                   </button>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-800 text-[0.75rem] font-bold rounded-xl border border-red-300 cursor-pointer"
+                  className="px-4 py-2.5 bg-red-100 hover:bg-red-200 text-red-800 text-[0.8rem] font-bold rounded-xl border border-red-300 cursor-pointer"
                 >
                   🔒 Kunci Dasbor (Logout)
                 </button>
@@ -725,7 +722,7 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
-                {/* TAB 1: DAFTAR PENYEWA + STATUS SEWA 3 BULAN TERAKHIR */}
+                {/* TAB 1: DAFTAR PENYEWA */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -804,7 +801,6 @@ export default function OwnerDashboard() {
                                     </button>
                                   </td>
 
-                                  {/* KOLOM STATUS PEMBAYARAN 3 BULAN KE BELAKANG */}
                                   <td className="p-3">
                                     <div className="flex gap-1">
                                       {threeMonthHistory.map((m, idx) => (
@@ -815,7 +811,6 @@ export default function OwnerDashboard() {
                                               ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
                                               : 'bg-red-50 text-red-900 border-red-300'
                                           }`}
-                                          title={`Bulan ${m.label}: ${m.isPaid ? 'Lunas' : 'Belum Lunas'}`}
                                         >
                                           {m.label} {m.isPaid ? '✓' : '✗'}
                                         </span>
@@ -997,13 +992,13 @@ export default function OwnerDashboard() {
 
       </div>
 
-      {/* MODAL EDIT PROPERTI & PENGELOLA */}
+      {/* MODAL EDIT PROPERTI, PENGELOLA, & PIN UNIT */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="p-5 bg-emerald-800 text-white flex justify-between items-center">
               <h3 className="text-[0.95rem] font-black">
-                {editingProperty ? '✏️ Edit Properti & Pengelola' : '🏢 Daftarkan Properti Kos Baru'}
+                {editingProperty ? '✏️ Edit Properti, Pengelola, & PIN Unit' : '🏢 Daftarkan Properti Kos Baru'}
               </h3>
               <button
                 type="button"
@@ -1048,14 +1043,14 @@ export default function OwnerDashboard() {
                     placeholder="Nama Pemilik"
                     value={propOwnerName}
                     onChange={(e) => setPropOwnerName(e.target.value)}
-                    className="p-2 border-2 border-slate-200 rounded-xl bg-white"
+                    className="p-2 border-2 border-slate-200 rounded-xl bg-white font-bold"
                   />
                   <input
                     type="tel"
                     placeholder="No. WA Pemilik"
                     value={propOwnerPhone}
                     onChange={(e) => setPropOwnerPhone(e.target.value)}
-                    className="p-2 border-2 border-slate-200 rounded-xl bg-white font-mono"
+                    className="p-2 border-2 border-slate-200 rounded-xl bg-white font-mono font-bold"
                   />
                 </div>
               </div>
@@ -1075,13 +1070,28 @@ export default function OwnerDashboard() {
                     placeholder="No. WA Pengelola"
                     value={propManagerPhone}
                     onChange={(e) => setPropManagerPhone(e.target.value)}
-                    className="p-2 border-2 border-amber-200 rounded-xl bg-white font-mono"
+                    className="p-2 border-2 border-amber-200 rounded-xl bg-white font-mono font-bold"
                   />
                 </div>
               </div>
 
+              {/* KOLOM EDIT PIN UNIT PROPERTI OLEH OWNER */}
+              <div className="bg-emerald-50 p-3.5 rounded-2xl border-2 border-emerald-300 space-y-1.5">
+                <span className="text-[0.7rem] font-black text-emerald-950 uppercase block">3. PIN 4-DIGIT AKSES UNIT PROPERTI INI:</span>
+                <input
+                  type="text"
+                  maxLength={4}
+                  required
+                  placeholder="Contoh: 1234"
+                  value={propPin}
+                  onChange={(e) => setPropPin(e.target.value.replace(/\D/g, ''))}
+                  className="w-full p-2.5 border-2 border-emerald-400 rounded-xl bg-white font-mono font-black text-center text-lg tracking-widest text-emerald-950 outline-none"
+                />
+                <p className="text-[0.7rem] text-emerald-800 font-medium">PIN ini digunakan oleh Owner & Pengelola untuk membuka unit kos ini.</p>
+              </div>
+
               <div className="bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-200 space-y-2">
-                <span className="text-[0.7rem] font-black text-slate-600 uppercase block">3. REKENING BANK RESMI:</span>
+                <span className="text-[0.7rem] font-black text-slate-600 uppercase block">4. REKENING BANK RESMI:</span>
                 <div className="grid grid-cols-3 gap-2">
                   <input
                     type="text"
@@ -1103,7 +1113,7 @@ export default function OwnerDashboard() {
                   placeholder="Atas Nama Pemilik Rekening"
                   value={propBankHolder}
                   onChange={(e) => setPropBankHolder(e.target.value)}
-                  className="w-full p-2 border-2 border-slate-200 rounded-xl bg-white"
+                  className="w-full p-2 border-2 border-slate-200 rounded-xl bg-white font-medium"
                 />
               </div>
 

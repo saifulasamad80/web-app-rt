@@ -9,6 +9,11 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { persistSession: false }
 });
 
+function cleanDigits(phone?: string): string {
+  if (!phone) return '';
+  return phone.replace(/\D/g, '');
+}
+
 export async function loginRtAdminAction(emailInput: string, passwordInput: string) {
   if (!emailInput || !passwordInput) {
     return { success: false, error: 'Email dan kata sandi pengurus wajib diisi.' };
@@ -154,7 +159,7 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     return { success: false, properties: [], error: 'Nomor WhatsApp dan PIN 4-Digit wajib diisi.' };
   }
 
-  const rawClean = phoneInput.replace(/\D/g, '');
+  const rawClean = cleanDigits(phoneInput);
   const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
 
   const { data: properties, error } = await supabase
@@ -171,17 +176,19 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     };
   }
 
-  const matchedProperties = properties.filter((p) => p.pin_code === pinInput);
+  // Cek apakah PIN cocok dengan salah satu properti miliknya
+  const isPinValid = properties.some((p) => p.pin_code === pinInput);
 
-  if (matchedProperties.length === 0) {
+  if (!isPinValid) {
     return {
       success: false,
       properties: [],
-      error: '🔒 PIN 4-Digit yang Anda masukkan salah untuk unit ini.'
+      error: '🔒 PIN 4-Digit yang Anda masukkan salah.'
     };
   }
 
-  return { success: true, properties: matchedProperties, error: undefined };
+  // Kembalikan SEMUA properti yang terhubung dengan nomor HP tersebut
+  return { success: true, properties, error: undefined };
 }
 
 export async function getOwnerPropertyDetails(propertyId: string) {
@@ -310,23 +317,26 @@ export async function updateProperty(
     pin_code?: string;
   }
 ) {
+  const updateFields: any = {};
+  if (payload.name !== undefined) {
+    updateFields.name = payload.name;
+    updateFields.property_name = payload.name;
+  }
+  if (payload.owner_name !== undefined) updateFields.owner_name = payload.owner_name;
+  if (payload.owner_phone !== undefined) updateFields.owner_phone = payload.owner_phone;
+  if (payload.manager_name !== undefined) updateFields.manager_name = payload.manager_name;
+  if (payload.manager_phone !== undefined) updateFields.manager_phone = payload.manager_phone;
+  if (payload.total_rooms !== undefined) updateFields.total_rooms = payload.total_rooms;
+  if (payload.bank_name !== undefined) updateFields.bank_name = payload.bank_name;
+  if (payload.bank_account_number !== undefined) updateFields.bank_account_number = payload.bank_account_number;
+  if (payload.bank_account_holder !== undefined) updateFields.bank_account_holder = payload.bank_account_holder;
+  if (payload.address !== undefined) updateFields.address = payload.address;
+  if (payload.type !== undefined) updateFields.type = payload.type;
+  if (payload.pin_code !== undefined && payload.pin_code !== '') updateFields.pin_code = payload.pin_code;
+
   const { error } = await supabase
     .from('properties')
-    .update({
-      name: payload.name,
-      property_name: payload.name,
-      owner_name: payload.owner_name,
-      owner_phone: payload.owner_phone,
-      manager_name: payload.manager_name,
-      manager_phone: payload.manager_phone,
-      total_rooms: payload.total_rooms,
-      bank_name: payload.bank_name,
-      bank_account_number: payload.bank_account_number,
-      bank_account_holder: payload.bank_account_holder,
-      address: payload.address,
-      type: payload.type,
-      pin_code: payload.pin_code
-    })
+    .update(updateFields)
     .eq('id', propertyId);
 
   if (!error) {
@@ -440,7 +450,7 @@ export async function deletePropertyExpenseWithAudit(expenseId: string, title: s
 export async function getTenantPortalData(phoneInput: string) {
   if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
 
-  const rawClean = phoneInput.replace(/\D/g, '');
+  const rawClean = cleanDigits(phoneInput);
   const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
 
   const { data: tenantRecords, error: tenantErr } = await supabase
