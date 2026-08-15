@@ -17,11 +17,13 @@ export default function CheckinPage() {
   const params = useParams();
   const slug = params?.slug as string;
 
+  const [textScale, setTextScale] = useState<'base' | 'lg'>('base');
+
   const [loadingProp, setLoadingProp] = useState(true);
   const [property, setProperty] = useState<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // SEKSI 1: Lokasi & Kontak Utama
+  // SEKSI 1: Lokasi & Kontak
   const [phone, setPhone] = useState('');
   const [roomNumber, setRoomNumber] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
@@ -122,12 +124,15 @@ export default function CheckinPage() {
     }
   };
 
+  const fontClass = textScale === 'lg' ? 'text-base' : 'text-xs';
+  const headingClass = textScale === 'lg' ? 'text-2xl md:text-3xl' : 'text-xl md:text-2xl';
+
   if (loadingProp) {
     return (
-      <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="text-center space-y-3">
-          <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-xs font-bold text-slate-600">Memuat Formulir Wajib Lapor RT...</p>
+          <div className="w-12 h-12 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-sm font-bold text-slate-700">Memuat Formulir Wajib Lapor RT...</p>
         </div>
       </main>
     );
@@ -135,12 +140,12 @@ export default function CheckinPage() {
 
   if (errorMsg || !property) {
     return (
-      <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white p-6 rounded-2xl shadow max-w-md text-center space-y-3 border border-red-200">
-          <p className="text-3xl">⚠️</p>
-          <h2 className="text-sm font-bold text-red-700">Tautan Tidak Valid</h2>
-          <p className="text-xs text-slate-500">{errorMsg}</p>
-          <Link href="/" className="inline-block px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-7 rounded-3xl shadow-lg max-w-md text-center space-y-4 border-2 border-red-200">
+          <p className="text-4xl">⚠️</p>
+          <h2 className="text-base font-black text-red-700">Tautan Tidak Valid</h2>
+          <p className="text-xs text-slate-600">{errorMsg}</p>
+          <Link href="/" className="inline-block px-5 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold">
             Kembali ke Beranda
           </Link>
         </div>
@@ -150,22 +155,22 @@ export default function CheckinPage() {
 
   if (isSuccess) {
     return (
-      <main className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-4 border border-emerald-200">
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white p-7 md:p-9 rounded-3xl shadow-xl max-w-md w-full text-center space-y-4 border-2 border-emerald-300">
           <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center text-3xl mx-auto">
             ✅
           </div>
           <div>
-            <span className="text-[10px] font-extrabold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full uppercase">
+            <span className="text-[11px] font-black px-3 py-1 bg-emerald-100 text-emerald-900 rounded-full uppercase">
               BERHASIL TERCATAT DI RT
             </span>
-            <h2 className="text-lg font-black text-slate-900 mt-2">Lapor Diri Telah Diterima</h2>
+            <h2 className="text-xl font-black text-slate-900 mt-2">Lapor Diri Telah Diterima</h2>
             <p className="text-xs text-slate-600 mt-1">
-              Data Anda telah terdaftar dalam sistem register Pengurus RT dan unit <b>{property.name || property.property_name}</b>.
+              Data Anda telah terdaftar resmi dalam sistem kependudukan RT dan unit <b>{property.name || property.property_name}</b>.
             </p>
           </div>
 
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-left text-xs space-y-1.5 font-medium text-slate-700">
+          <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 text-left text-xs space-y-1.5 font-semibold text-slate-800">
             <p>🏠 <b>Unit / Kamar:</b> {roomNumber}</p>
             <p>👤 <b>Penanggung Jawab:</b> {name}</p>
             <p>📱 <b>WhatsApp Login:</b> {phone}</p>
@@ -174,13 +179,13 @@ export default function CheckinPage() {
           <div className="space-y-2 pt-2">
             <Link
               href="/portal-warga"
-              className="w-full py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl block transition-all shadow"
+              className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs rounded-2xl block transition-all shadow"
             >
               📱 Buka Dasbor Portal Warga
             </Link>
             <Link
               href="/"
-              className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl block transition-all"
+              className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl block transition-all border border-slate-200"
             >
               Halaman Utama
             </Link>
@@ -194,33 +199,51 @@ export default function CheckinPage() {
   const managerName = property.manager_name || property.owner_name || 'Pengelola Unit';
 
   return (
-    <main className="min-h-screen bg-slate-100 p-3 md:p-8 text-slate-900 font-sans text-xs">
-      <div className="max-w-2xl mx-auto space-y-4">
+    <main className={`min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 ${fontClass}`}>
+      <div className="max-w-2xl mx-auto space-y-5">
 
-        {/* HEADER PROPERTI & KONTAK PENGELOLA */}
-        <div className="bg-slate-900 text-white p-5 md:p-6 rounded-3xl shadow-xl space-y-3">
+        {/* HEADER PROPERTI DENGAN TOMBOL T↕ A- A+ */}
+        <div className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl space-y-3">
           <div className="flex justify-between items-start">
-            <span className="text-[10px] font-extrabold px-2.5 py-0.5 bg-emerald-500 text-slate-950 rounded-full uppercase">
-              PORTAL WAJIB LAPOR RT (PUBLIK)
+            <span className="text-[10px] md:text-[11px] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
+              PORTAL WAJIB LAPOR RT
             </span>
-            <span className="text-[10px] font-bold text-slate-400 font-mono">UU PDP COMPLIANT</span>
+
+            {/* WIDGET ZOOM TEKS T↕ A- A+ */}
+            <div className="bg-emerald-950/80 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1 shadow-inner">
+              <span className="text-xs font-bold text-emerald-300 px-1.5 flex items-center">T↕</span>
+              <button
+                type="button"
+                onClick={() => setTextScale('base')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all ${textScale === 'base' ? 'bg-amber-400 text-slate-950 shadow' : 'bg-emerald-900 text-emerald-200 hover:bg-emerald-800'}`}
+              >
+                A-
+              </button>
+              <button
+                type="button"
+                onClick={() => setTextScale('lg')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all ${textScale === 'lg' ? 'bg-amber-400 text-slate-950 shadow' : 'bg-emerald-900 text-emerald-200 hover:bg-emerald-800'}`}
+              >
+                A+
+              </button>
+            </div>
           </div>
 
           <div>
-            <h1 className="text-xl md:text-2xl font-black text-white">{property.name || property.property_name}</h1>
-            <p className="text-xs text-slate-300 mt-0.5">{property.address || 'Lingkungan RT Setempat'}</p>
+            <h1 className={`${headingClass} font-black text-white`}>{property.name || property.property_name}</h1>
+            <p className="text-xs md:text-sm text-emerald-100 mt-1 font-medium">{property.address || 'Lingkungan RT Setempat'}</p>
           </div>
 
           {managerContact && (
-            <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-              <span className="text-[11px] text-slate-400">Pengelola Lapangan: <b>{managerName}</b></span>
+            <div className="pt-2 border-t border-emerald-700/80 flex items-center justify-between">
+              <span className="text-xs text-emerald-100 font-medium">Pengelola: <b>{managerName}</b></span>
               <a
                 href={`https://wa.me/${managerContact.replace(/\D/g, '')}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[10px] inline-flex items-center gap-1 shadow-sm"
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1 shadow"
               >
-                💬 Chat Pengelola
+                💬 Chat WA Pengelola
               </a>
             </div>
           )}
@@ -228,117 +251,117 @@ export default function CheckinPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
 
-          {/* SEKSI 1: LOKASI UNIT & KONTAK (WAJIB SEMUA) */}
-          <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-xs uppercase flex items-center gap-1.5">
+          {/* SEKSI 1: LOKASI & KONTAK */}
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-center">
+              <h3 className="font-black text-slate-900 text-sm uppercase flex items-center gap-2">
                 <span>1️⃣</span> Lokasi Unit & Kontak Utama
               </h3>
-              <span className="text-[9px] font-extrabold px-2 py-0.5 bg-red-100 text-red-700 rounded">WAJIB SEMUA</span>
+              <span className="text-[10px] font-black px-2.5 py-0.5 bg-red-100 text-red-700 rounded-full">WAJIB SEMUA</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nomor WhatsApp Aktif *</label>
+                <label className="block font-bold text-slate-800 mb-1">Nomor WhatsApp Aktif *</label>
                 <input
                   type="tel"
                   required
                   placeholder="08123456789"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none font-mono focus:ring-2 focus:ring-emerald-600"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-mono text-sm focus:border-emerald-600 bg-white"
                 />
-                <p className="text-[10px] text-slate-500 mt-0.5">Nomor ini menjadi kunci login Dasbor Warga Anda.</p>
+                <p className="text-[11px] text-slate-500 mt-1 font-medium">Nomor ini menjadi kunci login Dasbor Anda.</p>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nomor Kamar / Unit Hunian *</label>
+                <label className="block font-bold text-slate-800 mb-1">Nomor Kamar / Unit Hunian *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Kamar 04 / Lantai 2"
                   value={roomNumber}
                   onChange={(e) => setRoomNumber(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm focus:border-emerald-600 bg-white font-bold text-emerald-900"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Tanggal Mulai Menetap *</label>
+                <label className="block font-bold text-slate-800 mb-1">Tanggal Mulai Menetap *</label>
                 <input
                   type="date"
                   required
                   value={entryDate}
                   onChange={(e) => setEntryDate(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm bg-white font-medium"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Alamat Asal Sesuai KTP *</label>
+                <label className="block font-bold text-slate-800 mb-1">Alamat Asal Sesuai KTP *</label>
                 <input
                   type="text"
                   required
                   placeholder="Kota / Kabupaten Asal KTP"
                   value={addressKtp}
                   onChange={(e) => setAddressKtp(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm focus:border-emerald-600 bg-white"
                 />
               </div>
             </div>
           </div>
 
-          {/* SEKSI 2: DATA PENANGGUNG JAWAB UTAMA */}
-          <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-xs uppercase flex items-center gap-1.5">
-                <span>2️⃣</span> Data Penanggung Jawab (Warga Utama)
+          {/* SEKSI 2: PENANGGUNG JAWAB */}
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-center">
+              <h3 className="font-black text-slate-900 text-sm uppercase flex items-center gap-2">
+                <span>2️⃣</span> Data Penanggung Jawab
               </h3>
-              <span className="text-[9px] font-extrabold px-2 py-0.5 bg-red-100 text-red-700 rounded">WAJIB SEMUA</span>
+              <span className="text-[10px] font-black px-2.5 py-0.5 bg-red-100 text-red-700 rounded-full">WAJIB SEMUA</span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Nama Lengkap (Sesuai KTP) *</label>
+                <label className="block font-bold text-slate-800 mb-1">Nama Lengkap (Sesuai KTP) *</label>
                 <input
                   type="text"
                   required
                   placeholder="Nama Lengkap Penanggung Jawab"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm focus:border-emerald-600 bg-white font-bold"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Tanggal Lahir *</label>
+                <label className="block font-bold text-slate-800 mb-1">Tanggal Lahir *</label>
                 <input
                   type="date"
                   required
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm bg-white"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Pekerjaan *</label>
+                <label className="block font-bold text-slate-800 mb-1">Pekerjaan *</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Karyawan / Mahasiswa"
                   value={occupation}
                   onChange={(e) => setOccupation(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm bg-white"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Status Pernikahan *</label>
+                <label className="block font-bold text-slate-800 mb-1">Status Pernikahan *</label>
                 <select
                   value={maritalStatus}
                   onChange={(e) => setMaritalStatus(e.target.value)}
-                  className="w-full p-2.5 border rounded-xl outline-none bg-white font-semibold"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none text-sm bg-white font-bold text-slate-900"
                 >
                   <option value="Belum Menikah">Belum Menikah (Lajang)</option>
                   <option value="Menikah">Menikah</option>
@@ -347,19 +370,18 @@ export default function CheckinPage() {
               </div>
 
               <div className="md:col-span-2">
-                <label className="block font-bold text-slate-700 mb-1">Foto KTP Penanggung Jawab (Usia ≥ 17 Tahun) *</label>
+                <label className="block font-bold text-slate-800 mb-1">Foto KTP Penanggung Jawab (Usia ≥ 17 Tahun) *</label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => setKtpFile(e.target.files ? e.target.files[0] : null)}
-                  className="w-full text-xs p-2 border rounded-xl bg-slate-50 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white"
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-slate-50 text-xs font-semibold file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white"
                 />
               </div>
 
-              {/* KONDISIONAL BUKU NIKAH / KK JIKA STATUS MENIKAH */}
               {maritalStatus === 'Menikah' && (
-                <div className="md:col-span-2 bg-amber-50 p-3.5 rounded-xl border border-amber-200 space-y-2">
-                  <label className="block font-bold text-amber-900">
+                <div className="md:col-span-2 bg-amber-50 p-4 rounded-2xl border-2 border-amber-300 space-y-2">
+                  <label className="block font-black text-amber-950">
                     📎 Unggah Buku Nikah / Kartu Keluarga (KK) Pasutri
                   </label>
                   <input
@@ -367,7 +389,7 @@ export default function CheckinPage() {
                     accept="image/*,.pdf"
                     disabled={docPendingLater}
                     onChange={(e) => setMarriageDocFile(e.target.files ? e.target.files[0] : null)}
-                    className="w-full text-xs p-2 border rounded-xl bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-800 file:text-white"
+                    className="w-full p-2.5 border-2 border-amber-200 rounded-xl bg-white text-xs file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-amber-900 file:text-white"
                   />
                   <div className="flex items-center gap-2 pt-1">
                     <input
@@ -375,9 +397,9 @@ export default function CheckinPage() {
                       id="docPending"
                       checked={docPendingLater}
                       onChange={(e) => setDocPendingLater(e.target.checked)}
-                      className="rounded"
+                      className="w-4 h-4 rounded"
                     />
-                    <label htmlFor="docPending" className="text-[11px] font-semibold text-amber-800">
+                    <label htmlFor="docPending" className="text-xs font-bold text-amber-900 cursor-pointer">
                       Dokumen Buku Nikah/KK masih di kampung halaman (Akan disusulkan nanti)
                     </label>
                   </div>
@@ -386,14 +408,14 @@ export default function CheckinPage() {
             </div>
           </div>
 
-          {/* SEKSI 3: ANGGOTA TAMBAHAN (FLEKSIBEL) */}
-          <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
+          {/* SEKSI 3: ANGGOTA TAMBAHAN */}
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h3 className="font-bold text-slate-900 text-xs uppercase flex items-center gap-1.5">
+                <h3 className="font-black text-slate-900 text-sm uppercase flex items-center gap-2">
                   <span>3️⃣</span> Anggota Hunian Lainnya (1 Kamar)
                 </h3>
-                <p className="text-[10px] text-slate-500">Centang jika menempati kamar bersama orang lain/keluarga.</p>
+                <p className="text-xs text-slate-500 font-medium">Centang jika menempati kamar bersama orang lain/keluarga.</p>
               </div>
               <input
                 type="checkbox"
@@ -402,54 +424,54 @@ export default function CheckinPage() {
                   setHasMembers(e.target.checked);
                   if (e.target.checked && occupants.length === 0) handleAddOccupant();
                 }}
-                className="w-4 h-4 rounded text-emerald-600"
+                className="w-5 h-5 rounded text-emerald-600 cursor-pointer"
               />
             </div>
 
             {hasMembers && (
-              <div className="space-y-3 pt-2 border-t">
+              <div className="space-y-3 pt-3 border-t-2 border-slate-100">
                 {occupants.map((occ, idx) => (
-                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2 relative">
+                  <div key={idx} className="p-4 bg-slate-50 rounded-2xl border-2 border-slate-200 space-y-2 relative">
                     <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-slate-700">Anggota #{idx + 1}</span>
+                      <span className="text-xs font-black text-slate-800">Anggota #{idx + 1}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveOccupant(idx)}
-                        className="text-[10px] text-red-600 font-bold hover:underline"
+                        className="text-xs text-red-600 font-bold hover:underline"
                       >
                         ✕ Hapus
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <input
                         type="text"
                         required
                         placeholder="Nama Lengkap Anggota"
                         value={occ.name}
                         onChange={(e) => handleOccupantChange(idx, 'name', e.target.value)}
-                        className="p-2 border rounded-lg bg-white"
+                        className="p-3 border-2 border-slate-200 rounded-xl bg-white text-xs font-bold"
                       />
                       <input
                         type="date"
                         required
                         value={occ.birth_date}
                         onChange={(e) => handleOccupantChange(idx, 'birth_date', e.target.value)}
-                        className="p-2 border rounded-lg bg-white"
+                        className="p-3 border-2 border-slate-200 rounded-xl bg-white text-xs"
                       />
                       <input
                         type="text"
                         placeholder="Hubungan (Istri/Suami/Anak/Teman)"
                         value={occ.relation}
                         onChange={(e) => handleOccupantChange(idx, 'relation', e.target.value)}
-                        className="p-2 border rounded-lg bg-white"
+                        className="p-3 border-2 border-slate-200 rounded-xl bg-white text-xs"
                       />
                       <input
                         type="tel"
                         placeholder="No WA Anggota (Opsional)"
                         value={occ.phone}
                         onChange={(e) => handleOccupantChange(idx, 'phone', e.target.value)}
-                        className="p-2 border rounded-lg bg-white font-mono"
+                        className="p-3 border-2 border-slate-200 rounded-xl bg-white text-xs font-mono"
                       />
                     </div>
                   </div>
@@ -458,7 +480,7 @@ export default function CheckinPage() {
                 <button
                   type="button"
                   onClick={handleAddOccupant}
-                  className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl"
+                  className="w-full py-3 bg-slate-200 hover:bg-slate-300 text-slate-900 font-black text-xs rounded-2xl transition-all"
                 >
                   + Tambah Anggota Kamar Lainnya
                 </button>
@@ -466,16 +488,16 @@ export default function CheckinPage() {
             )}
           </div>
 
-          {/* SEKSI 4: TATA TERTIB & PERSETUJUAN HUKUM (UU PDP) */}
-          <div className="bg-white p-5 rounded-2xl shadow border border-slate-200 space-y-3">
-            <div className="border-b pb-2 flex justify-between items-center">
-              <h3 className="font-bold text-slate-900 text-xs uppercase flex items-center gap-1.5">
-                <span>4️⃣</span> Tata Tertib & Persetujuan Regulasi RT
+          {/* SEKSI 4: TATA TERTIB & PERSETUJUAN RT */}
+          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            <div className="border-b-2 border-slate-100 pb-2 flex justify-between items-center">
+              <h3 className="font-black text-slate-900 text-sm uppercase flex items-center gap-2">
+                <span>4️⃣</span> Tata Tertib & Ketentuan RT
               </h3>
-              <span className="text-[9px] font-extrabold px-2 py-0.5 bg-red-100 text-red-700 rounded">WAJIB CENTANG</span>
+              <span className="text-[10px] font-black px-2.5 py-0.5 bg-red-100 text-red-700 rounded-full">WAJIB CENTANG</span>
             </div>
 
-            <div className="p-3 bg-slate-50 border rounded-xl max-h-36 overflow-y-auto font-mono text-[11px] text-slate-700 leading-relaxed">
+            <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl max-h-40 overflow-y-auto font-mono text-xs text-slate-800 leading-relaxed font-semibold">
               {property.house_rules || (
                 <>
                   1. Wajib lapor diri 1x24 jam kependudukan RT setempat.<br/>
@@ -487,31 +509,31 @@ export default function CheckinPage() {
               )}
             </div>
 
-            <div className="space-y-2 pt-1 text-slate-800 text-[11px]">
-              <div className="flex items-start gap-2">
+            <div className="space-y-3 pt-2 text-slate-900">
+              <div className="flex items-start gap-2.5">
                 <input
                   type="checkbox"
                   id="agree1"
                   required
                   checked={agreeRules}
                   onChange={(e) => setAgreeRules(e.target.checked)}
-                  className="mt-0.5 rounded text-emerald-600"
+                  className="w-5 h-5 mt-0.5 rounded text-emerald-600 cursor-pointer"
                 />
-                <label htmlFor="agree1" className="font-semibold">
+                <label htmlFor="agree1" className="font-bold text-xs md:text-sm cursor-pointer leading-snug">
                   Saya telah membaca, memahami, dan menyatakan tunduk pada Tata Tertib Hunian di atas. Apabila melanggar, saya bersedia menerima sanksi yang berlaku.
                 </label>
               </div>
 
-              <div className="flex items-start gap-2">
+              <div className="flex items-start gap-2.5">
                 <input
                   type="checkbox"
                   id="agree2"
                   required
                   checked={agreePDP}
                   onChange={(e) => setAgreePDP(e.target.checked)}
-                  className="mt-0.5 rounded text-emerald-600"
+                  className="w-5 h-5 mt-0.5 rounded text-emerald-600 cursor-pointer"
                 />
-                <label htmlFor="agree2" className="text-slate-600 leading-tight">
+                <label htmlFor="agree2" className="text-xs md:text-sm text-slate-700 cursor-pointer leading-snug font-medium">
                   Saya memberikan persetujuan eksplisit kepada Pengurus RT dan Pemilik Unit untuk memproses dan menyimpan data pribadi ini <b>semata-mata untuk keperluan verifikasi identitas, keamanan lingkungan, dan register kependudukan RT setempat</b> sesuai ketentuan UU PDP No. 27 Tahun 2022.
                 </label>
               </div>
@@ -521,9 +543,9 @@ export default function CheckinPage() {
           <button
             type="submit"
             disabled={submitting || !agreeRules || !agreePDP}
-            className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-2xl transition-all shadow-lg disabled:bg-slate-300"
+            className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-sm md:text-base rounded-2xl transition-all shadow-lg disabled:bg-slate-300 cursor-pointer"
           >
-            {submitting ? 'Mengirim Data ke Sistem RT...' : 'Kirim Lapor Diri & Setujui Aturan RT'}
+            {submitting ? 'Mengirim Data ke Sistem RT...' : 'Kirim Lapor Diri & Setujui Aturan RT →'}
           </button>
         </form>
 

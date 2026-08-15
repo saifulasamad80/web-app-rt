@@ -1,91 +1,120 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 
-export default function CentralPortalLandingPage() {
-  return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-4 md:p-8">
-      <div className="max-w-4xl mx-auto w-full my-auto space-y-8 py-8">
-        
-        {/* HEADER BRANDING */}
-        <div className="text-center space-y-3">
-          <span className="text-[10px] font-black px-3 py-1 bg-emerald-500 text-slate-950 rounded-full uppercase tracking-widest">
-            SISTEM INFORMASI KEPENDUDUKAN DIGITAL RT
-          </span>
-          <h1 className="text-3xl md:text-5xl font-black text-white tracking-tight">
-            Portal Wajib Lapor Kependudukan RT
-          </h1>
-          <p className="text-xs md:text-sm text-slate-400 max-w-xl mx-auto leading-relaxed">
-            Layanan Terpadu Pendataan Warga Pendatang, Pengelolaan Kos/Kontrakan, dan Verifikasi Resmi RT Sesuai Regulasi UU PDP No. 27 Tahun 2022.
-          </p>
-        </div>
+export default function HomePage() {
+  const [textScale, setTextScale] = useState<'base' | 'lg'>('base');
+  const fontClass = textScale === 'lg' ? 'text-base' : 'text-sm';
+  const headingClass = textScale === 'lg' ? 'text-2xl md:text-3xl' : 'text-xl md:text-2xl';
 
-        {/* 2 PINTU MASUK UTAMA */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
-          
-          {/* PINTU 1: PEMILIK KOS & KONTRAKAN */}
-          <div className="bg-slate-900/80 border-2 border-slate-800 hover:border-emerald-500/50 p-6 rounded-2xl shadow-2xl transition-all flex flex-col justify-between gap-6 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+  return (
+    <main className={`min-h-screen bg-slate-50 text-slate-900 ${fontClass} p-4 md:p-8`}>
+      <div className="max-w-4xl mx-auto space-y-6">
+
+        {/* HEADER CERAH DENGAN PENGATUR TEKS LANSIA */}
+        <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-lg flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <span className="text-[11px] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase tracking-wider">
+              Sistem Kependudukan & Lingkungan RT
+            </span>
+            <h1 className={`${headingClass} font-black text-white mt-2`}>
+              Portal Digital Warga & Hunian RT
+            </h1>
+            <p className="text-xs md:text-sm text-emerald-100 mt-1 font-medium">
+              Layanan Pelaporan Warga Pendatang, Manajemen Kos/Kontrakan, & Iuran Kas RT
+            </p>
+          </div>
+
+          {/* WIDGET ZOOM TEKS T↕ A- A+ */}
+          <div className="bg-emerald-950/80 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1 shadow-inner">
+            <span className="text-xs font-bold text-emerald-300 px-2 flex items-center">T↕</span>
+            <button
+              type="button"
+              onClick={() => setTextScale('base')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${textScale === 'base' ? 'bg-amber-400 text-slate-950 shadow' : 'bg-emerald-900 text-emerald-200 hover:bg-emerald-800'}`}
+            >
+              A-
+            </button>
+            <button
+              type="button"
+              onClick={() => setTextScale('lg')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${textScale === 'lg' ? 'bg-amber-400 text-slate-950 shadow' : 'bg-emerald-900 text-emerald-200 hover:bg-emerald-800'}`}
+            >
+              A+
+            </button>
+          </div>
+        </header>
+
+        {/* 3 KARTU MENU UTAMA (CERAH & KONTRAK TINGGI) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-5">
+
+          {/* 1. PORTAL PENGHUNI / WARGA */}
+          <div className="bg-white p-6 rounded-3xl border-2 border-emerald-200 shadow-md hover:border-emerald-500 transition-all flex flex-col justify-between space-y-4">
+            <div className="space-y-2">
+              <div className="w-14 h-14 bg-emerald-100 text-emerald-800 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                👤
+              </div>
+              <h2 className="text-lg font-black text-slate-900">Portal Warga / Penyewa</h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Cek status verifikasi kependudukan RT, data kamar, tagihan sewa, dan kontak darurat RT/pengelola.
+              </p>
+            </div>
+            <Link
+              href="/portal-warga"
+              className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-center rounded-2xl shadow transition-all block"
+            >
+              Buka Portal Warga →
+            </Link>
+          </div>
+
+          {/* 2. DASBOR PEMILIK / PENGELOLA KOS */}
+          <div className="bg-white p-6 rounded-3xl border-2 border-amber-200 shadow-md hover:border-amber-500 transition-all flex flex-col justify-between space-y-4">
+            <div className="space-y-2">
+              <div className="w-14 h-14 bg-amber-100 text-amber-900 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
                 🏢
               </div>
-              <h2 className="text-xl font-bold text-white">Pemilik Kos / Kontrakan</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Kelola unit hunian sewa Anda, dapatkan Poster QR Code resmi RT, bagikan tautan lapor WA ke penyewa, dan pantau penghuni secara mandiri.
+              <h2 className="text-lg font-black text-slate-900">Dasbor Pemilik Kos</h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Kelola okupansi kamar, daftar penyewa, cetak poster QR lapor diri, dan pencatatan operasional kos.
               </p>
             </div>
-
-            <div className="pt-2">
-              <Link
-                href="/owner"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-2"
-              >
-                <span>Masuk Dasbor Pemilik</span>
-                <span>→</span>
-              </Link>
-            </div>
+            <Link
+              href="/owner"
+              className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-center rounded-2xl shadow transition-all block"
+            >
+              Masuk Dasbor Pemilik →
+            </Link>
           </div>
 
-          {/* PINTU 2: PENGURUS RT */}
-          <div className="bg-slate-900/80 border-2 border-slate-800 hover:border-slate-700 p-6 rounded-2xl shadow-2xl transition-all flex flex-col justify-between gap-6 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-slate-800 border border-slate-700 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                🛡️
+          {/* 3. DASBOR PENGURUS RT */}
+          <div className="bg-white p-6 rounded-3xl border-2 border-blue-200 shadow-md hover:border-blue-500 transition-all flex flex-col justify-between space-y-4">
+            <div className="space-y-2">
+              <div className="w-14 h-14 bg-blue-100 text-blue-900 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                🏛️
               </div>
-              <h2 className="text-xl font-bold text-white">Portal Pengurus RT</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Akses khusus Admin/Pengurus RT untuk menyetujui permohonan lokasi kos baru, memverifikasi warga pendatang, dan mencetak Buku Register.
+              <h2 className="text-lg font-black text-slate-900">Portal Pengurus RT</h2>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Buku register warga pendatang, verifikasi legalitas berkas KTP, reset PIN properti, dan kas iuran RT.
               </p>
             </div>
-
-            <div className="pt-2">
-              <Link
-                href="/login"
-                className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all border border-slate-700 flex items-center justify-center gap-2"
-              >
-                <span>Login Pengurus RT</span>
-                <span>→</span>
-              </Link>
-            </div>
+            <Link
+              href="/rt"
+              className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-center rounded-2xl shadow transition-all block"
+            >
+              Masuk Dasbor RT →
+            </Link>
           </div>
 
         </div>
 
-        {/* CATATAN PENTING UNTUK PENYEWA */}
-        <div className="p-4 bg-slate-900/40 border border-slate-800/80 rounded-xl text-center space-y-1">
-          <p className="text-xs font-bold text-slate-300">📢 Anda Calon Penyewa / Penghuni Baru?</p>
-          <p className="text-[11px] text-slate-500">
-            Silakan memindai **Poster QR Code** yang tertempel di lokasi kos/kontrakan Anda atau gunakan tautan pendaftaran khusus yang dikirim oleh pemilik unit.
-          </p>
-        </div>
+        {/* FOOTER INFORMASI LINGKUNGAN */}
+        <footer className="bg-white p-5 rounded-2xl border-2 border-slate-200 text-center text-slate-600 text-xs space-y-1">
+          <p className="font-bold text-slate-900">Sistem Pelayanan Kependudukan Digital Lingkungan RT Setempat</p>
+          <p>Mematuhi Ketentuan UU Kependudukan & UU Perlindungan Data Pribadi (UU PDP No. 27 Tahun 2022)</p>
+        </footer>
 
       </div>
-
-      {/* FOOTER */}
-      <footer className="text-center text-[10px] text-slate-600 font-mono py-4 border-t border-slate-900">
-        © 2026 Sistem Informasi Kependudukan RT • Terenkripsi & Terlindungi UU PDP No. 27/2022
-      </footer>
     </main>
   );
 }
