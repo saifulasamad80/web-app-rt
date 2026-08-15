@@ -354,6 +354,35 @@ export async function deleteProperty(propertyId: string) {
   return { success: !error, error: error?.message };
 }
 
+export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string, notes?: string) {
+  if (!propertyId || !title || !amount) {
+    return { success: false, error: 'Judul dan nominal biaya pengeluaran wajib diisi.' };
+  }
+
+  const { data, error } = await supabase.from('property_expenses').insert({
+    property_id: propertyId,
+    title,
+    category: category || 'Lainnya',
+    amount,
+    expense_date: expenseDate || new Date().toISOString().slice(0, 10),
+    notes: notes || ''
+  }).select();
+
+  if (!error) {
+    await supabase.from('dues_audit_logs').insert({
+      action_type: 'TAMBAH_BIAYA_KOS',
+      performed_by: 'Owner / Pengelola Kos',
+      details: `Menambah pengeluaran: "${title}" (${category}) sebesar Rp ${amount.toLocaleString('id-ID')}`
+    });
+
+    try {
+      revalidatePath('/owner');
+    } catch (e) {}
+  }
+
+  return { success: !error, data: data ? data[0] : null, error: error?.message };
+}
+
 export async function addPropertyExpenseWithReceipt(formData: FormData) {
   try {
     const property_id = formData.get('property_id') as string;
@@ -380,43 +409,20 @@ export async function addPropertyExpenseWithReceipt(formData: FormData) {
     }
 
     const fullNotes = receipt_path ? `${notes} [STRUK:${receipt_path}]` : notes;
-
-    const { data, error } = await supabase.from('property_expenses').insert({
-      property_id,
-      title,
-      category: category || 'Lainnya',
-      amount,
-      expense_date,
-      notes: fullNotes
-    }).select();
-
-    if (error) return { success: false, error: error.message };
-
-    // Catat log pengeluaran
-    await supabase.from('dues_audit_logs').insert({
-      action_type: 'TAMBAH_BIAYA_KOS',
-      performed_by: 'Pengelola / Owner Kos',
-      details: `Menambah pengeluaran: ${title} (${category}) sebesar Rp ${amount.toLocaleString('id-ID')}`
-    });
-
-    try {
-      revalidatePath('/owner');
-    } catch (e) {}
-
-    return { success: true, data: data ? data[0] : null };
+    return await addPropertyExpense(property_id, title, category, amount, expense_date, fullNotes);
   } catch (err: any) {
     return { success: false, error: err.message };
   }
 }
 
-export async function deletePropertyExpenseWithAudit(expenseId: string, title: string, amount: number) {
+export async function deletePropertyExpense(expenseId: string, title?: string, amount?: number) {
   const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
 
   if (!error) {
     await supabase.from('dues_audit_logs').insert({
       action_type: 'HAPUS_BIAYA_KOS',
-      performed_by: 'Pengelola / Owner Kos',
-      details: `Menghapus pengeluaran: "${title}" sebesar Rp ${amount.toLocaleString('id-ID')}`
+      performed_by: 'Owner / Pengelola Kos',
+      details: `Menghapus pengeluaran: "${title || 'Pengeluaran'}" ${amount ? `sebesar Rp ${amount.toLocaleString('id-ID')}` : ''}`
     });
 
     try {
@@ -425,6 +431,10 @@ export async function deletePropertyExpenseWithAudit(expenseId: string, title: s
   }
 
   return { success: !error, error: error?.message };
+}
+
+export async function deletePropertyExpenseWithAudit(expenseId: string, title: string, amount: number) {
+  return await deletePropertyExpense(expenseId, title, amount);
 }
 
 export async function getTenantPortalData(phoneInput: string) {
