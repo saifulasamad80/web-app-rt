@@ -176,7 +176,6 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     };
   }
 
-  // Cek apakah PIN cocok dengan salah satu properti miliknya
   const isPinValid = properties.some((p) => p.pin_code === pinInput);
 
   if (!isPinValid) {
@@ -187,7 +186,6 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     };
   }
 
-  // Kembalikan SEMUA properti yang terhubung dengan nomor HP tersebut
   return { success: true, properties, error: undefined };
 }
 
@@ -447,6 +445,7 @@ export async function deletePropertyExpenseWithAudit(expenseId: string, title: s
   return await deletePropertyExpense(expenseId, title, amount);
 }
 
+// MENDUKUNG MULTI-KAMAR SEWA OLEH 1 NOMOR WHATSAPP
 export async function getTenantPortalData(phoneInput: string) {
   if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
 
@@ -455,7 +454,7 @@ export async function getTenantPortalData(phoneInput: string) {
 
   const { data: tenantRecords, error: tenantErr } = await supabase
     .from('tenants')
-    .select('*')
+    .select('*, properties(*)')
     .or(`phone.ilike.%${suffix}%,phone.eq.${phoneInput.trim()},phone.eq.${rawClean}`)
     .order('created_at', { ascending: false });
 
@@ -470,18 +469,11 @@ export async function getTenantPortalData(phoneInput: string) {
     };
   }
 
-  const primary = tenantRecords[0];
+  // Cari semua kamar utama yang disewa nomor ini
+  const headRooms = tenantRecords.filter((t) => t.is_head);
+  const primary = headRooms.length > 0 ? headRooms[0] : tenantRecords[0];
 
-  let propertyData = null;
-  if (primary.property_id) {
-    const { data: propData } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('id', primary.property_id)
-      .single();
-    propertyData = propData;
-  }
-
+  // Ambil semua anggota keluarga dari household aktif
   let householdMembers = [primary];
   if (primary.household_id) {
     const { data: members } = await supabase
@@ -496,9 +488,21 @@ export async function getTenantPortalData(phoneInput: string) {
 
   return {
     success: true,
-    tenant: { ...primary, properties: propertyData },
+    tenant: primary,
+    allRooms: headRooms.length > 0 ? headRooms : [primary],
     household: householdMembers
   };
+}
+
+export async function getHouseholdMembersByHouseholdId(householdId: string) {
+  if (!householdId) return { success: false, members: [] };
+  const { data: members } = await supabase
+    .from('tenants')
+    .select('*')
+    .eq('household_id', householdId)
+    .order('is_head', { ascending: false });
+
+  return { success: true, members: members || [] };
 }
 
 export async function addMemberSusulan(formData: FormData) {

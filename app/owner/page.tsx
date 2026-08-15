@@ -83,6 +83,14 @@ function isPhoneMatch(phoneA?: string, phoneB?: string): boolean {
   return suffixA === suffixB;
 }
 
+// PARSER NOMOR KAMAR PRESISI: MENGAMBIL ANGKA SETELAH KATA "KAMAR" / "UNIT"
+function parseRoomNumber(roomStr?: string): number | null {
+  if (!roomStr) return null;
+  const match = roomStr.match(/(?:kamar|unit|no\.?)\s*(\d+)/i) || roomStr.match(/^(\d+)/);
+  if (match) return parseInt(match[1], 10);
+  return null;
+}
+
 function getThreeMonthStatus(paymentStatus?: string) {
   const today = new Date();
   const months = [];
@@ -481,10 +489,24 @@ export default function OwnerDashboard() {
     }
   };
 
-  const countAll = tenants.length;
-  const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE' || (t.status || '').toUpperCase() === 'VERIFIED').length;
+  // HITUNG FISIK OKUPANSI SECARA PRESISI (BERDASARKAN JUMLAH KAMAR FISIK UNIK YANG TERISI)
   const totalRooms = activeProperty?.total_rooms || 10;
-  const emptyRooms = Math.max(totalRooms - countActive, 0);
+  const occupiedRoomSet = new Set<string>();
+
+  tenants.forEach((t) => {
+    const st = (t.status || '').toUpperCase();
+    if (st === 'ACTIVE' || st === 'VERIFIED' || st === 'PENDING') {
+      const parsedNum = parseRoomNumber(t.room_number);
+      if (parsedNum !== null) {
+        occupiedRoomSet.add(`room-${parsedNum}`);
+      } else if (t.room_number) {
+        occupiedRoomSet.add(t.room_number.trim().toLowerCase());
+      }
+    }
+  });
+
+  const countActiveRooms = occupiedRoomSet.size;
+  const emptyRooms = Math.max(totalRooms - countActiveRooms, 0);
 
   const totalRentCollected = tenants
     .filter((t) => (t.payment_status || '').toUpperCase() === 'PAID')
@@ -502,7 +524,7 @@ export default function OwnerDashboard() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH */}
+        {/* HEADER BRANDING CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -696,7 +718,9 @@ export default function OwnerDashboard() {
                       <h3 className="text-[1.6rem] font-black text-slate-950 mt-1">
                         Rp {netProfit.toLocaleString('id-ID')}
                       </h3>
-                      <p className="text-[0.75rem] text-slate-800 font-bold">Okupansi: {Math.round((countActive / totalRooms) * 100)}% ({countActive}/{totalRooms} Terisi)</p>
+                      <p className="text-[0.75rem] text-slate-800 font-bold">
+                        Okupansi: {Math.round((countActiveRooms / totalRooms) * 100)}% ({countActiveRooms}/{totalRooms} Terisi)
+                      </p>
                     </div>
                   ) : (
                     <div className="bg-slate-200 text-slate-600 p-6 rounded-3xl shadow-sm space-y-1 border-2 border-slate-300 flex flex-col justify-center items-center text-center">
@@ -960,7 +984,7 @@ export default function OwnerDashboard() {
                   </div>
                 )}
 
-                {/* TAB 3: MATRIX KAMAR */}
+                {/* TAB 3: MATRIX KAMAR DENGAN PENCOCOKAN PRESISI */}
                 {activeTab === 'matrix' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="border-b pb-3">
@@ -972,8 +996,19 @@ export default function OwnerDashboard() {
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
                       {Array.from({ length: activeProperty.total_rooms || 10 }).map((_, idx) => {
-                        const roomName = `Kamar ${String(idx + 1).padStart(2, '0')}`;
-                        const occupant = tenants.find((t) => (t.room_number || '').toLowerCase().includes(roomName.toLowerCase()) || (t.room_number || '').includes(String(idx + 1)));
+                        const targetRoomNum = idx + 1;
+                        const roomLabel = `Kamar ${String(targetRoomNum).padStart(2, '0')}`;
+
+                        // PENCOCOKAN PRESISI: HANYA COCOK JIKA ANGKA KAMAR TEPAT SAMA DENGAN targetRoomNum
+                        const occupant = tenants.find((t) => {
+                          const pNum = parseRoomNumber(t.room_number);
+                          if (pNum !== null) {
+                            return pNum === targetRoomNum;
+                          }
+                          // Fallback jika kamar ditulis string murni
+                          const raw = (t.room_number || '').trim().toLowerCase();
+                          return raw === roomLabel.toLowerCase() || raw === `kamar ${targetRoomNum}`.toLowerCase();
+                        });
 
                         return (
                           <div
@@ -985,7 +1020,7 @@ export default function OwnerDashboard() {
                             }`}
                           >
                             <div className="flex justify-between items-center">
-                              <span className="font-black text-[0.85rem]">{roomName}</span>
+                              <span className="font-black text-[0.85rem]">{roomLabel}</span>
                               <span className={`text-[0.65rem] font-extrabold px-2 py-0.5 rounded-full ${
                                 occupant ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
                               }`}>
@@ -1018,7 +1053,7 @@ export default function OwnerDashboard() {
 
       </div>
 
-      {/* 1. MODAL POSTER CETAK RESMI QR CODE (AKTIF) */}
+      {/* MODAL POSTER CETAK RESMI QR CODE */}
       {posterProp && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
@@ -1086,7 +1121,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 2. MODAL TATA TERTIB HUNIAN (AKTIF & BISA DISUNTING OWNER) */}
+      {/* MODAL TATA TERTIB HUNIAN */}
       {editingRulesProp && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
@@ -1132,7 +1167,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 3. MODAL EDIT PROPERTI, PENGELOLA, & PIN UNIT */}
+      {/* MODAL EDIT PROPERTI & PIN UNIT */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -1288,7 +1323,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 4. MODAL INPUT PENGELUARAN */}
+      {/* MODAL INPUT PENGELUARAN */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -1371,7 +1406,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 5. MODAL EDIT PENYEWA & PENETAPAN HARGA SEWA KAMAR */}
+      {/* MODAL EDIT PENYEWA */}
       {editingTenant && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -1413,7 +1448,6 @@ export default function OwnerDashboard() {
                 />
               </div>
 
-              {/* KOLOM HARGA SEWA KHUSUS KAMAR INI */}
               <div className="bg-emerald-50 p-3 rounded-xl border-2 border-emerald-300 space-y-1">
                 <label className="block font-black text-emerald-950 text-[0.75rem]">
                   💰 Harga Sewa Kamar Ini (Rp) *
@@ -1426,9 +1460,6 @@ export default function OwnerDashboard() {
                   onChange={(e) => setTenantRentPrice(e.target.value)}
                   className="w-full p-2.5 border-2 border-emerald-400 rounded-xl font-mono font-black text-emerald-950 bg-white text-base"
                 />
-                <p className="text-[0.65rem] text-emerald-800 font-medium">
-                  Nominal ini langsung tampil di tagihan portal warga & pesan WhatsApp.
-                </p>
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t">
