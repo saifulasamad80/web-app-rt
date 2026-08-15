@@ -12,8 +12,8 @@ const supabase = createClient(
 export default function LoginPage() {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
 
-  const [email, setEmail] = useState('ajipsas@gmail.com');
-  const [password, setPassword] = useState('admin12345');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -86,7 +86,7 @@ export default function LoginPage() {
           </div>
         </header>
 
-        {/* CARD LOGIN CERAH */}
+        {/* CARD LOGIN CERAH TANPA PREFILLED DATA */}
         <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
           <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">
             🏛️
@@ -111,6 +111,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 required
+                placeholder="nama@gmail.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-3.5 border-2 border-slate-200 rounded-2xl font-bold bg-white text-[0.95rem] outline-none focus:border-emerald-600 font-mono"
@@ -140,7 +141,7 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || !password}
+              disabled={loading || !email || !password}
               className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[1rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
             >
               {loading ? 'Memverifikasi Akun...' : 'Masuk ke Dasbor RT →'}
@@ -156,7 +157,7 @@ export default function LoginPage() {
 
       </div>
 
-      {/* MODAL BANTUAN LUPA SANDI (MENGHUBUNGI SUPER ADMIN) */}
+      {/* MODAL BANTUAN LUPA SANDI */}
       {showHelpModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -174,7 +175,7 @@ export default function LoginPage() {
               <div className="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 text-amber-950 space-y-1.5">
                 <p className="font-bold">🛡️ Kebijakan Keamanan Sistem RT:</p>
                 <p className="text-[0.75rem] text-slate-700 leading-relaxed font-medium">
-                  Demi perlindungan data kependudukan warga (UU PDP No. 27/2022), hak reset kata sandi pengurus dibatasi secara ketat dan <b>hanya dapat dilakukan oleh Super Admin RT</b> melalui Dasbor Operasional Internal.
+                  Hak reset kata sandi pengurus dibatasi secara ketat dan <b>hanya dapat dilakukan oleh Super Admin RT</b> melalui Dasbor Operasional Internal.
                 </p>
               </div>
 

@@ -177,7 +177,7 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     return {
       success: false,
       properties: [],
-      error: '🔒 PIN 4-Digit yang Anda masukkan salah. Hubungi RT jika lupa PIN.'
+      error: '🔒 PIN 4-Digit yang Anda masukkan salah untuk unit ini.'
     };
   }
 
@@ -354,35 +354,76 @@ export async function deleteProperty(propertyId: string) {
   return { success: !error, error: error?.message };
 }
 
-export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string) {
-  if (!propertyId || !title || !amount) {
-    return { success: false, error: 'Judul dan nominal biaya pengeluaran wajib diisi.' };
-  }
+export async function addPropertyExpenseWithReceipt(formData: FormData) {
+  try {
+    const property_id = formData.get('property_id') as string;
+    const title = formData.get('title') as string;
+    const category = formData.get('category') as string;
+    const amount = parseInt((formData.get('amount') as string || '0').replace(/\D/g, ''), 10) || 0;
+    const expense_date = (formData.get('expense_date') as string) || new Date().toISOString().slice(0, 10);
+    const notes = (formData.get('notes') as string) || '';
 
-  const { data, error } = await supabase.from('property_expenses').insert({
-    property_id: propertyId,
-    title,
-    category: category || 'Lainnya',
-    amount,
-    expense_date: expenseDate || new Date().toISOString().slice(0, 10)
-  }).select();
+    let receipt_path = '';
+    const receiptFile = formData.get('receipt');
+    if (receiptFile && receiptFile instanceof File && receiptFile.size > 0) {
+      const fileExt = receiptFile.name.split('.').pop() || 'jpg';
+      const fileName = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const buffer = Buffer.from(await receiptFile.arrayBuffer());
 
-  if (!error) {
+      const { data: upData, error: upErr } = await supabase.storage
+        .from('ktp-documents')
+        .upload(fileName, buffer, { contentType: receiptFile.type || 'image/jpeg', upsert: true });
+
+      if (!upErr && upData) {
+        receipt_path = upData.path;
+      }
+    }
+
+    const fullNotes = receipt_path ? `${notes} [STRUK:${receipt_path}]` : notes;
+
+    const { data, error } = await supabase.from('property_expenses').insert({
+      property_id,
+      title,
+      category: category || 'Lainnya',
+      amount,
+      expense_date,
+      notes: fullNotes
+    }).select();
+
+    if (error) return { success: false, error: error.message };
+
+    // Catat log pengeluaran
+    await supabase.from('dues_audit_logs').insert({
+      action_type: 'TAMBAH_BIAYA_KOS',
+      performed_by: 'Pengelola / Owner Kos',
+      details: `Menambah pengeluaran: ${title} (${category}) sebesar Rp ${amount.toLocaleString('id-ID')}`
+    });
+
     try {
       revalidatePath('/owner');
     } catch (e) {}
-  }
 
-  return { success: !error, data: data ? data[0] : null, error: error?.message };
+    return { success: true, data: data ? data[0] : null };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
 }
 
-export async function deletePropertyExpense(expenseId: string) {
+export async function deletePropertyExpenseWithAudit(expenseId: string, title: string, amount: number) {
   const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
+
   if (!error) {
+    await supabase.from('dues_audit_logs').insert({
+      action_type: 'HAPUS_BIAYA_KOS',
+      performed_by: 'Pengelola / Owner Kos',
+      details: `Menghapus pengeluaran: "${title}" sebesar Rp ${amount.toLocaleString('id-ID')}`
+    });
+
     try {
       revalidatePath('/owner');
     } catch (e) {}
   }
+
   return { success: !error, error: error?.message };
 }
 
@@ -756,6 +797,15 @@ export async function getDocumentSignedUrl(filePath: string) {
   return { success: true, url: data.signedUrl };
 }
 
+export async function getDuesList() {
+  const { data, error } = await supabase
+    .from('dues')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  return { success: !error, dues: data || [], error: error?.message };
+}
+
 export async function getDuesAuditLogs() {
   const { data, error } = await supabase
     .from('dues_audit_logs')
@@ -766,7 +816,6 @@ export async function getDuesAuditLogs() {
   return { success: !error, logs: data || [], error: error?.message };
 }
 
-// FUNGSI SIMPAN IURAN KAS RT YANG SUDAH MENYESUAIKAN SKEMA TABEL DUES (KOLOM PERIOD WAJIB)
 export async function recordRtDues(
   payerName: string,
   blockNumber: string,
@@ -809,4 +858,22 @@ export async function recordRtDues(
   } catch (e) {}
 
   return { success: true, data: data ? data[0] : null };
+}
+
+export async function deleteRtDues(duesId: string, payerName: string, amount: number) {
+  const { error } = await supabase.from('dues').delete().eq('id', duesId);
+
+  if (!error) {
+    await supabase.from('dues_audit_logs').insert({
+      action_type: 'HAPUS_KAS',
+      performed_by: 'Pengurus RT',
+      details: `Menghapus transaksi iuran Rp ${amount.toLocaleString('id-ID')} dari: ${payerName}`
+    });
+
+    try {
+      revalidatePath('/rt');
+    } catch (e) {}
+  }
+
+  return { success: !error, error: error?.message };
 }

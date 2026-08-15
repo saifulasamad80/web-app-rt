@@ -11,8 +11,10 @@ import {
   updateProperty,
   getDocumentSignedUrl,
   deleteTenant,
+  getDuesList,
   getDuesAuditLogs,
   recordRtDues,
+  deleteRtDues,
   getRtOfficers,
   addRtOfficer,
   updateRtOfficer,
@@ -35,6 +37,7 @@ export default function RtDashboardPage() {
   const [tenants, setTenants] = useState<any[]>([]);
   const [properties, setProperties] = useState<any[]>([]);
   const [officers, setOfficers] = useState<any[]>([]);
+  const [duesList, setDuesList] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -64,10 +67,10 @@ export default function RtDashboardPage() {
   const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345');
   const [savingOfficer, setSavingOfficer] = useState(false);
 
-  // Form Input Iuran Kas RT (Dropdown Nama, Dropdown Unit, & Dropdown Tahun)
+  // Form Input Iuran Kas RT
   const [payerName, setPayerName] = useState('');
   const [unitRoom, setUnitRoom] = useState('');
-  const [duesAmount, setDuesAmount] = useState('50000');
+  const [duesAmount, setDuesAmount] = useState('30000');
   const [duesMonth, setDuesMonth] = useState('Agustus');
   const [duesYear, setDuesYear] = useState('2026');
   const [savingDues, setSavingDues] = useState(false);
@@ -95,16 +98,18 @@ export default function RtDashboardPage() {
 
   const loadAllData = async () => {
     setLoadingData(true);
-    const [tRes, pRes, oRes, aRes] = await Promise.all([
+    const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
       getAllTenantsForRt(),
       getPublicPropertiesList(),
       getRtOfficers(),
+      getDuesList(),
       getDuesAuditLogs(),
     ]);
 
     setTenants(tRes.tenants || []);
     setProperties(pRes.properties || []);
     setOfficers(oRes.officers || []);
+    setDuesList(dRes.dues || []);
     setAuditLogs(aRes.logs || []);
     setLoadingData(false);
   };
@@ -264,7 +269,8 @@ export default function RtDashboardPage() {
     const res = await recordRtDues(payerName, unitRoom, parsedAmount, duesMonth, duesYear, 'Pengurus RT');
     setSavingDues(false);
 
-    if (res.success) {
+    if (res.success && res.data) {
+      setDuesList([res.data, ...duesList]);
       setCopyMsg(`Iuran Rp ${parsedAmount.toLocaleString('id-ID')} dari ${payerName} berhasil dicatat.`);
       setTimeout(() => setCopyMsg(''), 3500);
       setPayerName('');
@@ -273,6 +279,15 @@ export default function RtDashboardPage() {
       setAuditLogs(aRes.logs || []);
     } else {
       alert('Gagal mencatat iuran: ' + res.error);
+    }
+  };
+
+  const handleDeleteDuesRow = async (id: string, name: string, amount: number) => {
+    if (confirm(`Batalkan / Hapus catatan iuran Rp ${amount.toLocaleString('id-ID')} dari ${name}?`)) {
+      setDuesList(duesList.filter((d) => d.id !== id));
+      await deleteRtDues(id, name, amount);
+      const aRes = await getDuesAuditLogs();
+      setAuditLogs(aRes.logs || []);
     }
   };
 
@@ -307,6 +322,8 @@ export default function RtDashboardPage() {
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
   const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url)).length;
+
+  const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   return (
     <main
@@ -432,7 +449,7 @@ export default function RtDashboardPage() {
                 : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
             }`}
           >
-            💰 Catat Iuran Kas RT
+            💰 Catat Iuran Kas RT ({duesList.length})
           </button>
 
           <button
@@ -635,8 +652,8 @@ export default function RtDashboardPage() {
                       <span className="text-[0.7rem] font-black px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-full uppercase">
                         {prop.type} • {prop.total_rooms || 10} Kamar
                       </span>
-                      <span className="text-[0.75rem] font-mono font-black text-amber-900 bg-amber-200 px-2.5 py-0.5 rounded-lg">
-                        PIN: {prop.pin_code || '1234'}
+                      <span className="text-[0.75rem] font-mono font-black text-amber-900 bg-amber-200 px-2.5 py-0.5 rounded-lg border border-amber-300">
+                        PIN AKTIF: {prop.pin_code || '1234'}
                       </span>
                     </div>
 
@@ -743,109 +760,182 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 4: CATAT IURAN KAS RT (DROPDOWN NAMA, DROPDOWN UNIT, DROPDOWN TAHUN) */}
+        {/* TAB 4: CATAT & TABEL RIWAYAT IURAN KAS RT */}
         {activeTab === 'kas' && (
-          <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-            <div className="border-b pb-3">
-              <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                Pencatatan Iuran Kas Lingkungan RT
-              </h3>
-              <p className="text-[0.75rem] text-slate-500">Catat pemasukan iuran sampah, keamanan, dan kas RT dari warga atau pemilik kos.</p>
+          <div className="space-y-5">
+            {/* HERO KAS TERKUMPUL */}
+            <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg flex justify-between items-center">
+              <div>
+                <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
+                  TOTAL KAS MASUK RT
+                </span>
+                <h3 className="text-[1.8rem] font-black text-white mt-1">
+                  Rp {totalKasTerkumpul.toLocaleString('id-ID')}
+                </h3>
+                <p className="text-[0.75rem] text-emerald-100 font-medium">Dari {duesList.length} total transaksi iuran tercatat</p>
+              </div>
             </div>
 
-            <form onSubmit={handleRecordDuesSubmit} className="max-w-lg space-y-3 text-[0.8rem]">
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">Nama Pembayar / Warga *</label>
-                <select
-                  required
-                  value={payerName}
-                  onChange={(e) => setPayerName(e.target.value)}
-                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white text-slate-900"
-                >
-                  <option value="">-- Pilih Nama Warga / Pemilik --</option>
-                  {tenants.map((t) => (
-                    <option key={t.id} value={t.name}>{t.name} (Warga - Unit: {t.room_number || 'Kamar'})</option>
-                  ))}
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.owner_name || p.name}>
-                      {p.owner_name || p.name} (Pemilik - {p.name})
-                    </option>
-                  ))}
-                  {officers.map((o) => (
-                    <option key={o.id} value={o.full_name}>{o.full_name} (Pengurus RT - {o.role})</option>
-                  ))}
-                </select>
+            {/* FORM INPUT IURAN */}
+            <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+              <div className="border-b pb-3">
+                <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                  Pencatatan Iuran Kas Lingkungan RT Baru
+                </h3>
+                <p className="text-[0.75rem] text-slate-500">Catat pemasukan iuran sampah, keamanan, dan kas RT dari warga atau pemilik kos.</p>
               </div>
 
-              {/* DROPDOWN NOMOR RUMAH / UNIT KOS */}
-              <div>
-                <label className="block font-bold text-slate-800 mb-1">Nomor Rumah / Unit Kos *</label>
-                <select
-                  required
-                  value={unitRoom}
-                  onChange={(e) => setUnitRoom(e.target.value)}
-                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white text-slate-900"
-                >
-                  <option value="">-- Pilih Unit Properti / Kamar / Blok --</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.name}>{p.name} ({p.type})</option>
-                  ))}
-                  {tenants.filter(t => t.room_number).map((t) => (
-                    <option key={`room-${t.id}`} value={`${t.properties?.name || 'Unit'} - ${t.room_number}`}>
-                      {t.room_number} ({t.name} - {t.properties?.name || 'Unit'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
+              <form onSubmit={handleRecordDuesSubmit} className="max-w-lg space-y-3 text-[0.8rem]">
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">Nominal (Rp) *</label>
-                  <input
-                    type="text"
+                  <label className="block font-bold text-slate-800 mb-1">Nama Pembayar / Warga *</label>
+                  <select
                     required
-                    value={duesAmount}
-                    onChange={(e) => setDuesAmount(e.target.value)}
-                    className="w-full p-3 border-2 border-slate-200 rounded-2xl font-mono font-bold bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-800 mb-1">Bulan *</label>
-                  <select
-                    value={duesMonth}
-                    onChange={(e) => setDuesMonth(e.target.value)}
-                    className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold"
+                    value={payerName}
+                    onChange={(e) => setPayerName(e.target.value)}
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white text-slate-900"
                   >
-                    {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((m) => (
-                      <option key={m} value={m}>{m}</option>
+                    <option value="">-- Pilih Nama Warga / Pemilik --</option>
+                    {tenants.map((t) => (
+                      <option key={t.id} value={t.name}>{t.name} (Warga - Unit: {t.room_number || 'Kamar'})</option>
+                    ))}
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.owner_name || p.name}>
+                        {p.owner_name || p.name} (Pemilik - {p.name})
+                      </option>
+                    ))}
+                    {officers.map((o) => (
+                      <option key={o.id} value={o.full_name}>{o.full_name} (Pengurus RT - {o.role})</option>
                     ))}
                   </select>
                 </div>
 
-                {/* DROPDOWN TAHUN */}
                 <div>
-                  <label className="block font-bold text-slate-800 mb-1">Tahun *</label>
+                  <label className="block font-bold text-slate-800 mb-1">Nomor Rumah / Unit Kos *</label>
                   <select
-                    value={duesYear}
-                    onChange={(e) => setDuesYear(e.target.value)}
-                    className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold font-mono"
+                    required
+                    value={unitRoom}
+                    onChange={(e) => setUnitRoom(e.target.value)}
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white text-slate-900"
                   >
-                    {['2025', '2026', '2027', '2028', '2029', '2030'].map((y) => (
-                      <option key={y} value={y}>{y}</option>
+                    <option value="">-- Pilih Unit Properti / Kamar / Blok --</option>
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.name}>{p.name} ({p.type})</option>
+                    ))}
+                    {tenants.filter(t => t.room_number).map((t) => (
+                      <option key={`room-${t.id}`} value={`${t.properties?.name || 'Unit'} - ${t.room_number}`}>
+                        {t.room_number} ({t.name} - {t.properties?.name || 'Unit'})
+                      </option>
                     ))}
                   </select>
                 </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">Nominal (Rp) *</label>
+                    <input
+                      type="text"
+                      required
+                      value={duesAmount}
+                      onChange={(e) => setDuesAmount(e.target.value)}
+                      className="w-full p-3 border-2 border-slate-200 rounded-2xl font-mono font-bold bg-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">Bulan *</label>
+                    <select
+                      value={duesMonth}
+                      onChange={(e) => setDuesMonth(e.target.value)}
+                      className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold"
+                    >
+                      {['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'].map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-800 mb-1">Tahun *</label>
+                    <select
+                      value={duesYear}
+                      onChange={(e) => setDuesYear(e.target.value)}
+                      className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold font-mono"
+                    >
+                      {['2025', '2026', '2027', '2028', '2029', '2030'].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingDues}
+                  className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.85rem] rounded-2xl shadow cursor-pointer disabled:bg-slate-300"
+                >
+                  {savingDues ? 'Menyimpan...' : '➕ Simpan Transaksi Kas RT'}
+                </button>
+              </form>
+            </div>
+
+            {/* TABEL DAFTAR TRANSAKSI KAS MASUK */}
+            <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+              <div className="border-b pb-3">
+                <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                  Daftar Riwayat Transaksi Iuran Warga Masuk ({duesList.length})
+                </h3>
               </div>
 
-              <button
-                type="submit"
-                disabled={savingDues}
-                className="w-full py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.85rem] rounded-2xl shadow cursor-pointer disabled:bg-slate-300"
-              >
-                {savingDues ? 'Menyimpan...' : '➕ Simpan Transaksi Kas RT'}
-              </button>
-            </form>
+              {duesList.length === 0 ? (
+                <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                  <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada transaksi iuran kas yang tercatat.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-[0.8rem]">
+                    <thead>
+                      <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                        <th className="p-3">Tanggal Catat</th>
+                        <th className="p-3">Nama Pembayar</th>
+                        <th className="p-3">Unit / Kamar</th>
+                        <th className="p-3">Periode</th>
+                        <th className="p-3">Nominal (Rp)</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {duesList.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3 font-mono text-[0.75rem] text-slate-600">
+                            {d.created_at ? new Date(d.created_at).toLocaleDateString('id-ID') : '-'}
+                          </td>
+                          <td className="p-3 font-black text-slate-900">{d.payer_name || d.resident_name}</td>
+                          <td className="p-3 font-semibold text-emerald-900">{d.block_number || d.house_number || '-'}</td>
+                          <td className="p-3 font-medium text-slate-800">{d.period || `${d.month} ${d.year}`}</td>
+                          <td className="p-3 font-mono font-black text-slate-900">
+                            Rp {Number(d.amount || 0).toLocaleString('id-ID')}
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 font-black text-[0.65rem] rounded-full border border-emerald-300 uppercase">
+                              {d.status || 'PAID'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <button
+                              onClick={() => handleDeleteDuesRow(d.id, d.payer_name || d.resident_name, d.amount)}
+                              className="px-2.5 py-1 bg-slate-200 hover:bg-red-100 hover:text-red-700 text-slate-700 text-[0.7rem] font-bold rounded-lg cursor-pointer"
+                            >
+                              🗑️ Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -856,7 +946,7 @@ export default function RtDashboardPage() {
               <h3 className="text-[1rem] font-black text-slate-900 uppercase">
                 Jejak Audit Iuran Kas RT (Audit Trail)
               </h3>
-              <p className="text-[0.75rem] text-slate-500">Mencatat transparansi setiap transaksi kas masuk & reset sandi pengurus.</p>
+              <p className="text-[0.75rem] text-slate-500">Mencatat transparansi setiap transaksi kas masuk, perubahan kas, & reset sandi pengurus.</p>
             </div>
 
             {auditLogs.length === 0 ? (
