@@ -299,7 +299,7 @@ export default function CheckinPage() {
                   required
                   placeholder="08123456789"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
                   className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-mono text-[0.95rem] focus:border-emerald-600 bg-white"
                 />
                 <p className="text-[0.75rem] text-slate-500 mt-1 font-medium">Nomor ini menjadi kunci login Dasbor Anda.</p>

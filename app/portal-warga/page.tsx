@@ -147,7 +147,7 @@ export default function TenantPortalPage() {
                   required
                   placeholder="Contoh: 082113546883"
                   value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
+                  onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ""))}
                   className="w-full p-3.5 border-2 border-slate-200 focus:border-emerald-600 rounded-2xl outline-none font-mono text-[1rem] font-bold bg-white"
                 />
               </div>
