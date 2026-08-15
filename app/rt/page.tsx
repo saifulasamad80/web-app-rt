@@ -54,7 +54,7 @@ export default function RtDashboardPage() {
   const [savingPin, setSavingPin] = useState(false);
   const [copyMsg, setCopyMsg] = useState('');
 
-  // Modal Reset Sandi Pengurus oleh Super Admin
+  // Modal Reset Sandi Pengurus
   const [resetOfficerTarget, setResetOfficerTarget] = useState<any | null>(null);
   const [officerNewPassword, setOfficerNewPassword] = useState('');
   const [resettingPassword, setResettingPassword] = useState(false);
@@ -69,7 +69,7 @@ export default function RtDashboardPage() {
   const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345');
   const [savingOfficer, setSavingOfficer] = useState(false);
 
-  // Form Input Iuran Kas RT
+  // Form Input Iuran Kas RT (Dropdown Nama Warga & Tahun)
   const [payerName, setPayerName] = useState('');
   const [blockNumber, setBlockNumber] = useState('');
   const [duesAmount, setDuesAmount] = useState('50000');
@@ -80,7 +80,6 @@ export default function RtDashboardPage() {
   const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
   const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
-  // AUTH GUARD: Periksa Sesi Login Pengurus RT
   useEffect(() => {
     async function checkAuthAndLoad() {
       const { data } = await supabase.auth.getSession();
@@ -302,14 +301,14 @@ export default function RtDashboardPage() {
     const st = (t.status || '').toUpperCase();
     if (filterStatus === 'PENDING') return matchesSearch && st === 'PENDING';
     if (filterStatus === 'VERIFIED') return matchesSearch && (st === 'VERIFIED' || st === 'ACTIVE');
-    if (filterStatus === 'DOC_PENDING') return matchesSearch && t.marital_status === 'Menikah' && !t.marriage_doc_url;
+    if (filterStatus === 'DOC_PENDING') return matchesSearch && t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
 
     return matchesSearch;
   });
 
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
-  const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && !t.marriage_doc_url).length;
+  const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url)).length;
 
   return (
     <main
@@ -450,7 +449,7 @@ export default function RtDashboardPage() {
           </button>
         </div>
 
-        {/* TAB 1: BUKU REGISTER WARGA */}
+        {/* TAB 1: BUKU REGISTER WARGA (3 DOKUMEN RESMI: KTP, BUKU NIKAH, KK) */}
         {activeTab === 'warga' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
@@ -509,7 +508,7 @@ export default function RtDashboardPage() {
                       <th className="p-3">Identitas & No WA</th>
                       <th className="p-3">Lokasi Unit & Kamar</th>
                       <th className="p-3">Status Pernikahan</th>
-                      <th className="p-3">Dokumen Resmi</th>
+                      <th className="p-3">3 Dokumen Resmi (KTP, Nikah, KK)</th>
                       <th className="p-3">Status RT</th>
                       <th className="p-3 text-right">Aksi RT</th>
                     </tr>
@@ -517,7 +516,7 @@ export default function RtDashboardPage() {
                   <tbody className="divide-y divide-slate-200">
                     {filteredTenants.map((t) => {
                       const st = (t.status || '').toUpperCase();
-                      const isPendingDoc = t.marital_status === 'Menikah' && !t.marriage_doc_url;
+                      const isPendingDoc = t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
 
                       return (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -543,7 +542,8 @@ export default function RtDashboardPage() {
                             )}
                           </td>
 
-                          <td className="p-3 space-x-1">
+                          {/* 3 DOKUMEN RESMI (HANYA RT & SUPER ADMIN YANG BISA LIHAT) */}
+                          <td className="p-3 space-x-1 whitespace-nowrap">
                             {t.ktp_path ? (
                               <button
                                 onClick={() => handleViewDocument(t.ktp_path, `KTP: ${t.name}`)}
@@ -555,13 +555,26 @@ export default function RtDashboardPage() {
                               <span className="text-[0.7rem] text-slate-400 font-medium">KTP -</span>
                             )}
 
-                            {t.marriage_doc_url && (
+                            {t.marriage_doc_url ? (
                               <button
-                                onClick={() => handleViewDocument(t.marriage_doc_url, `Buku Nikah / KK: ${t.name}`)}
+                                onClick={() => handleViewDocument(t.marriage_doc_url, `Buku Nikah: ${t.name}`)}
                                 className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[0.7rem] rounded-lg font-black cursor-pointer"
                               >
-                                📎 Buku Nikah/KK
+                                📎 Nikah
                               </button>
+                            ) : (
+                              <span className="text-[0.7rem] text-slate-400 font-medium">Nikah -</span>
+                            )}
+
+                            {t.kk_doc_url ? (
+                              <button
+                                onClick={() => handleViewDocument(t.kk_doc_url, `Kartu Keluarga: ${t.name}`)}
+                                className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[0.7rem] rounded-lg font-bold cursor-pointer"
+                              >
+                                📁 KK
+                              </button>
+                            ) : (
+                              <span className="text-[0.7rem] text-slate-400 font-medium">KK -</span>
                             )}
                           </td>
 
@@ -585,7 +598,7 @@ export default function RtDashboardPage() {
                             {st !== 'REJECTED' && (
                               <button
                                 onClick={() => handleVerifyTenant(t.id, 'rejected')}
-                                className="px-2 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-[0.7rem] font-bold rounded-lg cursor-pointer"
+                                className="px-2.5 py-1 bg-red-100 hover:bg-red-200 text-red-800 text-[0.7rem] font-bold rounded-lg cursor-pointer"
                               >
                                 ✗ Tolak
                               </button>
@@ -653,7 +666,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: ⚙️ KELOLA PENGURUS RT & EDIT NOMOR HP */}
+        {/* TAB 3: ⚙️ KELOLA PENGURUS RT */}
         {activeTab === 'pengurus' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -733,27 +746,38 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 4: CATAT IURAN KAS RT */}
+        {/* TAB 4: CATAT IURAN KAS RT (DENGAN DROPDOWN NAMA & TAHUN) */}
         {activeTab === 'kas' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="border-b pb-3">
               <h3 className="text-[1rem] font-black text-slate-900 uppercase">
                 Pencatatan Iuran Kas Lingkungan RT
               </h3>
-              <p className="text-[0.75rem] text-slate-500">Catat pemasukan iuran sampah, keamanan, dan kas RT dari warga atau pemilik kos.</p>
+              <p className="text-[0.75rem] text-slate-500">Catat pemasukan iuran sampah, keamanan, dan kas RT.</p>
             </div>
 
             <form onSubmit={handleRecordDuesSubmit} className="max-w-lg space-y-3 text-[0.8rem]">
               <div>
                 <label className="block font-bold text-slate-800 mb-1">Nama Pembayar / Warga *</label>
-                <input
-                  type="text"
+                <select
                   required
-                  placeholder="Contoh: Saiful Anwar / Pemilik Kos Melati"
                   value={payerName}
                   onChange={(e) => setPayerName(e.target.value)}
-                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white"
-                />
+                  className="w-full p-3 border-2 border-slate-200 rounded-2xl outline-none font-bold bg-white text-slate-900"
+                >
+                  <option value="">-- Pilih Nama Warga / Pemilik / Pengelola --</option>
+                  {tenants.map((t) => (
+                    <option key={t.id} value={t.name}>{t.name} (Warga - Unit: {t.room_number || 'Kamar'})</option>
+                  ))}
+                  {properties.map((p) => (
+                    <option key={p.id} value={p.owner_name || p.name}>
+                      {p.owner_name || p.name} (Pemilik - {p.name})
+                    </option>
+                  ))}
+                  {officers.map((o) => (
+                    <option key={o.id} value={o.full_name}>{o.full_name} (Pengurus RT - {o.role})</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -794,13 +818,15 @@ export default function RtDashboardPage() {
 
                 <div>
                   <label className="block font-bold text-slate-800 mb-1">Tahun *</label>
-                  <input
-                    type="text"
-                    required
+                  <select
                     value={duesYear}
                     onChange={(e) => setDuesYear(e.target.value)}
-                    className="w-full p-3 border-2 border-slate-200 rounded-2xl font-mono font-bold bg-white"
-                  />
+                    className="w-full p-3 border-2 border-slate-200 rounded-2xl bg-white font-bold font-mono"
+                  >
+                    {['2025', '2026', '2027', '2028', '2029', '2030'].map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -917,7 +943,7 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL TAMBAH & EDIT PENGURUS RT (EMAIL WAJIB LOGIN) */}
+      {/* MODAL TAMBAH & EDIT PENGURUS RT */}
       {(showAddOfficerModal || editingOfficer) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -970,7 +996,6 @@ export default function RtDashboardPage() {
                   onChange={(e) => setOfficerPhone(e.target.value.replace(/\D/g, ''))}
                   className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono font-bold"
                 />
-                <p className="text-[0.7rem] text-slate-500 mt-0.5">Ubah kolom ini jika pengurus mengganti nomor HP.</p>
               </div>
 
               <div>

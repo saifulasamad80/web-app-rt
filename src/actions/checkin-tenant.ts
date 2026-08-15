@@ -67,7 +67,7 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
 
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err?.message || 'Terjadi kesalahan sistem saat mereset kata sandi.' };
+    return { success: false, error: err?.message || 'Terjadi kesalahan sistem.' };
   }
 }
 
@@ -98,7 +98,6 @@ export async function addRtOfficer(fullName: string, role: string, phone: string
     return { success: false, error: 'Nama lengkap, nomor WhatsApp, dan email wajib diisi.' };
   }
 
-  // 1. Buat akun login auth jika ada password
   if (initialPassword && initialPassword.length >= 6) {
     try {
       await supabase.auth.admin.createUser({
@@ -110,7 +109,6 @@ export async function addRtOfficer(fullName: string, role: string, phone: string
     } catch (e) {}
   }
 
-  // 2. Simpan profil
   const { data, error } = await supabase.from('profiles').insert({
     full_name: fullName,
     role,
@@ -528,6 +526,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
+    // Buku Nikah
     const marriageDoc = formData.get('marriage_doc');
     let marriage_doc_url = '';
     if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
@@ -541,6 +540,23 @@ export async function submitMultiTenantsStrict(formData: FormData) {
 
       if (!uploadDocErr && uploadDocData) {
         marriage_doc_url = uploadDocData.path;
+      }
+    }
+
+    // Kartu Keluarga (KK)
+    const kkDoc = formData.get('kk_doc');
+    let kk_doc_url = '';
+    if (kkDoc && kkDoc instanceof File && kkDoc.size > 0) {
+      const fileExt = kkDoc.name.split('.').pop() || 'jpg';
+      const fileName = `kk_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const buffer = Buffer.from(await kkDoc.arrayBuffer());
+
+      const { data: uploadKkData, error: uploadKkErr } = await supabase.storage
+        .from('ktp-documents')
+        .upload(fileName, buffer, { contentType: kkDoc.type || 'image/jpeg', upsert: true });
+
+      if (!uploadKkErr && uploadKkData) {
+        kk_doc_url = uploadKkData.path;
       }
     }
 
@@ -597,6 +613,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
         payment_status: 'UNPAID',
         ktp_path: member_ktp_path,
         marriage_doc_url: index === 0 ? marriage_doc_url : null,
+        kk_doc_url: index === 0 ? kk_doc_url : null,
         status: 'PENDING',
       });
     }
@@ -616,7 +633,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
   }
 }
 
-export async function uploadPendingDocument(tenantId: string, docType: 'marriage' | 'ktp', formData: FormData) {
+export async function uploadPendingDocument(tenantId: string, docType: 'marriage' | 'kk' | 'ktp', formData: FormData) {
   const file = formData.get('file');
   if (!file || !(file instanceof File)) {
     return { success: false, error: 'Berkas tidak valid.' };
@@ -634,7 +651,10 @@ export async function uploadPendingDocument(tenantId: string, docType: 'marriage
     return { success: false, error: 'Gagal mengunggah dokumen: ' + uploadErr?.message };
   }
 
-  const updateField = docType === 'marriage' ? { marriage_doc_url: uploadData.path } : { ktp_path: uploadData.path };
+  const updateField =
+    docType === 'marriage' ? { marriage_doc_url: uploadData.path } :
+    docType === 'kk' ? { kk_doc_url: uploadData.path } : { ktp_path: uploadData.path };
+
   const { error: dbErr } = await supabase.from('tenants').update(updateField).eq('id', tenantId);
 
   if (dbErr) return { success: false, error: dbErr.message };
