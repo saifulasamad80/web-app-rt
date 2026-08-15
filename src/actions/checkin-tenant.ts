@@ -526,7 +526,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
-    // Buku Nikah
     const marriageDoc = formData.get('marriage_doc');
     let marriage_doc_url = '';
     if (marriageDoc && marriageDoc instanceof File && marriageDoc.size > 0) {
@@ -543,7 +542,6 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       }
     }
 
-    // Kartu Keluarga (KK)
     const kkDoc = formData.get('kk_doc');
     let kk_doc_url = '';
     if (kkDoc && kkDoc instanceof File && kkDoc.size > 0) {
@@ -788,7 +786,7 @@ export async function recordRtDues(payerName: string, blockNumber: string, amoun
     dues_id: data && data[0] ? data[0].id : null,
     action_type: 'INPUT_KAS',
     performed_by: performedBy,
-    details: `Mencatat iuran Rp ${amount.toLocaleString('id-ID')} (${month} ${year}) dari warga: ${payerName}`
+    details: `Mencatat iuran Rp ${amount.toLocaleString('id-ID')} (${month} ${year}) dari warga: ${payerName} (Unit: ${blockNumber})`
   });
 
   try {

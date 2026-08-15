@@ -547,7 +547,7 @@ export default function OwnerDashboard() {
                   <input
                     type="tel"
                     required
-                    placeholder="Contoh: 085939967837 (Owner) / 081511562194 (Pengelola)"
+                    placeholder="08xxxxxxxxxx"
                     value={loginPhone}
                     onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))}
                     className="w-full p-3.5 border-2 border-slate-200 focus:border-emerald-600 rounded-2xl outline-none font-mono text-[1rem] font-bold bg-white"
@@ -609,7 +609,6 @@ export default function OwnerDashboard() {
               </div>
 
               <div className="flex items-center gap-2 w-full md:w-auto">
-                {/* HANYA MUNCUL JIKA LOGIN SEBAGAI OWNER */}
                 {isOwner && (
                   <button
                     type="button"
@@ -636,7 +635,7 @@ export default function OwnerDashboard() {
             ) : activeProperty ? (
               <div className="space-y-5">
 
-                {/* HERO FINANSIAL DENGAN LOGIKA KUNCI LABA */}
+                {/* HERO FINANSIAL */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
                     <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
@@ -658,7 +657,6 @@ export default function OwnerDashboard() {
                     <p className="text-[0.75rem] text-red-100 font-medium">Listrik, air, WiFi, sampah & servis</p>
                   </div>
 
-                  {/* KOTAK LABA BERSIH: HANYA DITAMPILKAN JIKA YANG LOGIN ADALAH PEMILIK (OWNER) */}
                   {isOwner ? (
                     <div className="bg-amber-400 text-slate-950 p-6 rounded-3xl shadow-lg space-y-1 border-2 border-amber-500">
                       <span className="text-[0.7rem] font-black uppercase tracking-wider text-slate-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
@@ -714,7 +712,6 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
-                {/* TAB 1: DAFTAR PENYEWA */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
