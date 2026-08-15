@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,12 +16,15 @@ export const metadata: Metadata = {
   title: "Portal Digital Warga & RT Terpadu",
   description: "Sistem Pelayanan Kependudukan Warga, Manajemen Kos & Iuran Kas RT",
   manifest: "/manifest.json",
-  themeColor: "#065f46",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Portal RT",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#065f46",
 };
 
 export default function RootLayout({
@@ -33,7 +36,6 @@ export default function RootLayout({
     <html lang="id">
       <head>
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#065f46" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="apple-mobile-web-app-title" content="Portal RT" />
