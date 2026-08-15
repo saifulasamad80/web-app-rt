@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import {
-  getPublicPropertiesList,
-  getTenantsByPropertyPin,
+  loginOwnerDashboard,
+  getOwnerPropertyDetails,
   createProperty,
   updateProperty,
   deleteProperty,
-  updateTenantStatus,
   updateTenantData,
   getTenantKtpUrl,
   deleteTenant,
@@ -67,24 +66,27 @@ interface Property {
   bank_name?: string;
   bank_account_number?: string;
   bank_account_holder?: string;
+  pin_code?: string;
 }
 
 export default function OwnerDashboard() {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
   const [activeTab, setActiveTab] = useState<'penyewa' | 'pengeluaran' | 'matrix'>('penyewa');
 
-  const [propertiesList, setPropertiesList] = useState<Property[]>([]);
+  // Status Login Owner
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPin, setLoginPin] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // Properti Milik Akun Ini Saja
+  const [myProperties, setMyProperties] = useState<Property[]>([]);
   const [activeProperty, setActiveProperty] = useState<Property | null>(null);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isUnlocked, setIsUnlocked] = useState<boolean>(false);
+  const [loadingDetails, setLoadingDetails] = useState(false);
   const [copyMsg, setCopyMsg] = useState('');
-
-  const [showPinModal, setShowPinModal] = useState<boolean>(false);
-  const [targetPropForUnlock, setTargetPropForUnlock] = useState<Property | null>(null);
-  const [inputPin, setInputPin] = useState<string>('');
-  const [pinError, setPinError] = useState<string>('');
-  const [verifyingPin, setVerifyingPin] = useState<boolean>(false);
 
   // Modal Tambah & Edit Properti
   const [showAddPropModal, setShowAddPropModal] = useState<boolean>(false);
@@ -110,7 +112,6 @@ export default function OwnerDashboard() {
   const [expenseCategory, setExpenseCategory] = useState('Listrik');
   const [expenseAmount, setExpenseAmount] = useState('');
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10));
-  const [expenseNotes, setExpenseNotes] = useState('');
   const [savingExpense, setSavingExpense] = useState(false);
 
   // Modal Edit Penyewa
@@ -136,44 +137,48 @@ export default function OwnerDashboard() {
   const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
   const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
-  const fetchPublicPropertyList = async () => {
-    const res = await getPublicPropertiesList();
-    setPropertiesList(res.properties || []);
-  };
-
-  useEffect(() => {
-    fetchPublicPropertyList();
-  }, []);
-
-  const handleOpenUnlockModal = (prop: Property) => {
-    setTargetPropForUnlock(prop);
-    setInputPin('');
-    setPinError('');
-    setShowPinModal(true);
-  };
-
-  const handleUnlockWithPin = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetPropForUnlock || !inputPin) return;
+    if (!loginPhone || !loginPin) return;
 
-    setVerifyingPin(true);
-    setPinError('');
+    setLoginLoading(true);
+    setLoginError('');
 
-    const res = await getTenantsByPropertyPin(targetPropForUnlock.id, inputPin);
-    setVerifyingPin(false);
+    const res = await loginOwnerDashboard(loginPhone, loginPin);
+    setLoginLoading(false);
 
-    if (res.success && res.property) {
-      setActiveProperty(res.property);
-      setTenants(res.tenants || []);
-      setExpenses(res.expenses || []);
-      setIsUnlocked(true);
-      setShowPinModal(false);
-      setInputPin('');
-      setCopyMsg('Dasbor ' + (res.property.name || res.property.property_name) + ' berhasil dibuka!');
-      setTimeout(() => setCopyMsg(''), 3000);
+    if (res.success && res.properties && res.properties.length > 0) {
+      setMyProperties(res.properties);
+      setIsLoggedIn(true);
+
+      // Langsung buka detail properti pertama
+      const firstProp = res.properties[0];
+      await handleSelectProperty(firstProp);
     } else {
-      setPinError(res.error || '🔒 PIN 4-digit salah.');
+      setLoginError(res.error || 'Nomor WhatsApp atau PIN 4-Digit salah.');
     }
+  };
+
+  const handleSelectProperty = async (prop: Property) => {
+    setLoadingDetails(true);
+    setActiveProperty(prop);
+    const details = await getOwnerPropertyDetails(prop.id);
+    setLoadingDetails(false);
+
+    if (details.success) {
+      setTenants(details.tenants || []);
+      setExpenses(details.expenses || []);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    setLoginPhone('');
+    setLoginPin('');
+    setMyProperties([]);
+    setActiveProperty(null);
+    setTenants([]);
+    setExpenses([]);
   };
 
   const handleOpenEditProp = (prop: Property) => {
@@ -217,11 +222,33 @@ export default function OwnerDashboard() {
         setCopyMsg('Data properti & pengelola berhasil diperbarui!');
         setTimeout(() => setCopyMsg(''), 3000);
         setEditingProperty(null);
-        await fetchPublicPropertyList();
+
+        const updatedList = myProperties.map((p) =>
+          p.id === editingProperty.id
+            ? {
+                ...p,
+                name: propName,
+                property_name: propName,
+                type: propType,
+                total_rooms: propTotalRooms,
+                owner_name: propOwnerName,
+                owner_phone: propOwnerPhone,
+                manager_name: propManagerName,
+                manager_phone: propManagerPhone,
+                bank_name: propBankName,
+                bank_account_number: propBankAcc,
+                bank_account_holder: propBankHolder,
+                address: propAddress,
+              }
+            : p
+        );
+        setMyProperties(updatedList);
+
         if (activeProperty && activeProperty.id === editingProperty.id) {
           setActiveProperty({
             ...activeProperty,
             name: propName,
+            property_name: propName,
             type: propType,
             total_rooms: propTotalRooms,
             owner_name: propOwnerName,
@@ -250,8 +277,8 @@ export default function OwnerDashboard() {
         propAddress,
         propRules,
         propPin,
-        propOwnerName,
-        propOwnerPhone,
+        propOwnerName || loginPhone,
+        propOwnerPhone || loginPhone,
         propManagerName,
         propManagerPhone,
         propTotalRooms,
@@ -261,10 +288,22 @@ export default function OwnerDashboard() {
       );
       setSubmittingProp(false);
 
-      if (res && res.success) {
+      if (res && res.success && res.data) {
         setCopyMsg('Properti "' + propName + '" berhasil didaftarkan!');
         setTimeout(() => setCopyMsg(''), 4000);
         setShowAddPropModal(false);
+
+        if (isLoggedIn) {
+          const newPropList = [res.data, ...myProperties];
+          setMyProperties(newPropList);
+          await handleSelectProperty(res.data);
+        } else {
+          // Otomatis login ke properti baru
+          setIsLoggedIn(true);
+          setMyProperties([res.data]);
+          await handleSelectProperty(res.data);
+        }
+
         setPropName('');
         setPropOwnerName('');
         setPropOwnerPhone('');
@@ -275,7 +314,6 @@ export default function OwnerDashboard() {
         setPropAddress('');
         setPropRules('');
         setPropPin('');
-        await fetchPublicPropertyList();
       } else {
         alert('Gagal membuat properti: ' + (res?.error || 'Kesalahan teknis'));
       }
@@ -294,8 +332,7 @@ export default function OwnerDashboard() {
       expenseTitle,
       expenseCategory,
       parsedAmount,
-      expenseDate,
-      expenseNotes
+      expenseDate
     );
     setSavingExpense(false);
 
@@ -306,7 +343,6 @@ export default function OwnerDashboard() {
       setShowAddExpenseModal(false);
       setExpenseTitle('');
       setExpenseAmount('');
-      setExpenseNotes('');
     } else {
       alert('Gagal mencatat pengeluaran: ' + res.error);
     }
@@ -450,7 +486,7 @@ export default function OwnerDashboard() {
     }
   };
 
-  // Kalkulasi Finansial
+  // Kalkulasi Finansial Unit Aktif
   const countAll = tenants.length;
   const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE' || (t.status || '').toUpperCase() === 'VERIFIED').length;
   const totalRooms = activeProperty?.total_rooms || 10;
@@ -470,15 +506,15 @@ export default function OwnerDashboard() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH DENGAN WIDGET ZOOM */}
+        {/* HEADER BRANDING CERAH DENGAN WIDGET ZOOM */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-[1.3rem]">🏢⚡</span>
-              <h1 className="text-[1.4rem] font-black text-white">Dasbor <span className="text-amber-400">Pemilik & Pengelola Kos</span></h1>
+              <h1 className="text-[1.4rem] font-black text-white">Portal <span className="text-amber-400">Pemilik Kos & Kontrakan</span></h1>
             </div>
             <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
-              Kelola Hunian, Penjaga Unit, Okupansi Kamar, Pengeluaran, & Tagihan Sewa Terintegrasi RT
+              Sistem Manajemen Properti Privat & Terintegrasi RT Setempat
             </p>
           </div>
 
@@ -515,442 +551,451 @@ export default function OwnerDashboard() {
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button
-            onClick={() => {
-              setEditingProperty(null);
-              setPropName('');
-              setPropOwnerName('');
-              setPropOwnerPhone('');
-              setPropManagerName('');
-              setPropManagerPhone('');
-              setPropBankAcc('');
-              setPropBankHolder('');
-              setPropAddress('');
-              setShowAddPropModal(true);
-            }}
-            className="px-5 py-3 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black text-[0.85rem] rounded-2xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
-          >
-            <span>➕ Daftarkan Properti Kos Baru</span>
-          </button>
-
-          {isUnlocked && (
-            <button
-              onClick={() => { setIsUnlocked(false); setActiveProperty(null); setTenants([]); setExpenses([]); }}
-              className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-[0.8rem] rounded-2xl border border-slate-300"
-            >
-              🔒 Kunci Dasbor
-            </button>
-          )}
-        </div>
-
         {copyMsg && (
           <div className="p-3.5 bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center">
             {copyMsg}
           </div>
         )}
 
-        {/* DAFTAR UNIT KOS */}
-        <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-          <div className="flex justify-between items-center border-b pb-3">
-            <div>
-              <h2 className="text-[1.1rem] font-black text-slate-900">Pilih Properti Kos Anda</h2>
-              <p className="text-[0.8rem] text-slate-500">Buka kunci unit menggunakan PIN 4-Digit untuk mengelola operasional.</p>
-            </div>
-            <span className="text-[0.75rem] font-black text-amber-900 bg-amber-100 px-3 py-1 rounded-full border border-amber-300">
-              {propertiesList.length} Properti Terdaftar
-            </span>
-          </div>
+        {/* JIKA BELUM LOGIN: TAMPILKAN FORM LOGIN PRIVAT (TIDAK ADA DATA KOS ORANG LAIN) */}
+        {!isLoggedIn ? (
+          <div className="max-w-md mx-auto space-y-4">
+            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-center">
+              <div className="w-16 h-16 bg-amber-100 text-amber-900 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">
+                🏢
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {propertiesList.map((prop) => {
-              const isCurrentActive = isUnlocked && activeProperty?.id === prop.id;
+              <div>
+                <h2 className="text-[1.2rem] font-black text-slate-900">Masuk Dasbor Pemilik</h2>
+                <p className="text-[0.8rem] text-slate-500 mt-1">
+                  Masukkan nomor WhatsApp dan PIN 4-Digit untuk mengelola properti Anda.
+                </p>
+              </div>
 
-              return (
-                <div
-                  key={prop.id}
-                  className={`p-5 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 ${
-                    isCurrentActive ? 'bg-amber-50/80 border-amber-400 ring-2 ring-amber-400/20' : 'bg-slate-50 border-slate-200'
-                  }`}
+              {loginError && (
+                <div className="p-3.5 bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl text-[0.8rem] font-bold leading-relaxed">
+                  {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
+                <div>
+                  <label className="block text-[0.85rem] font-bold text-slate-800 mb-1">Nomor WhatsApp Anda *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="Contoh: 081233006339"
+                    value={loginPhone}
+                    onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))}
+                    className="w-full p-3.5 border-2 border-slate-200 focus:border-emerald-600 rounded-2xl outline-none font-mono text-[1rem] font-bold bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[0.85rem] font-bold text-slate-800 mb-1">PIN 4-Digit Unit *</label>
+                  <input
+                    type="password"
+                    maxLength={4}
+                    required
+                    placeholder="• • • •"
+                    value={loginPin}
+                    onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full p-3.5 border-2 border-slate-200 focus:border-emerald-600 rounded-2xl outline-none font-mono text-[1.2rem] font-bold tracking-[0.4em] text-center bg-white"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loginLoading || !loginPhone || loginPin.length !== 4}
+                  className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.95rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
                 >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[0.7rem] font-black px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-full uppercase">
-                        {prop.type} • {prop.total_rooms || 10} Kamar
-                      </span>
+                  {loginLoading ? 'Memeriksa Hak Akses...' : 'Buka Dasbor Saya →'}
+                </button>
+              </form>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenEditProp(prop)}
-                          className="px-2.5 py-1 bg-white border border-slate-300 hover:bg-slate-100 rounded-xl text-[0.7rem] font-bold shadow-sm cursor-pointer"
-                        >
-                          ✏️ Edit & Pengelola
-                        </button>
-                        <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full">
-                          ✅ VERIFIED RT
-                        </span>
-                      </div>
-                    </div>
-
-                    <h3 className="font-black text-[1.1rem] text-slate-900">{prop.name || prop.property_name}</h3>
-
-                    <div className="bg-white p-3 rounded-2xl border border-slate-200 text-[0.75rem] space-y-1 text-slate-700">
-                      <p>👤 <b>Pemilik Sah:</b> {prop.owner_name || '-'} {prop.owner_phone ? `(${prop.owner_phone})` : ''}</p>
-                      <p>🔑 <b>Pengelola / Penjaga:</b> {prop.manager_name || 'Dikelola Pemilik'} {prop.manager_phone ? `(${prop.manager_phone})` : ''}</p>
-                      {prop.bank_account_number && (
-                        <p className="text-emerald-800 font-semibold">💳 {prop.bank_name}: {prop.bank_account_number} a.n. {prop.bank_account_holder}</p>
-                      )}
-                    </div>
-
-                    <p className="text-[0.75rem] text-slate-500 font-mono break-all">/checkin/{prop.slug}</p>
-                  </div>
-
-                  <div className="pt-3 border-t-2 border-slate-200 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleShareWA(prop)}
-                        className="flex-1 px-3 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-bold rounded-2xl transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer"
-                      >
-                        <span>💬 Kirim Link WA</span>
-                      </button>
-
-                      <button
-                        onClick={() => setPosterProp(prop)}
-                        className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-900 text-white text-[0.75rem] font-bold rounded-2xl transition-all shadow flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>🖨️ Poster QR</span>
-                      </button>
-                    </div>
-
-                    <div>
-                      {isCurrentActive ? (
-                        <div className="text-[0.8rem] font-black text-amber-950 flex items-center justify-center py-2.5 bg-amber-300 rounded-2xl shadow-sm">
-                          <span>🔓 Dasbor Aktif Terbuka</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => handleOpenUnlockModal(prop)}
-                          className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[0.8rem] font-black rounded-2xl transition-all shadow flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <span>🔒 Buka Dasbor Kos (PIN)</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* DASBOR OPERASIONAL PENUH (TERVERIFIKASI PIN) */}
-        {isUnlocked && activeProperty ? (
-          <div className="space-y-5">
-
-            {/* HERO FINANSIAL DENGAN LABA BERSIH BULANAN */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 1. SEWA MASUK */}
-              <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
-                <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
-                  SEWA MASUK (LUNAS)
-                </span>
-                <h3 className="text-[1.6rem] font-black text-white mt-1">
-                  Rp {totalRentCollected.toLocaleString('id-ID')}
-                </h3>
-                <p className="text-[0.75rem] text-emerald-100 font-medium">Dari kamar-kamar yang berstatus lunas</p>
-              </div>
-
-              {/* 2. BIAYA OPERASIONAL */}
-              <div className="bg-red-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
-                <span className="text-[0.7rem] font-black uppercase tracking-wider text-red-200 bg-red-950/60 px-2.5 py-0.5 rounded-full">
-                  TOTAL PENGELUARAN KOS
-                </span>
-                <h3 className="text-[1.6rem] font-black text-white mt-1">
-                  Rp {totalExpenses.toLocaleString('id-ID')}
-                </h3>
-                <p className="text-[0.75rem] text-red-100 font-medium">Listrik, WiFi, sampah, servis & penjaga</p>
-              </div>
-
-              {/* 3. LABA BERSIH */}
-              <div className="bg-amber-400 text-slate-950 p-6 rounded-3xl shadow-lg space-y-1 border-2 border-amber-500">
-                <span className="text-[0.7rem] font-black uppercase tracking-wider text-slate-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
-                  LABA BERSIH BULAN INI
-                </span>
-                <h3 className="text-[1.6rem] font-black text-slate-950 mt-1">
-                  Rp {netProfit.toLocaleString('id-ID')}
-                </h3>
-                <p className="text-[0.75rem] text-slate-800 font-bold">Okupansi: {Math.round((countActive / totalRooms) * 100)}% ({countActive}/{totalRooms} Terisi)</p>
+              <div className="pt-3 border-t-2 border-slate-100">
+                <button
+                  onClick={() => {
+                    setEditingProperty(null);
+                    setPropName('');
+                    setPropOwnerName('');
+                    setPropOwnerPhone('');
+                    setPropManagerName('');
+                    setPropManagerPhone('');
+                    setPropBankAcc('');
+                    setPropBankHolder('');
+                    setPropAddress('');
+                    setShowAddPropModal(true);
+                  }}
+                  className="text-[0.85rem] text-emerald-800 hover:text-emerald-900 font-bold hover:underline"
+                >
+                  ➕ Belum punya properti terdaftar? Daftarkan di sini
+                </button>
               </div>
             </div>
-
-            {/* TAB NAVIGASI DASBOR OPERASIONAL */}
-            <div className="flex border-b-2 border-slate-200 gap-2">
-              <button
-                onClick={() => setActiveTab('penyewa')}
-                className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
-                  activeTab === 'penyewa'
-                    ? 'bg-white border-slate-300 text-emerald-800 shadow-sm -mb-0.5'
-                    : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                👥 Manajemen Penyewa & Sewa ({tenants.length})
-              </button>
-
-              <button
-                onClick={() => setActiveTab('pengeluaran')}
-                className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
-                  activeTab === 'pengeluaran'
-                    ? 'bg-white border-slate-300 text-red-800 shadow-sm -mb-0.5'
-                    : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                📈 Catatan Pengeluaran ({expenses.length})
-              </button>
-
-              <button
-                onClick={() => setActiveTab('matrix')}
-                className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
-                  activeTab === 'matrix'
-                    ? 'bg-white border-slate-300 text-slate-900 shadow-sm -mb-0.5'
-                    : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                🏠 Matrix Okupansi Kamar ({emptyRooms} Kosong)
-              </button>
-            </div>
-
-            {/* TAB 1: MANAJEMEN PENYEWA */}
-            {activeTab === 'penyewa' && (
-              <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
-                  <div>
-                    <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                      Daftar Penghuni: {activeProperty.name || activeProperty.property_name}
-                    </h3>
-                    <p className="text-[0.75rem] text-slate-500">Klik status bayar untuk switch LUNAS/BELUM LUNAS secara instan.</p>
-                  </div>
-
-                  <button
-                    onClick={() => handleOpenRulesModal(activeProperty)}
-                    className="px-3.5 py-2 bg-slate-800 text-white text-[0.75rem] font-bold rounded-2xl hover:bg-slate-700 cursor-pointer"
-                  >
-                    📜 Edit Tata Tertib Kos
-                  </button>
-                </div>
-
-                {tenants.length === 0 ? (
-                  <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
-                    <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada penyewa yang mendaftar di unit ini.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-[0.8rem]">
-                      <thead>
-                        <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
-                          <th className="p-3">Nama & Peran</th>
-                          <th className="p-3">Kamar</th>
-                          <th className="p-3">Status Tagihan</th>
-                          <th className="p-3">Nominal Sewa</th>
-                          <th className="p-3">Dokumen KTP</th>
-                          <th className="p-3">Status RT</th>
-                          <th className="p-3 text-right">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {tenants.map((t) => {
-                          const st = (t.status || '').toUpperCase();
-                          const isPaid = (t.payment_status || '').toUpperCase() === 'PAID';
-
-                          return (
-                            <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                              <td className="p-3">
-                                <div className="font-black text-slate-900">{t.name}</div>
-                                <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200 inline-block mt-0.5">
-                                  {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
-                                </span>
-                              </td>
-                              <td className="p-3 font-bold text-emerald-900">{t.room_number || '-'}</td>
-                              <td className="p-3">
-                                <button
-                                  onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)}
-                                  className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black transition-all shadow-sm cursor-pointer ${
-                                    isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
-                                  }`}
-                                >
-                                  {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
-                                </button>
-                              </td>
-                              <td className="p-3 font-mono font-bold text-slate-900">
-                                Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
-                              </td>
-                              <td className="p-3">
-                                <button
-                                  onClick={() => handleViewKtp(t)}
-                                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[0.7rem] rounded-xl font-bold"
-                                >
-                                  🪪 KTP
-                                </button>
-                              </td>
-                              <td className="p-3">
-                                <span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase ' +
-                                  (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
-                                   st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
-                                  {st}
-                                </span>
-                              </td>
-                              <td className="p-3 text-right space-x-1">
-                                {!isPaid && (
-                                  <button
-                                    onClick={() => handleSendReminderWA(t)}
-                                    className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.7rem] font-bold rounded-lg"
-                                  >
-                                    💬 Tagih WA
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => handleOpenEditTenant(t)}
-                                  className="px-2 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.7rem] font-black rounded-lg"
-                                >
-                                  ✏️ Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteTenantRow(t.id, t.name)}
-                                  className="px-2 py-1 bg-slate-200 text-slate-700 text-[0.7rem] font-bold rounded-lg hover:bg-red-100 hover:text-red-700"
-                                >
-                                  🗑️
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 2: PENCATATAN PENGELUARAN */}
-            {activeTab === 'pengeluaran' && (
-              <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-                <div className="flex justify-between items-center border-b pb-3">
-                  <div>
-                    <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                      Buku Kas Pengeluaran Kos
-                    </h3>
-                    <p className="text-[0.75rem] text-slate-500">Catat semua biaya listrik, wifi, kebersihan, dan perbaikan.</p>
-                  </div>
-
-                  <button
-                    onClick={() => setShowAddExpenseModal(true)}
-                    className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-[0.8rem] font-black rounded-2xl shadow cursor-pointer"
-                  >
-                    ➕ Catat Pengeluaran Baru
-                  </button>
-                </div>
-
-                {expenses.length === 0 ? (
-                  <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
-                    <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada pengeluaran yang dicatat bulan ini.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-[0.8rem]">
-                      <thead>
-                        <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
-                          <th className="p-3">Tanggal</th>
-                          <th className="p-3">Kategori</th>
-                          <th className="p-3">Keterangan</th>
-                          <th className="p-3">Nominal (Rp)</th>
-                          <th className="p-3 text-right">Aksi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-200">
-                        {expenses.map((exp) => (
-                          <tr key={exp.id} className="hover:bg-slate-50">
-                            <td className="p-3 font-mono font-semibold">{exp.expense_date}</td>
-                            <td className="p-3">
-                              <span className="px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-lg text-[0.7rem] font-bold">
-                                {exp.category}
-                              </span>
-                            </td>
-                            <td className="p-3 font-medium text-slate-800">{exp.title}</td>
-                            <td className="p-3 font-mono font-black text-red-700">
-                              - Rp {Number(exp.amount || 0).toLocaleString('id-ID')}
-                            </td>
-                            <td className="p-3 text-right">
-                              <button
-                                onClick={() => handleDeleteExpense(exp.id, exp.title)}
-                                className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg font-bold"
-                              >
-                                ✕ Hapus
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* TAB 3: MATRIX OKUPANSI KAMAR */}
-            {activeTab === 'matrix' && (
-              <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
-                <div className="border-b pb-3">
-                  <h3 className="text-[1rem] font-black text-slate-900 uppercase">
-                    Matrix Okupansi Hunian ({activeProperty.total_rooms || 10} Total Unit)
-                  </h3>
-                  <p className="text-[0.75rem] text-slate-500">Peta visual ketersediaan kamar kos secara langsung.</p>
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-                  {Array.from({ length: activeProperty.total_rooms || 10 }).map((_, idx) => {
-                    const roomName = `Kamar ${String(idx + 1).padStart(2, '0')}`;
-                    const occupant = tenants.find((t) => (t.room_number || '').toLowerCase().includes(roomName.toLowerCase()) || (t.room_number || '').includes(String(idx + 1)));
-
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-4 rounded-2xl border-2 space-y-2 ${
-                          occupant
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                            : 'bg-slate-50 border-slate-300 text-slate-500 border-dashed'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="font-black text-[0.85rem]">{roomName}</span>
-                          <span className={`text-[0.65rem] font-extrabold px-2 py-0.5 rounded-full ${
-                            occupant ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
-                          }`}>
-                            {occupant ? 'TERISI' : 'KOSONG'}
-                          </span>
-                        </div>
-
-                        {occupant ? (
-                          <div className="text-[0.75rem] space-y-0.5">
-                            <p className="font-bold text-slate-900 truncate">👤 {occupant.name}</p>
-                            <p className="font-mono text-emerald-800 font-bold">Rp {Number(occupant.rent_price || 0).toLocaleString('id-ID')}</p>
-                          </div>
-                        ) : (
-                          <p className="text-[0.75rem] font-medium text-slate-400 pt-2">Siap ditempati penyewa baru</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
           </div>
         ) : (
-          <div className="p-12 text-center bg-white rounded-3xl border-2 border-slate-200 shadow-sm space-y-3">
-            <p className="text-5xl">🔒</p>
-            <h3 className="text-[1.1rem] font-black text-slate-900">Dasbor Kos Masih Terkunci</h3>
-            <p className="text-[0.8rem] text-slate-500 max-w-md mx-auto">
-              Pilih salah satu unit properti Anda di atas lalu klik tombol <b>"🔒 Buka Dasbor Kos (PIN)"</b> untuk membuka rekap finansial, matrix kamar, dan buku pengeluaran.
-            </p>
+          /* SETELAH LOGIN: HANYA TAMPILKAN PROPERTI MILIK AKUN INI */
+          <div className="space-y-5">
+
+            {/* BAR PROPERTI OWNER & LOGOUT */}
+            <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
+                {myProperties.length === 1 ? (
+                  <span className="text-[1rem] font-black text-emerald-900 bg-emerald-100 px-3 py-1 rounded-xl">
+                    {myProperties[0].name || myProperties[0].property_name}
+                  </span>
+                ) : (
+                  <select
+                    value={activeProperty?.id || ''}
+                    onChange={(e) => {
+                      const selected = myProperties.find((p) => p.id === e.target.value);
+                      if (selected) handleSelectProperty(selected);
+                    }}
+                    className="p-2 border-2 border-emerald-300 rounded-xl font-black text-emerald-950 bg-emerald-50 text-[0.9rem]"
+                  >
+                    {myProperties.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name || p.property_name}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <button
+                  onClick={() => activeProperty && handleOpenEditProp(activeProperty)}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 text-[0.75rem] font-bold rounded-xl border border-slate-300 cursor-pointer"
+                >
+                  ✏️ Edit Data & Pengelola
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="px-3.5 py-2 bg-red-100 hover:bg-red-200 text-red-800 text-[0.75rem] font-bold rounded-xl border border-red-300 cursor-pointer"
+                >
+                  🔒 Kunci Dasbor (Logout)
+                </button>
+              </div>
+            </div>
+
+            {loadingDetails ? (
+              <div className="p-12 text-center bg-white rounded-3xl border-2 border-slate-200 space-y-3">
+                <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p className="text-[0.85rem] font-bold text-slate-600">Memuat Data Finansial & Kamar...</p>
+              </div>
+            ) : activeProperty ? (
+              <div className="space-y-5">
+
+                {/* HERO FINANSIAL UNIT */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
+                    <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
+                      SEWA MASUK (LUNAS)
+                    </span>
+                    <h3 className="text-[1.6rem] font-black text-white mt-1">
+                      Rp {totalRentCollected.toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[0.75rem] text-emerald-100 font-medium">Dari kamar-kamar berstatus lunas</p>
+                  </div>
+
+                  <div className="bg-red-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
+                    <span className="text-[0.7rem] font-black uppercase tracking-wider text-red-200 bg-red-950/60 px-2.5 py-0.5 rounded-full">
+                      PENGELUARAN BULAN INI
+                    </span>
+                    <h3 className="text-[1.6rem] font-black text-white mt-1">
+                      Rp {totalExpenses.toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[0.75rem] text-red-100 font-medium">Listrik, air, WiFi, sampah & servis</p>
+                  </div>
+
+                  <div className="bg-amber-400 text-slate-950 p-6 rounded-3xl shadow-lg space-y-1 border-2 border-amber-500">
+                    <span className="text-[0.7rem] font-black uppercase tracking-wider text-slate-900 bg-amber-200/80 px-2.5 py-0.5 rounded-full">
+                      LABA BERSIH BULAN INI
+                    </span>
+                    <h3 className="text-[1.6rem] font-black text-slate-950 mt-1">
+                      Rp {netProfit.toLocaleString('id-ID')}
+                    </h3>
+                    <p className="text-[0.75rem] text-slate-800 font-bold">Okupansi: {Math.round((countActive / totalRooms) * 100)}% ({countActive}/{totalRooms} Terisi)</p>
+                  </div>
+                </div>
+
+                {/* TAB NAVIGASI OPERASIONAL */}
+                <div className="flex border-b-2 border-slate-200 gap-2">
+                  <button
+                    onClick={() => setActiveTab('penyewa')}
+                    className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
+                      activeTab === 'penyewa'
+                        ? 'bg-white border-slate-300 text-emerald-800 shadow-sm -mb-0.5'
+                        : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    👥 Daftar Penyewa ({tenants.length})
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('pengeluaran')}
+                    className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
+                      activeTab === 'pengeluaran'
+                        ? 'bg-white border-slate-300 text-red-800 shadow-sm -mb-0.5'
+                        : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    📈 Catatan Pengeluaran ({expenses.length})
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('matrix')}
+                    className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 transition-all cursor-pointer ${
+                      activeTab === 'matrix'
+                        ? 'bg-white border-slate-300 text-slate-900 shadow-sm -mb-0.5'
+                        : 'bg-slate-100 border-transparent text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    🏠 Matrix Kamar ({emptyRooms} Kosong)
+                  </button>
+                </div>
+
+                {/* TAB 1: DAFTAR PENYEWA */}
+                {activeTab === 'penyewa' && (
+                  <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
+                      <div>
+                        <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                          Penghuni: {activeProperty.name || activeProperty.property_name}
+                        </h3>
+                        <p className="text-[0.75rem] text-slate-500">Klik status tagihan untuk mengubah status bayar sewa.</p>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleShareWA(activeProperty)}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.75rem] font-bold rounded-2xl shadow flex items-center gap-1 cursor-pointer"
+                        >
+                          💬 Link WA Check-in
+                        </button>
+                        <button
+                          onClick={() => setPosterProp(activeProperty)}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-[0.75rem] font-bold rounded-2xl shadow flex items-center gap-1 cursor-pointer"
+                        >
+                          🖨️ Poster QR
+                        </button>
+                        <button
+                          onClick={() => handleOpenRulesModal(activeProperty)}
+                          className="px-3 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.75rem] font-black rounded-2xl shadow cursor-pointer"
+                        >
+                          📜 Tata Tertib
+                        </button>
+                      </div>
+                    </div>
+
+                    {tenants.length === 0 ? (
+                      <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                        <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada penyewa yang mendaftar di unit ini.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-[0.8rem]">
+                          <thead>
+                            <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                              <th className="p-3">Nama & Peran</th>
+                              <th className="p-3">Kamar</th>
+                              <th className="p-3">Status Tagihan</th>
+                              <th className="p-3">Nominal Sewa</th>
+                              <th className="p-3">Dokumen KTP</th>
+                              <th className="p-3">Status RT</th>
+                              <th className="p-3 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {tenants.map((t) => {
+                              const st = (t.status || '').toUpperCase();
+                              const isPaid = (t.payment_status || '').toUpperCase() === 'PAID';
+
+                              return (
+                                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="p-3">
+                                    <div className="font-black text-slate-900">{t.name}</div>
+                                    <span className="text-[0.65rem] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border border-slate-200 inline-block mt-0.5">
+                                      {t.relation || (t.is_head ? 'Penanggung Jawab' : 'Anggota')}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 font-bold text-emerald-900">{t.room_number || '-'}</td>
+                                  <td className="p-3">
+                                    <button
+                                      onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)}
+                                      className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black transition-all shadow-sm cursor-pointer ${
+                                        isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'
+                                      }`}
+                                    >
+                                      {isPaid ? '✅ LUNAS' : '❌ BELUM LUNAS'}
+                                    </button>
+                                  </td>
+                                  <td className="p-3 font-mono font-bold text-slate-900">
+                                    Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
+                                  </td>
+                                  <td className="p-3">
+                                    <button
+                                      onClick={() => handleViewKtp(t)}
+                                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[0.7rem] rounded-xl font-bold"
+                                    >
+                                      🪪 KTP
+                                    </button>
+                                  </td>
+                                  <td className="p-3">
+                                    <span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase ' +
+                                      (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
+                                       st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
+                                      {st}
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right space-x-1">
+                                    {!isPaid && (
+                                      <button
+                                        onClick={() => handleSendReminderWA(t)}
+                                        className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[0.7rem] font-bold rounded-lg"
+                                      >
+                                        💬 Tagih WA
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => handleOpenEditTenant(t)}
+                                      className="px-2 py-1 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.7rem] font-black rounded-lg"
+                                    >
+                                      ✏️ Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteTenantRow(t.id, t.name)}
+                                      className="px-2 py-1 bg-slate-200 text-slate-700 text-[0.7rem] font-bold rounded-lg hover:bg-red-100 hover:text-red-700"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: PENCATATAN PENGELUARAN */}
+                {activeTab === 'pengeluaran' && (
+                  <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+                    <div className="flex justify-between items-center border-b pb-3">
+                      <div>
+                        <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                          Buku Kas Pengeluaran Kos
+                        </h3>
+                        <p className="text-[0.75rem] text-slate-500">Catat semua biaya operasional unit ini.</p>
+                      </div>
+
+                      <button
+                        onClick={() => setShowAddExpenseModal(true)}
+                        className="px-4 py-2 bg-red-700 hover:bg-red-800 text-white text-[0.8rem] font-black rounded-2xl shadow cursor-pointer"
+                      >
+                        ➕ Catat Pengeluaran Baru
+                      </button>
+                    </div>
+
+                    {expenses.length === 0 ? (
+                      <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
+                        <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada pengeluaran yang dicatat bulan ini.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-[0.8rem]">
+                          <thead>
+                            <tr className="bg-slate-100 border-b-2 text-slate-700 font-black uppercase text-[0.7rem]">
+                              <th className="p-3">Tanggal</th>
+                              <th className="p-3">Kategori</th>
+                              <th className="p-3">Keterangan</th>
+                              <th className="p-3">Nominal (Rp)</th>
+                              <th className="p-3 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200">
+                            {expenses.map((exp) => (
+                              <tr key={exp.id} className="hover:bg-slate-50">
+                                <td className="p-3 font-mono font-semibold">{exp.expense_date}</td>
+                                <td className="p-3">
+                                  <span className="px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-lg text-[0.7rem] font-bold">
+                                    {exp.category}
+                                  </span>
+                                </td>
+                                <td className="p-3 font-medium text-slate-800">{exp.title}</td>
+                                <td className="p-3 font-mono font-black text-red-700">
+                                  - Rp {Number(exp.amount || 0).toLocaleString('id-ID')}
+                                </td>
+                                <td className="p-3 text-right">
+                                  <button
+                                    onClick={() => handleDeleteExpense(exp.id, exp.title)}
+                                    className="px-2 py-1 text-red-600 hover:bg-red-50 rounded-lg font-bold"
+                                  >
+                                    ✕ Hapus
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 3: MATRIX KAMAR */}
+                {activeTab === 'matrix' && (
+                  <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+                    <div className="border-b pb-3">
+                      <h3 className="text-[1rem] font-black text-slate-900 uppercase">
+                        Matrix Okupansi Kamar ({activeProperty.total_rooms || 10} Total Unit)
+                      </h3>
+                      <p className="text-[0.75rem] text-slate-500">Peta ketersediaan kamar kos secara visual.</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
+                      {Array.from({ length: activeProperty.total_rooms || 10 }).map((_, idx) => {
+                        const roomName = `Kamar ${String(idx + 1).padStart(2, '0')}`;
+                        const occupant = tenants.find((t) => (t.room_number || '').toLowerCase().includes(roomName.toLowerCase()) || (t.room_number || '').includes(String(idx + 1)));
+
+                        return (
+                          <div
+                            key={idx}
+                            className={`p-4 rounded-2xl border-2 space-y-2 ${
+                              occupant
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                                : 'bg-slate-50 border-slate-300 text-slate-500 border-dashed'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <span className="font-black text-[0.85rem]">{roomName}</span>
+                              <span className={`text-[0.65rem] font-extrabold px-2 py-0.5 rounded-full ${
+                                occupant ? 'bg-emerald-200 text-emerald-900' : 'bg-slate-200 text-slate-700'
+                              }`}>
+                                {occupant ? 'TERISI' : 'KOSONG'}
+                              </span>
+                            </div>
+
+                            {occupant ? (
+                              <div className="text-[0.75rem] space-y-0.5">
+                                <p className="font-bold text-slate-900 truncate">👤 {occupant.name}</p>
+                                <p className="font-mono text-emerald-800 font-bold">Rp {Number(occupant.rent_price || 0).toLocaleString('id-ID')}</p>
+                              </div>
+                            ) : (
+                              <p className="text-[0.75rem] font-medium text-slate-400 pt-2">Siap ditempati</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            ) : null}
+
           </div>
         )}
 
@@ -1348,59 +1393,6 @@ export default function OwnerDashboard() {
                 🖨️ Cetak Poster
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL VERIFIKASI PIN */}
-      {showPinModal && targetPropForUnlock && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
-            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
-              <h3 className="text-[0.85rem] font-bold">🔒 Verifikasi PIN 4-Digit</h3>
-              <button onClick={() => setShowPinModal(false)} className="text-white hover:text-amber-300 font-bold text-lg leading-none">✕</button>
-            </div>
-
-            <form onSubmit={handleUnlockWithPin} className="p-5 space-y-4">
-              <div className="text-center space-y-1">
-                <h4 className="font-black text-slate-900 text-sm">{targetPropForUnlock.name || targetPropForUnlock.property_name}</h4>
-                <p className="text-[0.75rem] text-slate-500">Masukkan PIN 4-digit unit ini:</p>
-              </div>
-
-              {pinError && (
-                <div className="p-2.5 bg-red-50 border border-red-200 text-red-700 rounded-2xl text-xs font-bold text-center">
-                  {pinError}
-                </div>
-              )}
-
-              <input
-                type="password"
-                maxLength={4}
-                required
-                autoFocus
-                placeholder="• • • •"
-                value={inputPin}
-                onChange={(e) => setInputPin(e.target.value.replace(/\D/g, ''))}
-                className="w-full text-center text-2xl tracking-[0.5em] p-3 border-2 border-slate-300 rounded-2xl font-mono font-bold focus:border-emerald-600 outline-none"
-              />
-
-              <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPinModal(false)}
-                  className="flex-1 py-2.5 bg-slate-200 text-slate-700 text-xs font-bold rounded-2xl hover:bg-slate-300"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={verifyingPin || inputPin.length !== 4}
-                  className="flex-1 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black rounded-2xl shadow disabled:bg-slate-300 cursor-pointer"
-                >
-                  {verifyingPin ? 'Memeriksa...' : 'Buka Dasbor'}
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

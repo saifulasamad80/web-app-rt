@@ -9,6 +9,72 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: false }
 });
 
+export async function loginOwnerDashboard(phoneInput: string, pinInput: string) {
+  if (!phoneInput || !pinInput) {
+    return { success: false, properties: [], error: 'Nomor WhatsApp dan PIN 4-Digit wajib diisi.' };
+  }
+
+  const rawClean = phoneInput.replace(/\D/g, '');
+  const suffix = rawClean.length >= 7 ? rawClean.slice(-8) : rawClean;
+
+  const { data: properties, error } = await supabase
+    .from('properties')
+    .select('*')
+    .or(`owner_phone.ilike.%${suffix}%,manager_phone.ilike.%${suffix}%,owner_phone.eq.${phoneInput.trim()},manager_phone.eq.${phoneInput.trim()}`)
+    .order('created_at', { ascending: false });
+
+  if (error || !properties || properties.length === 0) {
+    return {
+      success: false,
+      properties: [],
+      error: `Nomor WhatsApp (${phoneInput}) belum terdaftar sebagai Pemilik atau Pengelola kos.`
+    };
+  }
+
+  // Filter properti yang cocok dengan PIN yang dimasukkan
+  const matchedProperties = properties.filter((p) => p.pin_code === pinInput);
+
+  if (matchedProperties.length === 0) {
+    return {
+      success: false,
+      properties: [],
+      error: '🔒 PIN 4-Digit yang Anda masukkan salah. Hubungi RT jika lupa PIN.'
+    };
+  }
+
+  return { success: true, properties: matchedProperties, error: undefined };
+}
+
+export async function getOwnerPropertyDetails(propertyId: string) {
+  const { data: prop, error: propErr } = await supabase
+    .from('properties')
+    .select('*')
+    .eq('id', propertyId)
+    .single();
+
+  if (propErr || !prop) return { success: false, property: null, tenants: [], expenses: [], error: 'Properti tidak ditemukan.' };
+
+  const { data: tenants } = await supabase
+    .from('tenants')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('entry_date', { ascending: false });
+
+  const { data: expenses } = await supabase
+    .from('property_expenses')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('expense_date', { ascending: false });
+
+  return {
+    success: true,
+    property: prop,
+    tenants: tenants || [],
+    expenses: expenses || [],
+    error: undefined
+  };
+}
+
 export async function getPublicPropertiesList() {
   const { data, error } = await supabase
     .from('properties')
@@ -76,7 +142,7 @@ export async function createProperty(
     revalidatePath('/rt');
   } catch (e) {}
 
-  return { success: true, data };
+  return { success: true, data: data ? data[0] : null };
 }
 
 export async function updateProperty(
@@ -138,61 +204,6 @@ export async function deleteProperty(propertyId: string) {
   }
 
   return { success: !error, error: error?.message };
-}
-
-export async function getTenantsByPropertyPin(propertyId: string, pinInput: string) {
-  const { data: prop, error: propErr } = await supabase
-    .from('properties')
-    .select('*')
-    .eq('id', propertyId)
-    .single();
-
-  if (propErr || !prop) return { success: false, property: null, tenants: [], expenses: [], error: 'Properti tidak ditemukan.' };
-
-  if (prop.pin_locked_until && new Date(prop.pin_locked_until) > new Date()) {
-    return { success: false, property: null, tenants: [], expenses: [], error: '🔒 Unit ini terkunci sementara akibat 3x PIN salah. Hubungi RT untuk reset PIN.' };
-  }
-
-  if (prop.pin_code !== pinInput) {
-    const attempts = (prop.failed_pin_attempts || 0) + 1;
-    let lockTime = null;
-
-    if (attempts >= 3) {
-      const lockUntil = new Date();
-      lockUntil.setMinutes(lockUntil.getMinutes() + 15);
-      lockTime = lockUntil.toISOString();
-    }
-
-    await supabase
-      .from('properties')
-      .update({ failed_pin_attempts: attempts, pin_locked_until: lockTime })
-      .eq('id', propertyId);
-
-    if (attempts >= 3) {
-      return { success: false, property: null, tenants: [], expenses: [], error: '🔒 Terlalu banyak percobaan PIN salah. Terkunci 15 menit.' };
-    }
-
-    return { success: false, property: null, tenants: [], expenses: [], error: `🔒 PIN salah (${attempts}/3 percobaan).` };
-  }
-
-  await supabase
-    .from('properties')
-    .update({ failed_pin_attempts: 0, pin_locked_until: null })
-    .eq('id', propertyId);
-
-  const { data: tenants, error: tenErr } = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('property_id', propertyId)
-    .order('entry_date', { ascending: false });
-
-  const { data: expenses } = await supabase
-    .from('property_expenses')
-    .select('*')
-    .eq('property_id', propertyId)
-    .order('expense_date', { ascending: false });
-
-  return { success: true, property: prop, tenants: tenants || [], expenses: expenses || [], error: tenErr?.message };
 }
 
 export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string, notes?: string) {
