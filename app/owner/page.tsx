@@ -9,7 +9,6 @@ import {
   updateProperty,
   deleteProperty,
   updateTenantData,
-  getTenantKtpUrl,
   deleteTenant,
   updateHouseRules,
   updateTenantPaymentStatus,
@@ -33,9 +32,6 @@ interface Tenant {
   payment_status?: string;
   marital_status?: string;
   occupation?: string;
-  ktp_url?: string;
-  ktp_path?: string;
-  marriage_doc_url?: string;
   property_id?: string;
 }
 
@@ -129,11 +125,6 @@ export default function OwnerDashboard() {
 
   const [posterProp, setPosterProp] = useState<Property | null>(null);
 
-  const [selectedKtpUrl, setSelectedKtpUrl] = useState<string | null>(null);
-  const [selectedTenantName, setSelectedTenantName] = useState<string>('');
-  const [loadingKtp, setLoadingKtp] = useState<boolean>(false);
-  const [ktpErrorMsg, setKtpErrorMsg] = useState<string>('');
-
   const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
   const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
@@ -150,8 +141,6 @@ export default function OwnerDashboard() {
     if (res.success && res.properties && res.properties.length > 0) {
       setMyProperties(res.properties);
       setIsLoggedIn(true);
-
-      // Langsung buka detail properti pertama
       const firstProp = res.properties[0];
       await handleSelectProperty(firstProp);
     } else {
@@ -298,7 +287,6 @@ export default function OwnerDashboard() {
           setMyProperties(newPropList);
           await handleSelectProperty(res.data);
         } else {
-          // Otomatis login ke properti baru
           setIsLoggedIn(true);
           setMyProperties([res.data]);
           await handleSelectProperty(res.data);
@@ -463,29 +451,6 @@ export default function OwnerDashboard() {
     }
   };
 
-  const handleViewKtp = async (tenant: Tenant) => {
-    const targetPath = tenant.ktp_url || tenant.ktp_path;
-    setSelectedTenantName(tenant.name);
-    setLoadingKtp(true);
-    setKtpErrorMsg('');
-    setSelectedKtpUrl(null);
-
-    if (!targetPath) {
-      setLoadingKtp(false);
-      setKtpErrorMsg('Penyewa ini mendaftar tanpa berkas KTP.');
-      return;
-    }
-
-    const res = await getTenantKtpUrl(targetPath);
-    setLoadingKtp(false);
-
-    if (res && res.success && res.url) {
-      setSelectedKtpUrl(res.url);
-    } else {
-      setKtpErrorMsg(res?.error || 'Gagal memuat berkas KTP.');
-    }
-  };
-
   // Kalkulasi Finansial Unit Aktif
   const countAll = tenants.length;
   const countActive = tenants.filter((t) => (t.status || '').toUpperCase() === 'ACTIVE' || (t.status || '').toUpperCase() === 'VERIFIED').length;
@@ -514,7 +479,7 @@ export default function OwnerDashboard() {
               <h1 className="text-[1.4rem] font-black text-white">Portal <span className="text-amber-400">Pemilik Kos & Kontrakan</span></h1>
             </div>
             <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">
-              Sistem Manajemen Properti Privat & Terintegrasi RT Setempat
+              Sistem Manajemen Properti Privat & Terintegrasi RT (Kepatuhan UU PDP)
             </p>
           </div>
 
@@ -557,7 +522,7 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        {/* JIKA BELUM LOGIN: TAMPILKAN FORM LOGIN PRIVAT (TIDAK ADA DATA KOS ORANG LAIN) */}
+        {/* JIKA BELUM LOGIN: FORM LOGIN PRIVAT */}
         {!isLoggedIn ? (
           <div className="max-w-md mx-auto space-y-4">
             <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-center">
@@ -568,7 +533,7 @@ export default function OwnerDashboard() {
               <div>
                 <h2 className="text-[1.2rem] font-black text-slate-900">Masuk Dasbor Pemilik</h2>
                 <p className="text-[0.8rem] text-slate-500 mt-1">
-                  Masukkan nomor WhatsApp dan PIN 4-Digit untuk mengelola properti Anda.
+                  Masukkan nomor WhatsApp dan PIN 4-Digit untuk mengelola unit kos Anda.
                 </p>
               </div>
 
@@ -635,7 +600,7 @@ export default function OwnerDashboard() {
             </div>
           </div>
         ) : (
-          /* SETELAH LOGIN: HANYA TAMPILKAN PROPERTI MILIK AKUN INI */
+          /* SETELAH LOGIN: DASBOR PRIVAT */
           <div className="space-y-5">
 
             {/* BAR PROPERTI OWNER & LOGOUT */}
@@ -755,7 +720,7 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
-                {/* TAB 1: DAFTAR PENYEWA */}
+                {/* TAB 1: DAFTAR PENYEWA (BERSIH - TANPA AKSES DOKUMEN KTP PRIVAT) */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -801,7 +766,6 @@ export default function OwnerDashboard() {
                               <th className="p-3">Kamar</th>
                               <th className="p-3">Status Tagihan</th>
                               <th className="p-3">Nominal Sewa</th>
-                              <th className="p-3">Dokumen KTP</th>
                               <th className="p-3">Status RT</th>
                               <th className="p-3 text-right">Aksi</th>
                             </tr>
@@ -834,18 +798,10 @@ export default function OwnerDashboard() {
                                     Rp {Number(t.rent_price || 0).toLocaleString('id-ID')}
                                   </td>
                                   <td className="p-3">
-                                    <button
-                                      onClick={() => handleViewKtp(t)}
-                                      className="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white text-[0.7rem] rounded-xl font-bold"
-                                    >
-                                      🪪 KTP
-                                    </button>
-                                  </td>
-                                  <td className="p-3">
                                     <span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase ' +
                                       (st === 'ACTIVE' || st === 'VERIFIED' ? 'bg-green-100 text-green-800' :
                                        st === 'CHECKED_OUT' ? 'bg-slate-100 text-slate-800' : 'bg-amber-100 text-amber-800')}>
-                                      {st}
+                                      {st === 'VERIFIED' ? '✅ TERVERIFIKASI' : st}
                                     </span>
                                   </td>
                                   <td className="p-3 text-right space-x-1">
@@ -1382,7 +1338,7 @@ export default function OwnerDashboard() {
               <div className="text-left bg-amber-50 p-3 rounded-2xl border border-amber-200 text-[11px] text-amber-900 space-y-1 font-semibold">
                 <p className="font-bold">📢 INSTRUKSI PENGHUNI BARU:</p>
                 <p>1. Pindai QR Code di atas menggunakan kamera HP Anda.</p>
-                <p>2. Lengkapi formulir pendaftaran & unggah KTP dalam 1x24 jam.</p>
+                <p>2. Lengkapi formulir pendaftaran & persetujuan RT dalam 1x24 jam.</p>
                 <p>3. Data disimpan aman sesuai aturan UU PDP No. 27 Tahun 2022.</p>
               </div>
             </div>
@@ -1418,43 +1374,6 @@ export default function OwnerDashboard() {
               <button onClick={handleSaveRules} disabled={savingRules} className="px-4 py-2 bg-emerald-700 text-white text-xs font-bold rounded-2xl hover:bg-emerald-800">
                 {savingRules ? 'Menyimpan...' : 'Simpan Tata Tertib'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL KTP VIEWER */}
-      {(selectedTenantName || loadingKtp) && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
-            <div className="p-4 bg-emerald-800 text-white flex justify-between items-center">
-              <h3 className="text-xs font-bold flex items-center gap-2">
-                <span>🛡️ Dokumen KTP (UU PDP):</span>
-                <span className="text-amber-300">{selectedTenantName}</span>
-              </h3>
-              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="text-white font-bold text-lg leading-none">✕</button>
-            </div>
-            <div className="p-6 flex flex-col items-center justify-center min-h-[220px] bg-slate-50">
-              {loadingKtp ? (
-                <div className="text-center space-y-2">
-                  <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                  <p className="text-xs text-slate-500 font-semibold">Memuat Tautan Aman KTP...</p>
-                </div>
-              ) : ktpErrorMsg ? (
-                <div className="text-center space-y-2 p-4 bg-amber-50 border border-amber-200 rounded-2xl max-w-md">
-                  <p className="text-xs font-semibold text-amber-800">{ktpErrorMsg}</p>
-                </div>
-              ) : selectedKtpUrl ? (
-                <div className="space-y-3 w-full text-center">
-                  <img src={selectedKtpUrl} alt="Dokumen KTP Penghuni" className="max-h-[350px] w-auto mx-auto rounded-2xl border shadow-sm object-contain" />
-                  <p className="text-[10px] text-amber-800 bg-amber-50 p-2 rounded-xl border border-amber-200 font-semibold">
-                    🔒 Tautan privat ini akan kedaluwarsa secara otomatis dalam 60 detik (UU PDP).
-                  </p>
-                </div>
-              ) : null}
-            </div>
-            <div className="p-3 bg-slate-100 text-right border-t">
-              <button onClick={() => { setSelectedKtpUrl(null); setSelectedTenantName(''); setKtpErrorMsg(''); }} className="px-4 py-2 bg-slate-800 text-white text-xs font-bold rounded-2xl">Tutup Dokumen</button>
             </div>
           </div>
         </div>
