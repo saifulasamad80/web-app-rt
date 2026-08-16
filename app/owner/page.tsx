@@ -162,6 +162,24 @@ export default function OwnerDashboard() {
   const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
   const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
+  const handleOpenAddPropModal = () => {
+    setEditingProperty(null);
+    setPropName('');
+    setPropType('kos');
+    setPropTotalRooms(10);
+    setPropOwnerName('');
+    setPropOwnerPhone(loginPhone || '');
+    setPropManagerName('');
+    setPropManagerPhone('');
+    setPropBankName('BCA');
+    setPropBankAcc('');
+    setPropBankHolder('');
+    setPropAddress('');
+    setPropRules('');
+    setPropPin('');
+    setShowAddPropModal(true);
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginPhone || !loginPin) return;
@@ -318,24 +336,21 @@ export default function OwnerDashboard() {
       setSubmittingProp(false);
 
       if (res && res.success && res.data) {
-        setCopyMsg('Properti "' + propName + '" berhasil didaftarkan!');
+        setCopyMsg(`Properti "${propName}" berhasil didaftarkan!`);
         setTimeout(() => setCopyMsg(''), 4000);
         setShowAddPropModal(false);
 
-        const newPropList = [res.data, ...myProperties];
-        setMyProperties(newPropList);
-        await handleSelectProperty(res.data);
-
-        setPropName('');
-        setPropOwnerName('');
-        setPropOwnerPhone('');
-        setPropManagerName('');
-        setPropManagerPhone('');
-        setPropBankAcc('');
-        setPropBankHolder('');
-        setPropAddress('');
-        setPropRules('');
-        setPropPin('');
+        if (isLoggedIn) {
+          const newPropList = [res.data, ...myProperties];
+          setMyProperties(newPropList);
+          await handleSelectProperty(res.data);
+        } else {
+          setLoginPhone(propOwnerPhone || loginPhone);
+          setLoginPin(propPin);
+          setIsLoggedIn(true);
+          setMyProperties([res.data]);
+          await handleSelectProperty(res.data);
+        }
       } else {
         alert('Gagal membuat properti: ' + (res?.error || 'Kesalahan teknis'));
       }
@@ -522,7 +537,7 @@ export default function OwnerDashboard() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER BRANDING CERAH */}
+        {/* HEADER CERAH */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -627,12 +642,23 @@ export default function OwnerDashboard() {
                   {loginLoading ? 'Memeriksa Hak Akses...' : 'Buka Dasbor Saya →'}
                 </button>
               </form>
+
+              {/* MENU PENDAFTARAN PROPERTI BARU SEBELUM LOGIN */}
+              <div className="pt-3 border-t-2 border-slate-100 text-center">
+                <button
+                  type="button"
+                  onClick={handleOpenAddPropModal}
+                  className="text-[0.85rem] text-emerald-800 hover:text-emerald-950 font-black hover:underline cursor-pointer flex items-center justify-center gap-1 mx-auto"
+                >
+                  <span>➕</span> Daftarkan Properti Kos / Kontrakan Baru
+                </button>
+              </div>
             </div>
           </div>
         ) : (
           <div className="space-y-5">
 
-            {/* DROPDOWN UNIT AKTIF */}
+            {/* DROPDOWN UNIT AKTIF & MENU AKSI PROPERTI */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
@@ -659,19 +685,28 @@ export default function OwnerDashboard() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 w-full md:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                 {isOwner && (
-                  <button
-                    type="button"
-                    onClick={() => activeProperty && handleOpenEditProp(activeProperty)}
-                    className="px-4 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.8rem] font-black rounded-xl border border-amber-500 cursor-pointer shadow-sm"
-                  >
-                    ✏️ Edit Properti & Pengelola
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleOpenAddPropModal}
+                      className="px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-[0.75rem] font-black rounded-xl shadow-sm cursor-pointer"
+                    >
+                      ➕ Tambah Unit Baru
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => activeProperty && handleOpenEditProp(activeProperty)}
+                      className="px-3.5 py-2.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-[0.75rem] font-black rounded-xl border border-amber-500 cursor-pointer shadow-sm"
+                    >
+                      ✏️ Edit Properti & Pengelola
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="px-4 py-2.5 bg-red-100 hover:bg-red-200 text-red-800 text-[0.8rem] font-bold rounded-xl border border-red-300 cursor-pointer"
+                  className="px-3.5 py-2.5 bg-red-100 hover:bg-red-200 text-red-800 text-[0.75rem] font-bold rounded-xl border border-red-300 cursor-pointer"
                 >
                   🔒 Kunci Dasbor (Logout)
                 </button>
@@ -765,7 +800,7 @@ export default function OwnerDashboard() {
                   </button>
                 </div>
 
-                {/* TAB 1: DAFTAR PENYEWA (TAGIHAN HANYA PADA PENANGGUNG JAWAB) */}
+                {/* TAB 1: DAFTAR PENYEWA */}
                 {activeTab === 'penyewa' && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -838,7 +873,6 @@ export default function OwnerDashboard() {
                                   </td>
                                   <td className="p-3 font-bold text-emerald-900">{t.room_number || '-'}</td>
 
-                                  {/* STATUS TAGIHAN HANYA DISEMATKAN PADA PENANGGUNG JAWAB */}
                                   <td className="p-3">
                                     {isHeadPerson ? (
                                       <button
@@ -856,7 +890,6 @@ export default function OwnerDashboard() {
                                     )}
                                   </td>
 
-                                  {/* RIWAYAT 3 BULAN HANYA PADA PENANGGUNG JAWAB */}
                                   <td className="p-3">
                                     {isHeadPerson ? (
                                       <div className="flex gap-1">
@@ -1180,13 +1213,13 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL EDIT PROPERTI & PIN UNIT */}
+      {/* MODAL PENDAFTARAN / EDIT PROPERTI & PIN UNIT */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="p-5 bg-emerald-800 text-white flex justify-between items-center">
               <h3 className="text-[0.95rem] font-black">
-                {editingProperty ? '✏️ Edit Properti, Pengelola, & PIN Unit' : '🏢 Daftarkan Properti Kos Baru'}
+                {editingProperty ? '✏️ Edit Properti, Pengelola, & PIN Unit' : '🏢 Daftarkan Properti Kos / Kontrakan Baru'}
               </h3>
               <button
                 type="button"
@@ -1204,6 +1237,7 @@ export default function OwnerDashboard() {
                   <input
                     type="text"
                     required
+                    placeholder="Contoh: Kos Melati Indah RT 03"
                     value={propName}
                     onChange={(e) => setPropName(e.target.value)}
                     className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-bold"
@@ -1328,7 +1362,7 @@ export default function OwnerDashboard() {
                   disabled={submittingProp}
                   className="px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl shadow cursor-pointer disabled:bg-slate-300"
                 >
-                  {submittingProp ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  {submittingProp ? 'Menyimpan...' : editingProperty ? 'Simpan Perubahan' : 'Daftarkan Properti'}
                 </button>
               </div>
             </form>
