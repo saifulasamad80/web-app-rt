@@ -180,7 +180,6 @@ export default function OwnerDashboard() {
     setShowAddPropModal(true);
   };
 
-  // ⚡ LOGIN INSTAN: MEMANFAATKAN INITIAL DETAILS TANPA 2ND ROUND-TRIP
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginPhone || !loginPin) return;
@@ -195,7 +194,6 @@ export default function OwnerDashboard() {
       setMyProperties(res.properties);
       setIsLoggedIn(true);
 
-      // Gunakan initialDetails yang sudah dikirimkan server tanpa loading tambahan
       if (res.initialDetails) {
         setActiveProperty(res.initialDetails.property);
         setTenants(res.initialDetails.tenants || []);
@@ -271,8 +269,7 @@ export default function OwnerDashboard() {
       setSubmittingProp(false);
 
       if (res.success) {
-        setCopyMsg('Data properti & PIN unit berhasil diperbarui!');
-        setTimeout(() => setCopyMsg(''), 3000);
+        alert(`✅ Berhasil! Data properti "${propName}" & PIN unit berhasil diperbarui.`);
         setEditingProperty(null);
         setShowAddPropModal(false);
 
@@ -344,8 +341,7 @@ export default function OwnerDashboard() {
       setSubmittingProp(false);
 
       if (res && res.success && res.data) {
-        setCopyMsg(`Properti "${propName}" berhasil didaftarkan!`);
-        setTimeout(() => setCopyMsg(''), 4000);
+        alert(`✅ Berhasil! Properti "${propName}" berhasil didaftarkan ke sistem RT.`);
         setShowAddPropModal(false);
 
         if (isLoggedIn) {
@@ -365,6 +361,7 @@ export default function OwnerDashboard() {
     }
   };
 
+  // TAMBAHKAN POP-UP ALERT KONFIRMASI SIMPAN PENGELUARAN
   const handleAddExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeProperty || !expenseTitle || !expenseAmount) return;
@@ -383,11 +380,10 @@ export default function OwnerDashboard() {
 
     if (res.success && res.data) {
       setExpenses([res.data, ...expenses]);
-      setCopyMsg('Biaya operasional berhasil dicatat!');
-      setTimeout(() => setCopyMsg(''), 3000);
       setShowAddExpenseModal(false);
       setExpenseTitle('');
       setExpenseAmount('');
+      alert(`✅ Berhasil Tersimpan!\n\nPengeluaran "${expenseTitle}" (${expenseCategory}) sebesar Rp ${parsedAmount.toLocaleString('id-ID')} telah tercatat di Buku Kas.`);
     } else {
       alert('Gagal mencatat pengeluaran: ' + res.error);
     }
@@ -409,6 +405,7 @@ export default function OwnerDashboard() {
     setTenantRentPrice(t.rent_price ? String(t.rent_price) : '1500000');
   };
 
+  // TAMBAHKAN POP-UP ALERT KONFIRMASI SIMPAN DATA PENYEWA / HARGA SEWA
   const handleSaveTenantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTenant) return;
@@ -433,9 +430,8 @@ export default function OwnerDashboard() {
             : t
         )
       );
-      setCopyMsg(`Data kamar ${tenantRoom || 'Penyewa'} (${tenantName}) berhasil disetel ke Rp ${parsedPrice.toLocaleString('id-ID')}!`);
-      setTimeout(() => setCopyMsg(''), 3500);
       setEditingTenant(null);
+      alert(`✅ Berhasil Tersimpan!\n\nData penyewa ${tenantName} (${tenantRoom || 'Kamar'}) telah diperbarui dengan nominal sewa Rp ${parsedPrice.toLocaleString('id-ID')}/bulan.`);
     } else {
       alert('Gagal update data penyewa: ' + res.error);
     }
@@ -500,8 +496,7 @@ export default function OwnerDashboard() {
     setSavingRules(false);
 
     if (res && res.success) {
-      setCopyMsg('Tata tertib hunian berhasil diperbarui!');
-      setTimeout(() => setCopyMsg(''), 3000);
+      alert('✅ Berhasil Tersimpan!\n\nTata tertib hunian telah diperbarui dan langsung aktif di portal warga.');
       setEditingRulesProp(null);
       if (activeProperty) {
         setActiveProperty({ ...activeProperty, house_rules: rulesText });
@@ -1452,7 +1447,7 @@ export default function OwnerDashboard() {
                   disabled={savingExpense}
                   className="px-4 py-2 bg-red-700 text-white font-black rounded-xl shadow cursor-pointer"
                 >
-                  Simpan
+                  {savingExpense ? 'Menyimpan...' : 'Simpan'}
                 </button>
               </div>
             </form>
@@ -1518,7 +1513,9 @@ export default function OwnerDashboard() {
 
               <div className="pt-2 flex justify-end gap-2 border-t">
                 <button type="button" onClick={() => setEditingTenant(null)} className="px-4 py-2 bg-slate-200 font-bold rounded-xl cursor-pointer">Batal</button>
-                <button type="submit" disabled={savingTenant} className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black rounded-xl shadow cursor-pointer">Simpan Harga</button>
+                <button type="submit" disabled={savingTenant} className="px-4 py-2 bg-amber-400 hover:bg-amber-500 text-slate-950 font-black rounded-xl shadow cursor-pointer">
+                  {savingTenant ? 'Menyimpan...' : 'Simpan Harga'}
+                </button>
               </div>
             </form>
           </div>
