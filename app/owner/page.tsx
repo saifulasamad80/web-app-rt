@@ -180,6 +180,7 @@ export default function OwnerDashboard() {
     setShowAddPropModal(true);
   };
 
+  // ⚡ LOGIN INSTAN: MEMANFAATKAN INITIAL DETAILS TANPA 2ND ROUND-TRIP
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginPhone || !loginPin) return;
@@ -193,8 +194,15 @@ export default function OwnerDashboard() {
     if (res.success && res.properties && res.properties.length > 0) {
       setMyProperties(res.properties);
       setIsLoggedIn(true);
-      const firstProp = res.properties[0];
-      await handleSelectProperty(firstProp);
+
+      // Gunakan initialDetails yang sudah dikirimkan server tanpa loading tambahan
+      if (res.initialDetails) {
+        setActiveProperty(res.initialDetails.property);
+        setTenants(res.initialDetails.tenants || []);
+        setExpenses(res.initialDetails.expenses || []);
+      } else {
+        await handleSelectProperty(res.properties[0]);
+      }
     } else {
       setLoginError(res.error || 'Nomor WhatsApp atau PIN 4-Digit salah.');
     }
@@ -643,7 +651,6 @@ export default function OwnerDashboard() {
                 </button>
               </form>
 
-              {/* MENU PENDAFTARAN PROPERTI BARU SEBELUM LOGIN */}
               <div className="pt-3 border-t-2 border-slate-100 text-center">
                 <button
                   type="button"
@@ -658,7 +665,7 @@ export default function OwnerDashboard() {
         ) : (
           <div className="space-y-5">
 
-            {/* DROPDOWN UNIT AKTIF & MENU AKSI PROPERTI */}
+            {/* DROPDOWN UNIT AKTIF */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>

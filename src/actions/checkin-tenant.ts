@@ -154,9 +154,10 @@ export async function deleteRtOfficer(id: string) {
   return { success: !error, error: error?.message };
 }
 
+// ⚡ OPTIMASI KECEPATAN: QUERY PARALEL & SERTAKAN DATA AWAL PROPERTI PERTAMA
 export async function loginOwnerDashboard(phoneInput: string, pinInput: string) {
   if (!phoneInput || !pinInput) {
-    return { success: false, properties: [], error: 'Nomor WhatsApp dan PIN 4-Digit wajib diisi.' };
+    return { success: false, properties: [], initialDetails: null, error: 'Nomor WhatsApp dan PIN 4-Digit wajib diisi.' };
   }
 
   const rawClean = cleanDigits(phoneInput);
@@ -172,6 +173,7 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     return {
       success: false,
       properties: [],
+      initialDetails: null,
       error: `Nomor WhatsApp (${phoneInput}) belum terdaftar sebagai Pemilik atau Pengelola kos.`
     };
   }
@@ -182,39 +184,49 @@ export async function loginOwnerDashboard(phoneInput: string, pinInput: string) 
     return {
       success: false,
       properties: [],
+      initialDetails: null,
       error: '🔒 PIN 4-Digit yang Anda masukkan salah.'
     };
   }
 
-  return { success: true, properties, error: undefined };
-}
-
-export async function getOwnerPropertyDetails(propertyId: string) {
-  const { data: prop, error: propErr } = await supabase
-    .from('properties')
-    .select('*')
-    .eq('id', propertyId)
-    .single();
-
-  if (propErr || !prop) return { success: false, property: null, tenants: [], expenses: [], error: 'Properti tidak ditemukan.' };
-
-  const { data: tenants } = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('property_id', propertyId)
-    .order('entry_date', { ascending: false });
-
-  const { data: expenses } = await supabase
-    .from('property_expenses')
-    .select('*')
-    .eq('property_id', propertyId)
-    .order('expense_date', { ascending: false });
+  // Pre-fetch data properti pertama secara paralel agar login terasa instan
+  const firstProp = properties[0];
+  const [tenantsRes, expensesRes] = await Promise.all([
+    supabase.from('tenants').select('*').eq('property_id', firstProp.id).order('entry_date', { ascending: false }),
+    supabase.from('property_expenses').select('*').eq('property_id', firstProp.id).order('expense_date', { ascending: false })
+  ]);
 
   return {
     success: true,
-    property: prop,
-    tenants: tenants || [],
-    expenses: expenses || [],
+    properties,
+    initialDetails: {
+      property: firstProp,
+      tenants: tenantsRes.data || [],
+      expenses: expensesRes.data || []
+    },
+    error: undefined
+  };
+}
+
+// ⚡ OPTIMASI KECEPATAN: PARALLEL DATABASE QUERY (TIDAK LAGI WATERFALL)
+export async function getOwnerPropertyDetails(propertyId: string) {
+  if (!propertyId) return { success: false, property: null, tenants: [], expenses: [], error: 'ID Properti kosong.' };
+
+  const [propRes, tenantsRes, expensesRes] = await Promise.all([
+    supabase.from('properties').select('*').eq('id', propertyId).single(),
+    supabase.from('tenants').select('*').eq('property_id', propertyId).order('entry_date', { ascending: false }),
+    supabase.from('property_expenses').select('*').eq('property_id', propertyId).order('expense_date', { ascending: false })
+  ]);
+
+  if (propRes.error || !propRes.data) {
+    return { success: false, property: null, tenants: [], expenses: [], error: 'Properti tidak ditemukan.' };
+  }
+
+  return {
+    success: true,
+    property: propRes.data,
+    tenants: tenantsRes.data || [],
+    expenses: expensesRes.data || [],
     error: undefined
   };
 }
@@ -445,7 +457,6 @@ export async function deletePropertyExpenseWithAudit(expenseId: string, title: s
   return await deletePropertyExpense(expenseId, title, amount);
 }
 
-// MENDUKUNG MULTI-KAMAR SEWA OLEH 1 NOMOR WHATSAPP
 export async function getTenantPortalData(phoneInput: string) {
   if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
 
@@ -469,11 +480,9 @@ export async function getTenantPortalData(phoneInput: string) {
     };
   }
 
-  // Cari semua kamar utama yang disewa nomor ini
   const headRooms = tenantRecords.filter((t) => t.is_head);
   const primary = headRooms.length > 0 ? headRooms[0] : tenantRecords[0];
 
-  // Ambil semua anggota keluarga dari household aktif
   let householdMembers = [primary];
   if (primary.household_id) {
     const { data: members } = await supabase
@@ -492,17 +501,6 @@ export async function getTenantPortalData(phoneInput: string) {
     allRooms: headRooms.length > 0 ? headRooms : [primary],
     household: householdMembers
   };
-}
-
-export async function getHouseholdMembersByHouseholdId(householdId: string) {
-  if (!householdId) return { success: false, members: [] };
-  const { data: members } = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('household_id', householdId)
-    .order('is_head', { ascending: false });
-
-  return { success: true, members: members || [] };
 }
 
 export async function addMemberSusulan(formData: FormData) {
