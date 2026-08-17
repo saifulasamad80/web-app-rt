@@ -35,6 +35,55 @@ function calculateAge(birthDateString: string): number {
   return isNaN(age) ? 0 : age;
 }
 
+// ⚡ KOMPRESI GAMBAR DI SISI KLIEN (MENGECILKAN UKURAN DARI 5MB MENJADI ~100KB)
+async function compressImageClient(file: File, maxWidth = 1200, quality = 0.7): Promise<File> {
+  if (!file.type.startsWith('image/')) return file;
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const cleanName = file.name.replace(/\.[^/.]+$/, '') + '.jpg';
+              const compressedFile = new File([blob], cleanName, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+    };
+    reader.onerror = () => resolve(file);
+  });
+}
+
 export default function CheckinClientForm({ property }: { property: Property }) {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
 
@@ -63,6 +112,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [agreedRules, setAgreedRules] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('Mengirim Formulir...');
   const [successData, setSuccessData] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -100,6 +150,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
       return;
     }
 
+    // Validasi ketat anggota sekamar
     for (let i = 0; i < occupants.length; i++) {
       const occ = occupants[i];
       if (!occ.name || !occ.birth_date) {
@@ -114,70 +165,91 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     }
 
     setLoading(true);
+    setLoadingText('⚡ Mengoptimalkan & mengompres foto...');
     setErrorMsg('');
 
-    const formData = new FormData();
-    formData.append('property_id', property.id);
-    formData.append('room_number', roomNumber);
-    formData.append('entry_date', entryDate);
-    formData.append('marital_status', maritalStatus);
-    formData.append('occupation', occupation);
-    formData.append('rent_price', '0');
+    try {
+      // 1. Kompres seluruh foto di browser HP secara paralel
+      const [compressedKtp, compressedMarriage, compressedKk] = await Promise.all([
+        compressImageClient(ktpFile),
+        marriageDoc ? compressImageClient(marriageDoc) : Promise.resolve(null),
+        kkDoc ? compressImageClient(kkDoc) : Promise.resolve(null),
+      ]);
 
-    formData.append('name', primaryName);
-    formData.append('phone', primaryPhone);
-    formData.append('birth_date', primaryBirthDate);
-    formData.append('address_ktp', primaryAddress);
-    if (ktpFile) formData.append('ktp', ktpFile);
+      const compressedOccupantsFiles = await Promise.all(
+        occupants.map(async (occ) => (occ.ktpFile ? await compressImageClient(occ.ktpFile) : null))
+      );
 
-    if (marriageDoc) formData.append('marriage_doc', marriageDoc);
-    if (kkDoc) formData.append('kk_doc', kkDoc);
+      setLoadingText('🚀 Mengirim formulir resmi ke RT...');
 
-    const occupantList = [
-      {
-        name: primaryName,
-        phone: primaryPhone,
-        birth_date: primaryBirthDate,
-        address_ktp: primaryAddress,
-        relation: 'Penanggung Jawab',
-        is_head: true,
-        marital_status: maritalStatus,
-        occupation,
-      },
-    ];
+      // 2. Susun FormData ringan (< 500 KB)
+      const formData = new FormData();
+      formData.append('property_id', property.id);
+      formData.append('room_number', roomNumber);
+      formData.append('entry_date', entryDate);
+      formData.append('marital_status', maritalStatus);
+      formData.append('occupation', occupation);
+      formData.append('rent_price', '0');
 
-    occupants.forEach((occ, idx) => {
-      occupantList.push({
-        name: occ.name,
-        phone: occ.phone || '',
-        birth_date: occ.birth_date || '',
-        address_ktp: primaryAddress,
-        relation: occ.relation || 'Anggota',
-        is_head: false,
-        marital_status: 'Belum Menikah',
-        occupation: '',
+      formData.append('name', primaryName);
+      formData.append('phone', primaryPhone);
+      formData.append('birth_date', primaryBirthDate);
+      formData.append('address_ktp', primaryAddress);
+      if (compressedKtp) formData.append('ktp', compressedKtp);
+
+      if (compressedMarriage) formData.append('marriage_doc', compressedMarriage);
+      if (compressedKk) formData.append('kk_doc', compressedKk);
+
+      const occupantList = [
+        {
+          name: primaryName,
+          phone: primaryPhone,
+          birth_date: primaryBirthDate,
+          address_ktp: primaryAddress,
+          relation: 'Penanggung Jawab',
+          is_head: true,
+          marital_status: maritalStatus,
+          occupation,
+        },
+      ];
+
+      occupants.forEach((occ, idx) => {
+        occupantList.push({
+          name: occ.name,
+          phone: occ.phone || '',
+          birth_date: occ.birth_date || '',
+          address_ktp: primaryAddress,
+          relation: occ.relation || 'Anggota',
+          is_head: false,
+          marital_status: 'Belum Menikah',
+          occupation: '',
+        });
+
+        const memberFile = compressedOccupantsFiles[idx];
+        if (memberFile) {
+          formData.append(`member_ktp_${idx + 1}`, memberFile);
+        }
       });
 
-      if (occ.ktpFile) {
-        formData.append(`member_ktp_${idx + 1}`, occ.ktpFile);
+      formData.append('occupants', JSON.stringify(occupantList));
+
+      const res = await submitMultiTenantsStrict(formData);
+      setLoading(false);
+
+      if (res && res.success) {
+        setSuccessData({
+          name: primaryName,
+          room: roomNumber,
+          phone: primaryPhone,
+          property: property.name || property.property_name,
+          household_id: res.household_id,
+        });
+      } else {
+        setErrorMsg(res?.error || 'Gagal mengirim formulir pendaftaran. Silakan coba lagi.');
       }
-    });
-
-    formData.append('occupants', JSON.stringify(occupantList));
-
-    const res = await submitMultiTenantsStrict(formData);
-    setLoading(false);
-
-    if (res && res.success) {
-      setSuccessData({
-        name: primaryName,
-        room: roomNumber,
-        phone: primaryPhone,
-        property: property.name || property.property_name,
-        household_id: res.household_id,
-      });
-    } else {
-      setErrorMsg(res?.error || 'Gagal mengirim formulir pendaftaran. Silakan coba lagi.');
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Terjadi kendala jaringan: ' + (err?.message || 'Koneksi terputus'));
     }
   };
 
@@ -190,6 +262,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     >
       <div className="max-w-xl mx-auto space-y-4">
 
+        {/* HEADER */}
         <header className="bg-emerald-800 text-white p-5 md:p-6 rounded-3xl shadow-xl flex justify-between items-center">
           <div>
             <span className="text-[0.75rem] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
@@ -224,6 +297,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
         </header>
 
         {successData ? (
+          /* TAMPILAN SUKSES */
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-emerald-300 space-y-4 text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-inner">
               ✅
@@ -249,6 +323,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
             </div>
           </div>
         ) : (
+          /* FORMULIR PENDAFTARAN */
           <form onSubmit={handleSubmit} className="bg-white p-5 md:p-7 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-[0.8rem]">
             {errorMsg && (
               <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl font-bold text-center">
@@ -408,6 +483,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               </div>
             )}
 
+            {/* 2. ANGGOTA KELUARGA / TEMAN SEKAMAR */}
             <div className="pt-2 border-t space-y-3">
               <div className="flex justify-between items-center">
                 <div>
@@ -504,6 +580,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                       </div>
                     </div>
 
+                    {/* FOTO KTP KHUSUS USIA >= 17 TAHUN */}
                     {isAdult && (
                       <div className="bg-amber-50 p-3 rounded-xl border-2 border-amber-300 space-y-1">
                         <label className="block font-black text-amber-950 text-[0.75rem]">
@@ -523,6 +600,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               })}
             </div>
 
+            {/* 3. TATA TERTIB */}
             <div className="pt-2 border-t space-y-2">
               <h3 className="text-[0.95rem] font-black text-slate-900 uppercase">
                 3. Tata Tertib Hunian & Lingkungan RT
@@ -536,6 +614,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 )}
               </div>
 
+              {/* 2 CHECKLIST TERPISAH */}
               <div className="space-y-2 pt-2 bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-200">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -570,7 +649,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               disabled={loading || !agreedPdp || !agreedRules}
               className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.95rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
             >
-              {loading ? 'Mengirim Formulir...' : 'Kirim Pendaftaran Lapor Diri RT →'}
+              {loading ? loadingText : 'Kirim Pendaftaran Lapor Diri RT →'}
             </button>
           </form>
         )}
