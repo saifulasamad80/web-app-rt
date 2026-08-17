@@ -35,59 +35,9 @@ function calculateAge(birthDateString: string): number {
   return isNaN(age) ? 0 : age;
 }
 
-// ⚡ KOMPRESI GAMBAR DI SISI KLIEN (MENGECILKAN UKURAN DARI 5MB MENJADI ~100KB)
-async function compressImageClient(file: File, maxWidth = 1200, quality = 0.7): Promise<File> {
-  if (!file.type.startsWith('image/')) return file;
-
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const cleanName = file.name.replace(/\.[^/.]+$/, '') + '.jpg';
-              const compressedFile = new File([blob], cleanName, {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            } else {
-              resolve(file);
-            }
-          },
-          'image/jpeg',
-          quality
-        );
-      };
-      img.onerror = () => resolve(file);
-    };
-    reader.onerror = () => resolve(file);
-  });
-}
-
 export default function CheckinClientForm({ property }: { property: Property }) {
   const [zoomPercent, setZoomPercent] = useState<number>(100);
 
-  // Data Kamar & Penanggung Jawab
   const [roomNumber, setRoomNumber] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [maritalStatus, setMaritalStatus] = useState('Belum Menikah');
@@ -99,20 +49,16 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [primaryAddress, setPrimaryAddress] = useState('');
   const [ktpFile, setKtpFile] = useState<File | null>(null);
 
-  // Dokumen Nikah / KK
   const [marriageDoc, setMarriageDoc] = useState<File | null>(null);
   const [kkDoc, setKkDoc] = useState<File | null>(null);
   const [pendingDocLater, setPendingDocLater] = useState(false);
 
-  // Anggota Tambahan Sekamar
   const [occupants, setOccupants] = useState<OccupantItem[]>([]);
 
-  // 2 Checklist Wajib Terpisah
   const [agreedPdp, setAgreedPdp] = useState(false);
   const [agreedRules, setAgreedRules] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState('Mengirim Formulir...');
   const [successData, setSuccessData] = useState<any | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -150,7 +96,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
       return;
     }
 
-    // Validasi ketat anggota sekamar
     for (let i = 0; i < occupants.length; i++) {
       const occ = occupants[i];
       if (!occ.name || !occ.birth_date) {
@@ -165,91 +110,79 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     }
 
     setLoading(true);
-    setLoadingText('⚡ Mengoptimalkan & mengompres foto...');
     setErrorMsg('');
 
-    try {
-      // 1. Kompres seluruh foto di browser HP secara paralel
-      const [compressedKtp, compressedMarriage, compressedKk] = await Promise.all([
-        compressImageClient(ktpFile),
-        marriageDoc ? compressImageClient(marriageDoc) : Promise.resolve(null),
-        kkDoc ? compressImageClient(kkDoc) : Promise.resolve(null),
-      ]);
+    const formData = new FormData();
+    formData.append('property_id', property.id);
+    formData.append('room_number', roomNumber);
+    formData.append('entry_date', entryDate);
+    formData.append('marital_status', maritalStatus);
+    formData.append('occupation', occupation);
+    formData.append('rent_price', '0');
 
-      const compressedOccupantsFiles = await Promise.all(
-        occupants.map(async (occ) => (occ.ktpFile ? await compressImageClient(occ.ktpFile) : null))
-      );
+    // Penanggung Jawab
+    formData.append('name', primaryName);
+    formData.append('phone', primaryPhone);
+    formData.append('birth_date', primaryBirthDate);
+    formData.append('address_ktp', primaryAddress);
+    if (ktpFile) formData.append('ktp', ktpFile);
 
-      setLoadingText('🚀 Mengirim formulir resmi ke RT...');
+    // Dokumen Nikah & KK Terpisah
+    if (marriageDoc) formData.append('marriage_doc', marriageDoc);
+    if (kkDoc) formData.append('kk_doc', kkDoc);
 
-      // 2. Susun FormData ringan (< 500 KB)
-      const formData = new FormData();
-      formData.append('property_id', property.id);
-      formData.append('room_number', roomNumber);
-      formData.append('entry_date', entryDate);
-      formData.append('marital_status', maritalStatus);
-      formData.append('occupation', occupation);
-      formData.append('rent_price', '0');
+    // Susun Payload Anggota
+    const occupantList = [
+      {
+        name: primaryName,
+        phone: primaryPhone,
+        birth_date: primaryBirthDate,
+        address_ktp: primaryAddress,
+        relation: 'Penanggung Jawab',
+        is_head: true,
+        marital_status: maritalStatus,
+        occupation,
+      },
+    ];
 
-      formData.append('name', primaryName);
-      formData.append('phone', primaryPhone);
-      formData.append('birth_date', primaryBirthDate);
-      formData.append('address_ktp', primaryAddress);
-      if (compressedKtp) formData.append('ktp', compressedKtp);
+    occupants.forEach((occ, idx) => {
+      let memberMarital = 'Belum Menikah';
+      if (occ.relation === 'Istri' || occ.relation === 'Suami') {
+        memberMarital = 'Menikah';
+      }
 
-      if (compressedMarriage) formData.append('marriage_doc', compressedMarriage);
-      if (compressedKk) formData.append('kk_doc', compressedKk);
-
-      const occupantList = [
-        {
-          name: primaryName,
-          phone: primaryPhone,
-          birth_date: primaryBirthDate,
-          address_ktp: primaryAddress,
-          relation: 'Penanggung Jawab',
-          is_head: true,
-          marital_status: maritalStatus,
-          occupation,
-        },
-      ];
-
-      occupants.forEach((occ, idx) => {
-        occupantList.push({
-          name: occ.name,
-          phone: occ.phone || '',
-          birth_date: occ.birth_date || '',
-          address_ktp: primaryAddress,
-          relation: occ.relation || 'Anggota',
-          is_head: false,
-          marital_status: 'Belum Menikah',
-          occupation: '',
-        });
-
-        const memberFile = compressedOccupantsFiles[idx];
-        if (memberFile) {
-          formData.append(`member_ktp_${idx + 1}`, memberFile);
-        }
+      occupantList.push({
+        name: occ.name,
+        phone: occ.phone || '',
+        birth_date: occ.birth_date || '',
+        address_ktp: primaryAddress,
+        relation: occ.relation || 'Anggota',
+        is_head: false,
+        marital_status: memberMarital,
+        occupation: '',
       });
 
-      formData.append('occupants', JSON.stringify(occupantList));
-
-      const res = await submitMultiTenantsStrict(formData);
-      setLoading(false);
-
-      if (res && res.success) {
-        setSuccessData({
-          name: primaryName,
-          room: roomNumber,
-          phone: primaryPhone,
-          property: property.name || property.property_name,
-          household_id: res.household_id,
-        });
-      } else {
-        setErrorMsg(res?.error || 'Gagal mengirim formulir pendaftaran. Silakan coba lagi.');
+      // Lampirkan file KTP dengan indeks cocok
+      if (occ.ktpFile) {
+        formData.append(`member_ktp_${idx}`, occ.ktpFile);
       }
-    } catch (err: any) {
-      setLoading(false);
-      setErrorMsg('Terjadi kendala jaringan: ' + (err?.message || 'Koneksi terputus'));
+    });
+
+    formData.append('occupants', JSON.stringify(occupantList));
+
+    const res = await submitMultiTenantsStrict(formData);
+    setLoading(false);
+
+    if (res && res.success) {
+      setSuccessData({
+        name: primaryName,
+        room: roomNumber,
+        phone: primaryPhone,
+        property: property.name || property.property_name,
+        household_id: res.household_id,
+      });
+    } else {
+      setErrorMsg(res?.error || 'Gagal mengirim formulir pendaftaran. Silakan coba lagi.');
     }
   };
 
@@ -297,7 +230,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
         </header>
 
         {successData ? (
-          /* TAMPILAN SUKSES */
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-emerald-300 space-y-4 text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-3xl mx-auto shadow-inner">
               ✅
@@ -323,7 +255,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
             </div>
           </div>
         ) : (
-          /* FORMULIR PENDAFTARAN */
           <form onSubmit={handleSubmit} className="bg-white p-5 md:p-7 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-[0.8rem]">
             {errorMsg && (
               <div className="p-3 bg-red-50 border-2 border-red-200 text-red-700 rounded-2xl font-bold text-center">
@@ -448,36 +379,55 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 onChange={(e) => setKtpFile(e.target.files ? e.target.files[0] : null)}
                 className="w-full p-2 border-2 border-emerald-300 rounded-xl bg-white text-[0.75rem] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[0.75rem] file:font-bold file:bg-emerald-900 file:text-white cursor-pointer"
               />
-              <p className="text-[0.7rem] text-emerald-800 font-medium">Dokumen dilindungi privat dan hanya dapat diverifikasi oleh Pengurus RT.</p>
             </div>
 
+            {/* DOKUMEN BUKU NIKAH & KK TERPISAH */}
             {maritalStatus === 'Menikah' && (
-              <div className="bg-amber-50 p-4 rounded-2xl border-2 border-amber-300 space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="font-black text-amber-950 text-[0.8rem]">
-                    📎 Lampiran Buku Nikah / Kartu Keluarga (KK)
+              <div className="bg-amber-50 p-4 rounded-2xl border-2 border-amber-300 space-y-3">
+                <div className="flex justify-between items-center border-b border-amber-200 pb-2">
+                  <label className="font-black text-amber-950 text-[0.85rem]">
+                    📎 Dokumen Pasangan Suami-Istri (Pilih Salah Satu / Keduanya)
                   </label>
                   <label className="flex items-center gap-1.5 text-[0.75rem] font-bold text-amber-900 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={pendingDocLater}
                       onChange={(e) => setPendingDocLater(e.target.checked)}
-                      className="w-4 h-4 rounded text-amber-600"
+                      className="w-4 h-4 rounded text-amber-600 cursor-pointer"
                     />
                     Unggah Menyusul
                   </label>
                 </div>
 
                 {!pendingDocLater ? (
-                  <input
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => setMarriageDoc(e.target.files ? e.target.files[0] : null)}
-                    className="w-full p-2 border-2 border-amber-200 rounded-xl bg-white text-[0.75rem] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[0.75rem] file:font-bold file:bg-amber-900 file:text-white cursor-pointer"
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block font-bold text-amber-900 mb-1 text-[0.75rem]">
+                        1. Lampiran Buku Nikah (Foto/PDF)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => setMarriageDoc(e.target.files ? e.target.files[0] : null)}
+                        className="w-full p-2 border-2 border-amber-300 rounded-xl bg-white text-[0.7rem] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[0.7rem] file:font-bold file:bg-amber-900 file:text-white cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-amber-900 mb-1 text-[0.75rem]">
+                        2. Lampiran Kartu Keluarga (KK)
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => setKkDoc(e.target.files ? e.target.files[0] : null)}
+                        className="w-full p-2 border-2 border-amber-300 rounded-xl bg-white text-[0.7rem] file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[0.7rem] file:font-bold file:bg-amber-900 file:text-white cursor-pointer"
+                      />
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-[0.7rem] text-amber-800 italic font-medium">
-                    ⚠️ Anda dapat mengunggah berkas ini nanti melalui menu Portal Warga.
+                    ⚠️ Anda dapat mengunggah berkas Buku Nikah / KK nanti melalui menu Portal Warga.
                   </p>
                 )}
               </div>
@@ -580,7 +530,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                       </div>
                     </div>
 
-                    {/* FOTO KTP KHUSUS USIA >= 17 TAHUN */}
                     {isAdult && (
                       <div className="bg-amber-50 p-3 rounded-xl border-2 border-amber-300 space-y-1">
                         <label className="block font-black text-amber-950 text-[0.75rem]">
@@ -614,7 +563,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 )}
               </div>
 
-              {/* 2 CHECKLIST TERPISAH */}
               <div className="space-y-2 pt-2 bg-slate-50 p-3.5 rounded-2xl border-2 border-slate-200">
                 <label className="flex items-start gap-2.5 cursor-pointer">
                   <input
@@ -649,7 +597,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               disabled={loading || !agreedPdp || !agreedRules}
               className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-[0.95rem] rounded-2xl transition-all shadow-md disabled:bg-slate-300 cursor-pointer"
             >
-              {loading ? loadingText : 'Kirim Pendaftaran Lapor Diri RT →'}
+              {loading ? 'Mengirim Formulir...' : 'Kirim Pendaftaran Lapor Diri RT →'}
             </button>
           </form>
         )}

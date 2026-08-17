@@ -14,7 +14,6 @@ function cleanDigits(phone?: string): string {
   return phone.replace(/\D/g, '');
 }
 
-// ⚡ SINGLE BUNDLE ACTION: AMBIL SEMUA DATA DASBOR RT DALAM 1 REQUEST CEPAT (<400ms)
 export async function getRtDashboardBundle() {
   try {
     const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
@@ -484,6 +483,70 @@ export async function getTenantPortalData(phoneInput: string) {
   }
 }
 
+export async function addMemberSusulan(formData: FormData) {
+  try {
+    const household_id = formData.get('household_id') as string;
+    const property_id = formData.get('property_id') as string;
+    const room_number = formData.get('room_number') as string;
+    const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
+    const name = formData.get('name') as string;
+    const phone = (formData.get('phone') as string || '').trim();
+    const birth_date = formData.get('birth_date') as string;
+    const relation = formData.get('relation') as string;
+
+    let memberMaritalStatus = 'Belum Menikah';
+    if (relation === 'Istri' || relation === 'Suami') {
+      memberMaritalStatus = 'Menikah';
+    }
+
+    let ktp_path = null;
+    const ktpFile = formData.get('ktp');
+    if (ktpFile && ktpFile instanceof File && ktpFile.size > 0) {
+      const fileExt = ktpFile.name.split('.').pop() || 'jpg';
+      const fileName = `ktp_susulan_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const buffer = Buffer.from(await ktpFile.arrayBuffer());
+
+      const { data: upData, error: upErr } = await supabase.storage
+        .from('ktp-documents')
+        .upload(fileName, buffer, { contentType: ktpFile.type || 'image/jpeg', upsert: true });
+
+      if (!upErr && upData) {
+        ktp_path = upData.path;
+      }
+    }
+
+    const { data, error } = await supabase.from('tenants').insert({
+      household_id,
+      property_id,
+      room_number,
+      entry_date,
+      name,
+      phone,
+      birth_date,
+      relation,
+      is_head: false,
+      marital_status: memberMaritalStatus,
+      rent_price: 0,
+      payment_status: 'UNPAID',
+      status: 'PENDING',
+      ktp_path
+    }).select();
+
+    if (error) return { success: false, error: error.message };
+
+    try {
+      revalidatePath('/portal-warga');
+      revalidatePath('/owner');
+      revalidatePath('/rt');
+    } catch (e) {}
+
+    return { success: true, data: data ? data[0] : null };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+// ⚡ SUBMIT PENDAFTARAN LENGKAP: MENYIMPAN KTP ANGGOTA & STATUS NIKAH SECARA PRESISI
 export async function submitMultiTenantsStrict(formData: FormData) {
   try {
     const property_id = formData.get('property_id') as string;
@@ -515,7 +578,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
       (kkDoc instanceof File && kkDoc.size > 0) ? uploadFile(kkDoc, 'kk') : Promise.resolve(null)
     ]);
 
-    let occupants = [];
+    let occupants: any[] = [];
     try { occupants = JSON.parse(occupantsRaw || '[]'); } catch (e) {}
     if (occupants.length === 0) {
       occupants = [{ name: formData.get('name'), phone: formData.get('phone'), address_ktp: formData.get('address_ktp'), relation: 'Penanggung Jawab', is_head: true }];
@@ -523,11 +586,21 @@ export async function submitMultiTenantsStrict(formData: FormData) {
 
     const insertPayload = await Promise.all(occupants.map(async (occ: any, index: number) => {
       let member_ktp_path = index === 0 ? ktp_path : null;
+
+      // Ambil file KTP anggota dengan indeks tepat
       if (index > 0) {
-        const memberFile = formData.get(`member_ktp_${index + 1}`);
+        const memberFile = formData.get(`member_ktp_${index - 1}`);
         if (memberFile instanceof File && memberFile.size > 0) {
           member_ktp_path = await uploadFile(memberFile, `ktp_member_${index}`);
         }
+      }
+
+      // Status pernikahan anggota: jika istri/suami, otomatis Menikah
+      let currentMaritalStatus = occ.marital_status || 'Belum Menikah';
+      if (index === 0) {
+        currentMaritalStatus = marital_status;
+      } else if (occ.relation === 'Istri' || occ.relation === 'Suami') {
+        currentMaritalStatus = 'Menikah';
       }
 
       return {
@@ -541,13 +614,13 @@ export async function submitMultiTenantsStrict(formData: FormData) {
         relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
         is_head: index === 0,
         birth_date: occ.birth_date || (index === 0 ? (formData.get('birth_date') as string) : null),
-        marital_status: index === 0 ? marital_status : (occ.marital_status || 'Belum Menikah'),
+        marital_status: currentMaritalStatus,
         occupation: index === 0 ? occupation : '',
         rent_price: index === 0 ? rent_price : 0,
         payment_status: 'UNPAID',
         ktp_path: member_ktp_path,
-        marriage_doc_url: index === 0 ? marriage_doc_url : null,
-        kk_doc_url: index === 0 ? kk_doc_url : null,
+        marriage_doc_url: marriage_doc_url || null,
+        kk_doc_url: kk_doc_url || null,
         status: 'PENDING',
       };
     }));

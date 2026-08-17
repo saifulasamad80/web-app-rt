@@ -361,7 +361,6 @@ export default function OwnerDashboard() {
     }
   };
 
-  // TAMBAHKAN POP-UP ALERT KONFIRMASI SIMPAN PENGELUARAN
   const handleAddExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeProperty || !expenseTitle || !expenseAmount) return;
@@ -383,7 +382,7 @@ export default function OwnerDashboard() {
       setShowAddExpenseModal(false);
       setExpenseTitle('');
       setExpenseAmount('');
-      alert(`✅ Berhasil Tersimpan!\n\nPengeluaran "${expenseTitle}" (${expenseCategory}) sebesar Rp ${parsedAmount.toLocaleString('id-ID')} telah tercatat di Buku Kas.`);
+      alert(`✅ Berhasil Tersimpan!\n\nPengeluaran "${expenseTitle}" (${expenseCategory}) sebesar Rp ${parsedAmount.toLocaleString('id-ID')} telah dicatat.`);
     } else {
       alert('Gagal mencatat pengeluaran: ' + res.error);
     }
@@ -405,7 +404,6 @@ export default function OwnerDashboard() {
     setTenantRentPrice(t.rent_price ? String(t.rent_price) : '1500000');
   };
 
-  // TAMBAHKAN POP-UP ALERT KONFIRMASI SIMPAN DATA PENYEWA / HARGA SEWA
   const handleSaveTenantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTenant) return;
@@ -540,7 +538,7 @@ export default function OwnerDashboard() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH */}
+        {/* HEADER */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -584,12 +582,6 @@ export default function OwnerDashboard() {
             </Link>
           </div>
         </header>
-
-        {copyMsg && (
-          <div className="p-3.5 bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center">
-            {copyMsg}
-          </div>
-        )}
 
         {!isLoggedIn ? (
           <div className="max-w-md mx-auto space-y-4">
@@ -660,7 +652,6 @@ export default function OwnerDashboard() {
         ) : (
           <div className="space-y-5">
 
-            {/* DROPDOWN UNIT AKTIF */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
@@ -723,7 +714,6 @@ export default function OwnerDashboard() {
             ) : activeProperty ? (
               <div className="space-y-5">
 
-                {/* HERO FINANSIAL */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg space-y-1">
                     <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
@@ -861,7 +851,11 @@ export default function OwnerDashboard() {
                               const st = (t.status || '').toUpperCase();
                               const isPaid = (t.payment_status || '').toUpperCase() === 'PAID';
                               const isPending = st === 'PENDING';
-                              const isMarriedWithoutDoc = t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
+                              
+                              const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+                              // Dokumen hilang HANYA jika menikah dan TIDAK MEMILIKI buku nikah maupun KK
+                              const isDocMissing = isMarried && !t.marriage_doc_url && !t.kk_doc_url;
+
                               const threeMonthHistory = getThreeMonthStatus(t.payment_status);
                               const isHeadPerson = t.is_head || (t.relation || '').toLowerCase().includes('penanggung');
 
@@ -930,7 +924,7 @@ export default function OwnerDashboard() {
                                         ⚠️ Menunggu tinjauan & persetujuan Pengurus RT.
                                       </p>
                                     )}
-                                    {isMarriedWithoutDoc && (
+                                    {isDocMissing && (
                                       <p className="text-[0.7rem] text-red-800 font-semibold leading-tight bg-red-50 p-1.5 rounded-lg border border-red-200">
                                         ⚠️ Buku Nikah / KK belum diunggah.
                                       </p>
@@ -1101,7 +1095,7 @@ export default function OwnerDashboard() {
 
       </div>
 
-      {/* MODAL POSTER CETAK RESMI QR CODE */}
+      {/* MODAL POSTER */}
       {posterProp && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
@@ -1169,7 +1163,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL TATA TERTIB HUNIAN */}
+      {/* MODAL TATA TERTIB */}
       {editingRulesProp && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">
@@ -1215,7 +1209,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* MODAL PENDAFTARAN / EDIT PROPERTI & PIN UNIT */}
+      {/* MODAL EDIT PROPERTI */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200 max-h-[90vh] overflow-y-auto">
@@ -1447,7 +1441,7 @@ export default function OwnerDashboard() {
                   disabled={savingExpense}
                   className="px-4 py-2 bg-red-700 text-white font-black rounded-xl shadow cursor-pointer"
                 >
-                  {savingExpense ? 'Menyimpan...' : 'Simpan'}
+                  Simpan
                 </button>
               </div>
             </form>
