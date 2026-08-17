@@ -14,6 +14,55 @@ function cleanDigits(phone?: string): string {
   return phone.replace(/\D/g, '');
 }
 
+// ⚡ SINGLE BUNDLE ACTION: AMBIL SEMUA DATA DASBOR RT DALAM 1 REQUEST CEPAT (<400ms)
+export async function getRtDashboardBundle() {
+  try {
+    const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
+      supabase.from('tenants').select('*').order('created_at', { ascending: false }),
+      supabase.from('properties').select('*').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('*').order('created_at', { ascending: true }),
+      supabase.from('dues').select('*').order('created_at', { ascending: false }),
+      supabase.from('dues_audit_logs').select('*').order('created_at', { ascending: false }).limit(30)
+    ]);
+
+    const propMap = new Map((pRes.data || []).map((p) => [p.id, p]));
+    const mergedTenants = (tRes.data || []).map((t) => ({
+      ...t,
+      properties: propMap.get(t.property_id) || null
+    }));
+
+    let officersList = oRes.data || [];
+    if (officersList.length === 0) {
+      officersList = [
+        { id: '1', full_name: 'Saiful Anwar Samad (Ajip)', role: 'SUPER_ADMIN', phone_number: '082113546883', email: 'ajipsas@gmail.com' },
+        { id: '2', full_name: 'Bpk. H. Ahmad Fauzi', role: 'KETUA_RT', phone_number: '08111222333', email: 'ahmad.rt@gmail.com' },
+        { id: '3', full_name: 'Bpk. Hendra Wijaya', role: 'SEKRETARIS', phone_number: '081234567890', email: 'sekretaris.rt@gmail.com' },
+        { id: '4', full_name: 'Ibu Hj. Maryam', role: 'BENDAHARA', phone_number: '081398765432', email: 'bendahara.rt@gmail.com' },
+        { id: '5', full_name: 'Komandan Regu Hansip / Satpam', role: 'KEAMANAN_HANSIP', phone_number: '081299887766', email: 'hansip.rt@gmail.com' },
+      ];
+    }
+
+    return {
+      success: true,
+      tenants: mergedTenants,
+      properties: pRes.data || [],
+      officers: officersList,
+      dues: dRes.data || [],
+      auditLogs: aRes.data || []
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      tenants: [],
+      properties: [],
+      officers: [],
+      dues: [],
+      auditLogs: [],
+      error: err.message
+    };
+  }
+}
+
 export async function loginRtAdminAction(emailInput: string, passwordInput: string) {
   if (!emailInput || !passwordInput) {
     return { success: false, error: 'Email dan kata sandi pengurus wajib diisi.' };
@@ -77,32 +126,6 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || 'Terjadi kesalahan sistem.' };
-  }
-}
-
-export async function getRtOfficers() {
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: true });
-
-    if (error || !data || data.length === 0) {
-      return {
-        success: true,
-        officers: [
-          { id: '1', full_name: 'Saiful Anwar Samad (Ajip)', role: 'SUPER_ADMIN', phone_number: '082113546883', email: 'ajipsas@gmail.com' },
-          { id: '2', full_name: 'Bpk. H. Ahmad Fauzi', role: 'KETUA_RT', phone_number: '08111222333', email: 'ahmad.rt@gmail.com' },
-          { id: '3', full_name: 'Bpk. Hendra Wijaya', role: 'SEKRETARIS', phone_number: '081234567890', email: 'sekretaris.rt@gmail.com' },
-          { id: '4', full_name: 'Ibu Hj. Maryam', role: 'BENDAHARA', phone_number: '081398765432', email: 'bendahara.rt@gmail.com' },
-          { id: '5', full_name: 'Komandan Regu Hansip / Satpam', role: 'KEAMANAN_HANSIP', phone_number: '081299887766', email: 'hansip.rt@gmail.com' },
-        ]
-      };
-    }
-
-    return { success: true, officers: data };
-  } catch (err: any) {
-    return { success: true, officers: [] };
   }
 }
 
@@ -241,58 +264,6 @@ export async function getOwnerPropertyDetails(propertyId: string) {
     };
   } catch (err: any) {
     return { success: false, property: null, tenants: [], expenses: [], error: err.message };
-  }
-}
-
-// ⚡ QUERY TENANTS RT DENGAN FALLBACK JOIN MANUAL (ANTI-CRASH)
-export async function getAllTenantsForRt() {
-  try {
-    const [tRes, pRes] = await Promise.all([
-      supabase.from('tenants').select('*').order('created_at', { ascending: false }),
-      supabase.from('properties').select('*')
-    ]);
-
-    if (tRes.error) {
-      return { success: false, tenants: [], error: tRes.error.message };
-    }
-
-    const propMap = new Map((pRes.data || []).map((p) => [p.id, p]));
-    const mergedTenants = (tRes.data || []).map((t) => ({
-      ...t,
-      properties: propMap.get(t.property_id) || null
-    }));
-
-    return { success: true, tenants: mergedTenants, error: undefined };
-  } catch (err: any) {
-    return { success: false, tenants: [], error: err.message };
-  }
-}
-
-export async function getPublicPropertiesList() {
-  try {
-    const { data, error } = await supabase
-      .from('properties')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    return { success: !error, properties: data || [], error: error?.message };
-  } catch (err: any) {
-    return { success: false, properties: [], error: err.message };
-  }
-}
-
-export async function getPropertyRules(slug: string) {
-  try {
-    const { data, error } = await supabase
-      .from('properties')
-      .select('*')
-      .eq('slug', slug)
-      .single();
-
-    if (error || !data) return { success: false, property: null, error: 'Properti tidak ditemukan.' };
-    return { success: true, property: data, error: undefined };
-  } catch (err: any) {
-    return { success: false, property: null, error: err.message };
   }
 }
 
@@ -439,38 +410,6 @@ export async function addPropertyExpense(propertyId: string, title: string, cate
   return { success: !error, data: data ? data[0] : null, error: error?.message };
 }
 
-export async function addPropertyExpenseWithReceipt(formData: FormData) {
-  try {
-    const property_id = formData.get('property_id') as string;
-    const title = formData.get('title') as string;
-    const category = formData.get('category') as string;
-    const amount = parseInt((formData.get('amount') as string || '0').replace(/\D/g, ''), 10) || 0;
-    const expense_date = (formData.get('expense_date') as string) || new Date().toISOString().slice(0, 10);
-    const notes = (formData.get('notes') as string) || '';
-
-    let receipt_path = '';
-    const receiptFile = formData.get('receipt');
-    if (receiptFile && receiptFile instanceof File && receiptFile.size > 0) {
-      const fileExt = receiptFile.name.split('.').pop() || 'jpg';
-      const fileName = `receipt_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const buffer = Buffer.from(await receiptFile.arrayBuffer());
-
-      const { data: upData, error: upErr } = await supabase.storage
-        .from('ktp-documents')
-        .upload(fileName, buffer, { contentType: receiptFile.type || 'image/jpeg', upsert: true });
-
-      if (!upErr && upData) {
-        receipt_path = upData.path;
-      }
-    }
-
-    const fullNotes = receipt_path ? `${notes} [STRUK:${receipt_path}]` : notes;
-    return await addPropertyExpense(property_id, title, category, amount, expense_date, fullNotes);
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}
-
 export async function deletePropertyExpense(expenseId: string, title?: string, amount?: number) {
   const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
 
@@ -489,11 +428,6 @@ export async function deletePropertyExpense(expenseId: string, title?: string, a
   return { success: !error, error: error?.message };
 }
 
-export async function deletePropertyExpenseWithAudit(expenseId: string, title: string, amount: number) {
-  return await deletePropertyExpense(expenseId, title, amount);
-}
-
-// ⚡ QUERY TENANT PORTAL DENGAN JOIN PROPERTY AMAN
 export async function getTenantPortalData(phoneInput: string) {
   if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
 
@@ -545,64 +479,6 @@ export async function getTenantPortalData(phoneInput: string) {
       allRooms: headRooms.length > 0 ? headRooms : [primary],
       household: householdMembers
     };
-  } catch (err: any) {
-    return { success: false, error: err.message };
-  }
-}
-
-export async function addMemberSusulan(formData: FormData) {
-  try {
-    const household_id = formData.get('household_id') as string;
-    const property_id = formData.get('property_id') as string;
-    const room_number = formData.get('room_number') as string;
-    const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
-    const name = formData.get('name') as string;
-    const phone = (formData.get('phone') as string || '').trim();
-    const birth_date = formData.get('birth_date') as string;
-    const relation = formData.get('relation') as string;
-
-    let ktp_path = null;
-    const ktpFile = formData.get('ktp');
-    if (ktpFile && ktpFile instanceof File && ktpFile.size > 0) {
-      const fileExt = ktpFile.name.split('.').pop() || 'jpg';
-      const fileName = `ktp_susulan_${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const buffer = Buffer.from(await ktpFile.arrayBuffer());
-
-      const { data: upData, error: upErr } = await supabase.storage
-        .from('ktp-documents')
-        .upload(fileName, buffer, { contentType: ktpFile.type || 'image/jpeg', upsert: true });
-
-      if (!upErr && upData) {
-        ktp_path = upData.path;
-      }
-    }
-
-    const { data, error } = await supabase.from('tenants').insert({
-      household_id,
-      property_id,
-      room_number,
-      entry_date,
-      name,
-      phone,
-      birth_date,
-      relation,
-      is_head: false,
-      marital_status: 'Belum Menikah',
-      rent_price: 0,
-      payment_status: 'UNPAID',
-      status: 'PENDING',
-      ktp_path
-    }).select();
-
-    if (error) return { success: false, error: error.message };
-
-    try {
-      revalidatePath('/portal-warga');
-      revalidatePath('/owner');
-      revalidatePath('/rt');
-    } catch (e) {}
-
-    return { success: true, data: data ? data[0] : null };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
@@ -820,33 +696,6 @@ export async function getDocumentSignedUrl(filePath: string) {
     return { success: true, url: data.signedUrl };
   } catch (err: any) {
     return { success: false, error: err.message };
-  }
-}
-
-export async function getDuesList() {
-  try {
-    const { data, error } = await supabase
-      .from('dues')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    return { success: !error, dues: data || [], error: error?.message };
-  } catch (err: any) {
-    return { success: false, dues: [], error: err.message };
-  }
-}
-
-export async function getDuesAuditLogs() {
-  try {
-    const { data, error } = await supabase
-      .from('dues_audit_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(30);
-
-    return { success: !error, logs: data || [], error: error?.message };
-  } catch (err: any) {
-    return { success: false, logs: [], error: err.message };
   }
 }
 

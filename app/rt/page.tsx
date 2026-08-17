@@ -5,17 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import {
-  getAllTenantsForRt,
-  getPublicPropertiesList,
+  getRtDashboardBundle,
   updateTenantStatus,
   updateProperty,
   getDocumentSignedUrl,
   deleteTenant,
-  getDuesList,
-  getDuesAuditLogs,
   recordRtDues,
   deleteRtDues,
-  getRtOfficers,
   addRtOfficer,
   updateRtOfficer,
   deleteRtOfficer,
@@ -52,7 +48,6 @@ export default function RtDashboardPage() {
   const [resetProp, setResetProp] = useState<any | null>(null);
   const [newPin, setNewPin] = useState('1234');
   const [savingPin, setSavingPin] = useState(false);
-  const [copyMsg, setCopyMsg] = useState('');
 
   const [resetOfficerTarget, setResetOfficerTarget] = useState<any | null>(null);
   const [officerNewPassword, setOfficerNewPassword] = useState('');
@@ -100,22 +95,18 @@ export default function RtDashboardPage() {
     checkAuthAndLoad();
   }, []);
 
+  // ⚡ AMBIL SEMUA DATA DALAM 1 REQUEST CEPAT
   const loadAllData = async () => {
     setLoadingData(true);
     try {
-      const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
-        getAllTenantsForRt(),
-        getPublicPropertiesList(),
-        getRtOfficers(),
-        getDuesList(),
-        getDuesAuditLogs(),
-      ]);
-
-      setTenants(tRes?.tenants || []);
-      setProperties(pRes?.properties || []);
-      setOfficers(oRes?.officers || []);
-      setDuesList(dRes?.dues || []);
-      setAuditLogs(aRes?.logs || []);
+      const bundle = await getRtDashboardBundle();
+      if (bundle && bundle.success) {
+        setTenants(bundle.tenants || []);
+        setProperties(bundle.properties || []);
+        setOfficers(bundle.officers || []);
+        setDuesList(bundle.dues || []);
+        setAuditLogs(bundle.auditLogs || []);
+      }
     } catch (err) {
       console.error('Error loadAllData:', err);
     } finally {
@@ -198,8 +189,7 @@ export default function RtDashboardPage() {
       alert(`✅ Berhasil! Kata sandi akun ${resetOfficerTarget.full_name} berhasil direset.`);
       setResetOfficerTarget(null);
       setOfficerNewPassword('');
-      const aRes = await getDuesAuditLogs();
-      setAuditLogs(aRes.logs || []);
+      await loadAllData();
     } else {
       alert('Gagal reset sandi: ' + res.error);
     }
@@ -229,8 +219,7 @@ export default function RtDashboardPage() {
       if (res.success) {
         alert(`✅ Kontak pengurus "${officerName}" berhasil diperbarui!`);
         setEditingOfficer(null);
-        const oRes = await getRtOfficers();
-        setOfficers(oRes.officers || []);
+        await loadAllData();
       } else {
         alert('Gagal memperbarui pengurus: ' + res.error);
       }
@@ -244,8 +233,7 @@ export default function RtDashboardPage() {
         setOfficerName('');
         setOfficerPhone('');
         setOfficerEmail('');
-        const oRes = await getRtOfficers();
-        setOfficers(oRes.officers || []);
+        await loadAllData();
       } else {
         alert('Gagal menambah pengurus: ' + res.error);
       }
@@ -277,8 +265,7 @@ export default function RtDashboardPage() {
       alert(`✅ Iuran Rp ${parsedAmount.toLocaleString('id-ID')} dari ${payerName} berhasil dicatat.`);
       setPayerName('');
       setUnitRoom('');
-      const aRes = await getDuesAuditLogs();
-      setAuditLogs(aRes.logs || []);
+      await loadAllData();
     } else {
       alert('Gagal mencatat iuran: ' + res.error);
     }
@@ -288,8 +275,7 @@ export default function RtDashboardPage() {
     if (confirm(`Batalkan / Hapus catatan iuran Rp ${amount.toLocaleString('id-ID')} dari ${name}?`)) {
       setDuesList(duesList.filter((d) => d.id !== id));
       await deleteRtDues(id, name, amount);
-      const aRes = await getDuesAuditLogs();
-      setAuditLogs(aRes.logs || []);
+      await loadAllData();
     }
   };
 
@@ -314,16 +300,19 @@ export default function RtDashboardPage() {
       (t.properties?.name || t.properties?.property_name || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const st = (t.status || '').toUpperCase();
+    const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+    const isDocMissing = isMarried && !t.marriage_doc_url && !t.kk_doc_url;
+
     if (filterStatus === 'PENDING') return matchesSearch && st === 'PENDING';
     if (filterStatus === 'VERIFIED') return matchesSearch && (st === 'VERIFIED' || st === 'ACTIVE');
-    if (filterStatus === 'DOC_PENDING') return matchesSearch && t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
+    if (filterStatus === 'DOC_PENDING') return matchesSearch && isDocMissing;
 
     return matchesSearch;
   });
 
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
-  const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url)).length;
+  const countDocPending = tenants.filter((t) => (t.marital_status || '').toLowerCase().includes('nikah') && !t.marriage_doc_url && !t.kk_doc_url).length;
   const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   return (
@@ -397,11 +386,11 @@ export default function RtDashboardPage() {
 
           <div className="bg-red-50 border-2 border-red-300 p-4 md:p-5 rounded-3xl shadow-sm text-center">
             <span className="text-[1.6rem] font-black text-red-950 block">{countDocPending}</span>
-            <span className="text-[0.75rem] font-black text-red-800 mt-1 block uppercase">Dokumen Menyusul</span>
+            <span className="text-[0.75rem] font-black text-red-800 mt-1 block uppercase">Dokumen Kurang</span>
           </div>
         </div>
 
-        {/* TAB NAVIGASI DASBOR RT */}
+        {/* TAB NAVIGASI */}
         <div className="flex border-b-2 border-slate-200 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('warga')}
@@ -526,7 +515,9 @@ export default function RtDashboardPage() {
                   <tbody className="divide-y divide-slate-200">
                     {filteredTenants.map((t) => {
                       const st = (t.status || '').toUpperCase();
-                      const isPendingDoc = t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url);
+                      const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+                      // Dokumen kurang HANYA JIKA menikah dan TIDAK PUNYA buku nikah maupun KK
+                      const isDocMissing = isMarried && !t.marriage_doc_url && !t.kk_doc_url;
 
                       return (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -545,7 +536,7 @@ export default function RtDashboardPage() {
 
                           <td className="p-3">
                             <span className="font-semibold text-slate-800 block">{t.marital_status || 'Belum Menikah'}</span>
-                            {isPendingDoc && (
+                            {isDocMissing && (
                               <span className="text-[0.65rem] font-black px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md border border-amber-300 inline-block mt-0.5">
                                 ⚠️ Dokumen Menyusul
                               </span>
