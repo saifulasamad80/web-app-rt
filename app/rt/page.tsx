@@ -322,6 +322,20 @@ export default function RtDashboardPage() {
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
   const countDocPending = tenants.filter((t) => isFamilyDocMissing(t) && t.is_head).length;
+  const handleExportWarga = () => {
+    const headers = ["Nama Lengkap", "No WhatsApp", "Peran", "Properti / Kos", "Kamar", "Tanggal Masuk", "Status Pernikahan", "Status RT"];
+    const rows = filteredTenants.map(t => [
+      `"${t.name || ""}"`, `"${t.phone || ""}"`, `"${t.relation || (t.is_head ? "Penanggung Jawab" : "Anggota")}"`,
+      `"${t.properties?.name || t.properties?.property_name || ""}"`, `"${t.room_number || ""}"`,
+      `"${t.entry_date || ""}"`, `"${t.marital_status || ""}"`, `"${t.status || "PENDING"}"`
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.setAttribute("download", `Laporan_Data_Warga_RT_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
   const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   return (
@@ -461,6 +475,7 @@ export default function RtDashboardPage() {
         {activeTab === 'warga' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-3">
+              <button onClick={handleExportWarga} className="px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-[0.75rem] rounded-xl shadow cursor-pointer whitespace-nowrap hidden md:block flex items-center gap-1.5">📥 Export Excel</button>
               <div className="w-full md:w-auto flex-1 max-w-md">
                 <input
                   type="text"
