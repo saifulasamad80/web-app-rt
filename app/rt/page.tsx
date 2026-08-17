@@ -67,7 +67,6 @@ export default function RtDashboardPage() {
   const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345');
   const [savingOfficer, setSavingOfficer] = useState(false);
 
-  // Form Input Iuran Kas RT
   const [payerName, setPayerName] = useState('');
   const [unitRoom, setUnitRoom] = useState('');
   const [duesAmount, setDuesAmount] = useState('30000');
@@ -80,38 +79,48 @@ export default function RtDashboardPage() {
 
   useEffect(() => {
     async function checkAuthAndLoad() {
-      const { data } = await supabase.auth.getSession();
-      const localFlag = typeof window !== 'undefined' ? localStorage.getItem('rt_admin_logged_in') : null;
+      try {
+        const { data } = await supabase.auth.getSession();
+        const localFlag = typeof window !== 'undefined' ? localStorage.getItem('rt_admin_logged_in') : null;
 
-      if (!data.session && !localFlag) {
-        window.location.href = '/login';
-        return;
+        if (!data.session && !localFlag) {
+          window.location.href = '/login';
+          return;
+        }
+
+        const emailActive = data.session?.user?.email || 'ajipsas@gmail.com';
+        setCurrentUserEmail(emailActive);
+        setAuthChecking(false);
+        await loadAllData();
+      } catch (e) {
+        setAuthChecking(false);
+        setLoadingData(false);
       }
-
-      const emailActive = data.session?.user?.email || 'ajipsas@gmail.com';
-      setCurrentUserEmail(emailActive);
-      setAuthChecking(false);
-      await loadAllData();
     }
     checkAuthAndLoad();
   }, []);
 
   const loadAllData = async () => {
     setLoadingData(true);
-    const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
-      getAllTenantsForRt(),
-      getPublicPropertiesList(),
-      getRtOfficers(),
-      getDuesList(),
-      getDuesAuditLogs(),
-    ]);
+    try {
+      const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
+        getAllTenantsForRt(),
+        getPublicPropertiesList(),
+        getRtOfficers(),
+        getDuesList(),
+        getDuesAuditLogs(),
+      ]);
 
-    setTenants(tRes.tenants || []);
-    setProperties(pRes.properties || []);
-    setOfficers(oRes.officers || []);
-    setDuesList(dRes.dues || []);
-    setAuditLogs(aRes.logs || []);
-    setLoadingData(false);
+      setTenants(tRes?.tenants || []);
+      setProperties(pRes?.properties || []);
+      setOfficers(oRes?.officers || []);
+      setDuesList(dRes?.dues || []);
+      setAuditLogs(aRes?.logs || []);
+    } catch (err) {
+      console.error('Error loadAllData:', err);
+    } finally {
+      setLoadingData(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -129,8 +138,7 @@ export default function RtDashboardPage() {
         prev.map((t) => (t.id === id ? { ...t, status: status === 'verified' ? 'VERIFIED' : 'REJECTED' } : t))
       );
       await updateTenantStatus(id, status);
-      setCopyMsg(`Status warga berhasil diperbarui menjadi: ${status === 'verified' ? 'SAH TERVERIFIKASI' : 'DITOLAK'}`);
-      setTimeout(() => setCopyMsg(''), 3000);
+      alert(`Status warga berhasil diperbarui menjadi: ${status === 'verified' ? 'SAH TERVERIFIKASI' : 'DITOLAK'}`);
     }
   };
 
@@ -138,8 +146,7 @@ export default function RtDashboardPage() {
     if (confirm(`Hapus permanen warga "${name}" dari buku register RT?`)) {
       setTenants((prev) => prev.filter((t) => t.id !== id));
       await deleteTenant(id);
-      setCopyMsg(`Data "${name}" telah dihapus.`);
-      setTimeout(() => setCopyMsg(''), 3000);
+      alert(`Data "${name}" telah dihapus.`);
     }
   };
 
@@ -172,8 +179,7 @@ export default function RtDashboardPage() {
 
     if (res.success) {
       setProperties((prev) => prev.map((p) => (p.id === resetProp.id ? { ...p, pin_code: newPin } : p)));
-      setCopyMsg(`PIN unit "${resetProp.name || resetProp.property_name}" berhasil direset menjadi: ${newPin}`);
-      setTimeout(() => setCopyMsg(''), 4000);
+      alert(`✅ Berhasil! PIN unit "${resetProp.name || resetProp.property_name}" direset menjadi: ${newPin}`);
       setResetProp(null);
     } else {
       alert('Gagal reset PIN: ' + res.error);
@@ -189,8 +195,7 @@ export default function RtDashboardPage() {
     setResettingPassword(false);
 
     if (res.success) {
-      setCopyMsg(`Kata sandi akun ${resetOfficerTarget.full_name} (${resetOfficerTarget.email}) berhasil direset!`);
-      setTimeout(() => setCopyMsg(''), 4000);
+      alert(`✅ Berhasil! Kata sandi akun ${resetOfficerTarget.full_name} berhasil direset.`);
       setResetOfficerTarget(null);
       setOfficerNewPassword('');
       const aRes = await getDuesAuditLogs();
@@ -222,8 +227,7 @@ export default function RtDashboardPage() {
       setSavingOfficer(false);
 
       if (res.success) {
-        setCopyMsg(`Data kontak pengurus "${officerName}" berhasil diperbarui!`);
-        setTimeout(() => setCopyMsg(''), 3500);
+        alert(`✅ Kontak pengurus "${officerName}" berhasil diperbarui!`);
         setEditingOfficer(null);
         const oRes = await getRtOfficers();
         setOfficers(oRes.officers || []);
@@ -235,8 +239,7 @@ export default function RtDashboardPage() {
       setSavingOfficer(false);
 
       if (res.success) {
-        setCopyMsg(`Pengurus RT baru "${officerName}" berhasil didaftarkan & akun login aktif!`);
-        setTimeout(() => setCopyMsg(''), 3500);
+        alert(`✅ Pengurus RT "${officerName}" berhasil didaftarkan!`);
         setShowAddOfficerModal(false);
         setOfficerName('');
         setOfficerPhone('');
@@ -271,8 +274,7 @@ export default function RtDashboardPage() {
 
     if (res.success && res.data) {
       setDuesList([res.data, ...duesList]);
-      setCopyMsg(`Iuran Rp ${parsedAmount.toLocaleString('id-ID')} dari ${payerName} berhasil dicatat.`);
-      setTimeout(() => setCopyMsg(''), 3500);
+      alert(`✅ Iuran Rp ${parsedAmount.toLocaleString('id-ID')} dari ${payerName} berhasil dicatat.`);
       setPayerName('');
       setUnitRoom('');
       const aRes = await getDuesAuditLogs();
@@ -322,7 +324,6 @@ export default function RtDashboardPage() {
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
   const countDocPending = tenants.filter((t) => t.marital_status === 'Menikah' && (!t.marriage_doc_url || !t.kk_doc_url)).length;
-
   const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   return (
@@ -332,7 +333,7 @@ export default function RtDashboardPage() {
     >
       <div className="max-w-6xl mx-auto space-y-5">
 
-        {/* HEADER CERAH */}
+        {/* HEADER */}
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -376,12 +377,6 @@ export default function RtDashboardPage() {
             </button>
           </div>
         </header>
-
-        {copyMsg && (
-          <div className="p-3.5 bg-emerald-100 text-emerald-900 border-2 border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center">
-            {copyMsg}
-          </div>
-        )}
 
         {/* 4 KOTAK REKAP */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
@@ -513,7 +508,7 @@ export default function RtDashboardPage() {
               </div>
             ) : filteredTenants.length === 0 ? (
               <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50">
-                <p className="text-[0.8rem] text-slate-500 font-medium">Tidak ada data warga pendatang yang cocok dengan filter.</p>
+                <p className="text-[0.8rem] text-slate-500 font-medium">Belum ada data warga pendatang yang terdaftar.</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -680,7 +675,7 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 3: ⚙️ KELOLA PENGURUS RT */}
+        {/* TAB 3: KELOLA PENGURUS RT */}
         {activeTab === 'pengurus' && (
           <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 border-b pb-3">
@@ -760,10 +755,9 @@ export default function RtDashboardPage() {
           </div>
         )}
 
-        {/* TAB 4: CATAT & TABEL RIWAYAT IURAN KAS RT */}
+        {/* TAB 4: CATAT IURAN KAS */}
         {activeTab === 'kas' && (
           <div className="space-y-5">
-            {/* HERO KAS TERKUMPUL */}
             <div className="bg-emerald-800 text-white p-6 rounded-3xl shadow-lg flex justify-between items-center">
               <div>
                 <span className="text-[0.7rem] font-black uppercase tracking-wider text-emerald-200 bg-emerald-950/60 px-2.5 py-0.5 rounded-full">
@@ -776,7 +770,6 @@ export default function RtDashboardPage() {
               </div>
             </div>
 
-            {/* FORM INPUT IURAN */}
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
               <div className="border-b pb-3">
                 <h3 className="text-[1rem] font-black text-slate-900 uppercase">
@@ -878,7 +871,6 @@ export default function RtDashboardPage() {
               </form>
             </div>
 
-            {/* TABEL DAFTAR TRANSAKSI KAS MASUK */}
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
               <div className="border-b pb-3">
                 <h3 className="text-[1rem] font-black text-slate-900 uppercase">
@@ -988,7 +980,7 @@ export default function RtDashboardPage() {
 
       </div>
 
-      {/* MODAL RESET SANDI OLEH SUPER ADMIN */}
+      {/* MODAL RESET SANDI */}
       {resetOfficerTarget && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -1041,7 +1033,7 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL TAMBAH & EDIT PENGURUS RT */}
+      {/* MODAL TAMBAH & EDIT PENGURUS */}
       {(showAddOfficerModal || editingOfficer) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
@@ -1089,7 +1081,7 @@ export default function RtDashboardPage() {
                 <input
                   type="tel"
                   required
-                  placeholder="08123456789"
+                  placeholder="08xxxxxxxxxx"
                   value={officerPhone}
                   onChange={(e) => setOfficerPhone(e.target.value.replace(/\D/g, ''))}
                   className="w-full p-2.5 border-2 border-slate-200 rounded-xl bg-white font-mono font-bold"
@@ -1143,7 +1135,7 @@ export default function RtDashboardPage() {
         </div>
       )}
 
-      {/* MODAL DOCUMENT VIEWER */}
+      {/* MODAL VIEW DOKUMEN */}
       {(docModalTitle || loadingDoc) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border-2 border-slate-200">

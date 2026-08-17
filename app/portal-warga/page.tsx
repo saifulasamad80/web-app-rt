@@ -72,7 +72,7 @@ export default function TenantPortalPage() {
     setUploadingDoc(false);
 
     if (res.success) {
-      alert('Dokumen berhasil diunggah! Pengurus RT akan memverifikasi berkas Anda.');
+      alert('✅ Berhasil Diunggah!\n\nDokumen Buku Nikah / KK Anda telah tersimpan dan diteruskan ke Pengurus RT untuk proses verifikasi.');
       setDocFile(null);
       setTenantData({ ...tenantData, marriage_doc_url: res.path });
     } else {
@@ -106,13 +106,12 @@ export default function TenantPortalPage() {
 
     if (res.success && res.data) {
       setHousehold([...household, res.data]);
-      setCopyMsg('Anggota kamar susulan berhasil didaftarkan ke RT!');
-      setTimeout(() => setCopyMsg(''), 4000);
       setShowAddMemberModal(false);
       setMemberName('');
       setMemberPhone('');
       setMemberBirth('');
       setMemberKtpFile(null);
+      alert('✅ Berhasil! Anggota kamar susulan telah terdaftar di sistem RT.');
     } else {
       alert('Gagal menambah anggota: ' + res.error);
     }
@@ -122,8 +121,7 @@ export default function TenantPortalPage() {
     if (confirm(`Hapus anggota "${name}" dari daftar kamar Anda?`)) {
       setHousehold(household.filter((m) => m.id !== memberId));
       await deleteTenant(memberId);
-      setCopyMsg(`Anggota "${name}" berhasil dihapus.`);
-      setTimeout(() => setCopyMsg(''), 3000);
+      alert(`Anggota "${name}" berhasil dihapus.`);
     }
   };
 
@@ -155,6 +153,7 @@ export default function TenantPortalPage() {
   const property = tenantData?.properties;
   const isPaid = (tenantData?.payment_status || '').toUpperCase() === 'PAID';
   const paymentHistory = tenantData ? getThreeMonthsHistory() : [];
+  const hasMarriageDoc = !!(tenantData?.marriage_doc_url || tenantData?.kk_doc_url);
 
   const memberAgeCalculated = calculateAge(memberBirth);
   const isAdultMember = memberAgeCalculated >= 17 && memberBirth !== '';
@@ -164,9 +163,9 @@ export default function TenantPortalPage() {
       style={{ fontSize: `${zoomPercent}%` }}
       className="min-h-screen bg-slate-50 p-3 md:p-8 text-slate-900 transition-all font-sans"
     >
-      <div className="max-w-xl mx-auto space-y-5">
+      <div className="max-w-xl mx-auto space-y-4">
 
-        {/* HEADER CERAH */}
+        {/* HEADER */}
         <header className="bg-emerald-800 text-white p-5 md:p-6 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
           <div>
             <span className="text-[0.75rem] font-extrabold px-3 py-1 bg-amber-400 text-slate-950 rounded-full uppercase">
@@ -212,7 +211,7 @@ export default function TenantPortalPage() {
         )}
 
         {!tenantData ? (
-          /* FORM LOGIN NOMOR WHATSAPP (BERSIH TANPA CONTOH NOMOR) */
+          /* FORM LOGIN */
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 space-y-4 text-center">
             <div className="w-16 h-16 bg-emerald-100 text-emerald-800 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">
               📱
@@ -253,11 +252,11 @@ export default function TenantPortalPage() {
             </form>
           </div>
         ) : (
-          /* DASBOR PENGHUNI AKTIF */
+          /* DASBOR WARGA */
           <div className="space-y-4">
 
             {/* 1. STATUS KEPENDUDUKAN RT */}
-            <div className={`p-6 rounded-3xl shadow-sm border-2 flex items-center justify-between ${
+            <div className={`p-5 md:p-6 rounded-3xl shadow-sm border-2 flex items-center justify-between ${
               isVerified ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-amber-50 border-amber-300 text-amber-950'
             }`}>
               <div className="space-y-1">
@@ -273,8 +272,55 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 2. INFO LENGKAP HUNIAN & DAFTAR ANGGOTA KAMAR */}
-            <div className="bg-white p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            {/* 2. KARTU UPLOAD DOKUMEN BUKU NIKAH / KK (LANGSUNG DITAMPILKAN DI ATAS JIKA BELUM ADA) */}
+            {tenantData.marital_status === 'Menikah' && (
+              <div className={`p-5 md:p-6 rounded-3xl border-2 space-y-3 ${
+                hasMarriageDoc ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-amber-50 border-amber-400 text-amber-950 shadow-md'
+              }`}>
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{hasMarriageDoc ? '✅' : '📎'}</span>
+                    <h3 className="font-black text-[0.95rem] uppercase">
+                      Dokumen Buku Nikah / Kartu Keluarga (KK)
+                    </h3>
+                  </div>
+                  <span className={`text-[0.65rem] font-black px-2.5 py-1 rounded-full uppercase ${
+                    hasMarriageDoc ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900 border border-amber-300'
+                  }`}>
+                    {hasMarriageDoc ? 'TERLAMPIR' : 'BELUM DIUNGGAH'}
+                  </span>
+                </div>
+
+                {!hasMarriageDoc ? (
+                  <form onSubmit={handleUploadDoc} className="space-y-3 pt-1">
+                    <p className="text-[0.75rem] text-amber-900 font-medium leading-relaxed">
+                      Sesuai aturan RT untuk pasangan suami-istri, mohon lampirkan foto Buku Nikah atau Kartu Keluarga agar status verifikasi RT tuntas.
+                    </p>
+                    <input
+                      type="file"
+                      required
+                      accept="image/*,.pdf"
+                      onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)}
+                      className="w-full p-2.5 border-2 border-amber-300 rounded-xl bg-white text-[0.75rem] file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-[0.75rem] file:font-bold file:bg-amber-900 file:text-white cursor-pointer"
+                    />
+                    <button
+                      type="submit"
+                      disabled={uploadingDoc || !docFile}
+                      className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-black text-[0.8rem] rounded-xl transition-all disabled:bg-slate-300 cursor-pointer shadow"
+                    >
+                      {uploadingDoc ? 'Mengunggah Berkas...' : '📤 Unggah Buku Nikah / KK Sekarang'}
+                    </button>
+                  </form>
+                ) : (
+                  <p className="text-[0.75rem] text-emerald-800 font-bold">
+                    ✓ Berkas pernikahan telah tersimpan privat dan siap ditinjau oleh Pengurus RT.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* 3. INFO HUNIAN & DAFTAR ANGGOTA */}
+            <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
               <div className="flex justify-between items-center border-b-2 border-slate-100 pb-2">
                 <div>
                   <h3 className="font-black text-slate-900 text-[0.95rem] uppercase">
@@ -309,7 +355,7 @@ export default function TenantPortalPage() {
                 </div>
               </div>
 
-              {/* LIST ANGGOTA SEKELUARGA / SEKAMAR */}
+              {/* LIST ANGGOTA SEKELUARGA */}
               <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
                 <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
                   👥 Daftar Anggota Kamar Ini ({household.length} Orang):
@@ -348,8 +394,8 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 3. RINCIAN TAGIHAN & PEMBAYARAN SEWA (HARGA SPESIFIK KAMAR INI) */}
-            <div className="bg-white p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
+            {/* 4. TAGIHAN SEWA & REKENING PEMILIK */}
+            <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
               <div className="flex justify-between items-center border-b-2 border-slate-100 pb-2">
                 <h3 className="font-black text-slate-900 text-[0.9rem] uppercase">
                   💳 Tagihan Sewa Kamar Ini
@@ -386,7 +432,7 @@ export default function TenantPortalPage() {
                 </div>
               )}
 
-              {/* REKAP STATUS SEWA 3 BULAN */}
+              {/* RIWAYAT 3 BULAN */}
               <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
                 <span className="text-[0.75rem] font-black text-slate-700 uppercase block">
                   📊 Riwayat Status Sewa (3 Bulan Terakhir):
@@ -415,7 +461,7 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 4. TATA TERTIB */}
+            {/* 5. TATA TERTIB */}
             <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-3">
               <button
                 type="button"
@@ -440,42 +486,12 @@ export default function TenantPortalPage() {
                       `1. Wajib lapor diri 1x24 jam kependudukan RT setempat.
 2. Menjaga ketertiban, ketenangan, dan kebersihan lingkungan RT.
 3. Dilarang membawa barang terlarang (narkoba, miras, senjata tajam).
-4. Jam bertamu maksimal pukul 22.00 WIB demi keamanan lingkungan.
-5. Pembayaran sewa paling lambat tanggal 5 setiap bulannya.`
+4. Jam bertamu maksimal pukul 22.00 WIB demi keamanan lingkungan.`
                     )}
                   </div>
                 </div>
               )}
             </div>
-
-            {/* 5. DOKUMEN SUSULAN */}
-            {tenantData.marital_status === 'Menikah' && !tenantData.marriage_doc_url && (
-              <div className="bg-amber-50 p-6 rounded-3xl border-2 border-amber-300 space-y-3">
-                <h3 className="font-black text-amber-950 text-[0.9rem] uppercase flex items-center gap-2">
-                  <span>📎</span> Unggah Dokumen Buku Nikah / KK Susulan
-                </h3>
-                <p className="text-[0.8rem] text-amber-900 font-medium leading-relaxed">
-                  Berkas Buku Nikah/KK Anda belum terlampir. Silakan unggah foto dokumen begitu berkas siap agar verifikasi RT tuntas.
-                </p>
-
-                <form onSubmit={handleUploadDoc} className="space-y-3">
-                  <input
-                    type="file"
-                    required
-                    accept="image/*,.pdf"
-                    onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)}
-                    className="w-full p-2.5 border-2 border-amber-200 rounded-xl bg-white text-[0.75rem] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[0.75rem] file:font-bold file:bg-amber-900 file:text-white"
-                  />
-                  <button
-                    type="submit"
-                    disabled={uploadingDoc || !docFile}
-                    className="w-full py-3 bg-amber-800 hover:bg-amber-900 text-white font-black text-[0.8rem] rounded-xl transition-all disabled:bg-slate-300 cursor-pointer"
-                  >
-                    {uploadingDoc ? 'Mengunggah Berkas...' : 'Kirim Berkas Susulan ke RT'}
-                  </button>
-                </form>
-              </div>
-            )}
 
             {/* 6. TOMBOL AKSI CEPAT */}
             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -515,7 +531,7 @@ export default function TenantPortalPage() {
 
       </div>
 
-      {/* MODAL TAMBAH ANGGOTA SUSULAN */}
+      {/* MODAL TAMBAH ANGGOTA */}
       {showAddMemberModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border-2 border-slate-200">
@@ -612,7 +628,7 @@ export default function TenantPortalPage() {
         </div>
       )}
 
-      {/* MODAL BANTUAN DARURAT */}
+      {/* MODAL DARURAT */}
       {showEmergencyModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full overflow-hidden border-2 border-slate-200">
