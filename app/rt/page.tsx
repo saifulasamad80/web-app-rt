@@ -237,7 +237,7 @@ export default function RtDashboardPage() {
   const isSuperAdmin = currentUserEmail.toLowerCase() === 'ajipsas@gmail.com';
 
   const isFamilyDocMissing = (t: any) => {
-    const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+    const marital = (t.marital_status || '').toLowerCase(); const isMarried = marital === 'menikah' || marital === 'menikah (pasutri)';
     if (!isMarried) return false;
     if (t.marriage_doc_url || t.kk_doc_url) return false;
     const pj = tenants.find((item) => item.household_id && item.household_id === t.household_id && item.is_head);
@@ -325,7 +325,7 @@ export default function RtDashboardPage() {
                     const st = (t.status || '').toUpperCase();
                     const isDocMissing = isFamilyDocMissing(t);
                     const pj = tenants.find((item) => item.household_id && item.household_id === t.household_id && item.is_head);
-                    const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+                    const marital = (t.marital_status || '').toLowerCase(); const isMarried = marital === 'menikah' || marital === 'menikah (pasutri)';
 
                     // LOGIKA TAMPILAN DOKUMEN YANG BENAR AGAR ANAK TIDAK MINTA NIKAH/KK
                     const hasKtp = !!t.ktp_path;
