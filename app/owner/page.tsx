@@ -182,7 +182,7 @@ export default function OwnerDashboard() {
   };
 
   const handleDeleteExpense = async (id: string, title: string) => {
-    if (confirm(`Hapus catatan "${title}"?`)) { setExpenses(expenses.filter((e) => e.id !== id)); await deletePropertyExpense(id); await loadAuditLogs(); }
+    if (confirm(`Hapus catatan pengeluaran "${title}"?`)) { setExpenses(expenses.filter((e) => e.id !== id)); await deletePropertyExpense(id); await loadAuditLogs(); }
   };
 
   const handleOpenEditTenant = (t: Tenant) => { setEditingTenant(t); setTenantName(t.name); setTenantPhone(t.phone); setTenantRoom(t.room_number || ''); setTenantRelation(t.relation || 'Istri'); setTenantRentPrice(t.rent_price ? String(t.rent_price) : '1500000'); };
@@ -256,8 +256,27 @@ export default function OwnerDashboard() {
   const totalExpenses = expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   const netProfit = totalRentCollected - totalExpenses;
   
-  // PEMBATASAN AKSES 100% AMAN: Pengecekan Owner
   const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
+  
+  // NAMA LOGIN AKTIF
+  const activeLoginName = isOwner 
+    ? (activeProperty?.owner_name || 'Pemilik Sah') 
+    : (activeProperty?.manager_name || 'Pengelola');
+
+  const handleExportOwner = () => {
+    const headers = ["Nama Lengkap", "No WhatsApp", "Peran", "Kamar", "Tanggal Masuk", "Status RT", "Nominal Sewa", "Status Bayar"];
+    const rows = tenants.map(t => [
+      `"${t.name || ""}"`, `"${t.phone || ""}"`, `"${t.relation || (t.is_head ? "Penanggung Jawab" : "Anggota")}"`,
+      `"${t.room_number || ""}"`, `"${t.entry_date || ""}"`, `"${t.status || "PENDING"}"`, 
+      `"${t.is_head ? t.rent_price : 0}"`, `"${t.payment_status || "UNPAID"}"`
+    ]);
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.setAttribute("download", `Laporan_Penyewa_Kos_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  };
 
   return (
     <main style={{ fontSize: `${zoomPercent}%` }} className="min-h-screen p-3 md:p-8 bg-slate-50 text-slate-900 font-sans">
@@ -267,11 +286,20 @@ export default function OwnerDashboard() {
             <div className="flex items-center gap-2"><span className="text-[1.3rem]">🏢⚡</span><h1 className="text-[1.4rem] font-black text-white">Portal <span className="text-amber-400">Pemilik Kos & Kontrakan</span></h1></div>
             <p className="text-[0.8rem] text-emerald-100 mt-1 font-medium">Sistem Manajemen Properti Privat & Terintegrasi RT</p>
           </div>
-          <Link href="/" className="px-4 py-2 bg-emerald-950 text-white font-bold text-[0.75rem] rounded-2xl shadow">🚪 Keluar</Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
+              <span className="text-[0.75rem] font-bold text-emerald-300 px-1">T↕</span>
+              <button onClick={handleZoomOut} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer">A-</button>
+              <span className="text-[0.7rem] font-mono font-black text-amber-300 px-1">{zoomPercent}%</span>
+              <button onClick={handleZoomIn} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer">A+</button>
+            </div>
+            <Link href="/" className="px-4 py-2 bg-emerald-950 hover:bg-emerald-900 text-white font-bold text-[0.75rem] rounded-2xl shadow">🚪 Keluar</Link>
+          </div>
         </header>
 
         {!isLoggedIn ? (
           <div className="max-w-md mx-auto bg-white p-6 md:p-8 rounded-3xl shadow-md border-2 border-slate-200 text-center space-y-4">
+            <div className="w-16 h-16 bg-amber-100 text-amber-900 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">🏢</div>
             <h2 className="text-[1.2rem] font-black">Masuk Dasbor Pemilik</h2>
             <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
               <input type="tel" required placeholder="08xxxxxxxxxx" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border-2 rounded-2xl font-mono font-bold bg-white" />
@@ -284,19 +312,20 @@ export default function OwnerDashboard() {
           </div>
         ) : (
           <div className="space-y-5">
-            {/* KONTROL AKSES PEMILIK / PENGELOLA */}
             <div className="bg-white p-4 md:p-5 rounded-3xl shadow-sm border-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
-                <select value={activeProperty?.id || ''} onChange={(e) => { const s = myProperties.find((p) => p.id === e.target.value); if(s) handleSelectProperty(s); }} className="p-2.5 border-2 border-emerald-400 rounded-2xl font-black text-emerald-950 bg-emerald-50">
-                  {myProperties.map((p) => (<option key={p.id} value={p.id}>🏠 {p.name || p.property_name}</option>))}
-                </select>
-                <span className={`text-[0.7rem] font-black px-3 py-1.5 rounded-full uppercase ${isOwner ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-300'}`}>
-                  {isOwner ? '👑 PEMILIK' : '🔑 PENGELOLA'}
-                </span>
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2">
+                  <span className="text-[0.85rem] font-black text-slate-700">Unit Aktif:</span>
+                  <select value={activeProperty?.id || ''} onChange={(e) => { const s = myProperties.find((p) => p.id === e.target.value); if(s) handleSelectProperty(s); }} className="p-2.5 border-2 border-emerald-400 rounded-2xl font-black text-emerald-950 bg-emerald-50">
+                    {myProperties.map((p) => (<option key={p.id} value={p.id}>🏠 {p.name || p.property_name}</option>))}
+                  </select>
+                  <span className={`text-[0.7rem] font-black px-3 py-1.5 rounded-full uppercase ${isOwner ? 'bg-amber-100 text-amber-900 border border-amber-300' : 'bg-blue-100 text-blue-900 border border-blue-300'}`}>
+                    {isOwner ? '👑 PEMILIK' : '🔑 PENGELOLA'}
+                  </span>
+                </div>
+                <span className="text-[0.75rem] font-bold text-slate-500 mt-2">Login: {activeLoginName} ({loginPhone})</span>
               </div>
               <div className="flex flex-wrap gap-2">
-                {/* HANYA OWNER YANG BISA LIHAT TOMBOL TAMBAH/EDIT */}
                 {isOwner && (
                   <>
                     <button onClick={handleOpenAddPropModal} className="px-3.5 py-2.5 bg-emerald-700 text-white text-[0.75rem] font-black rounded-xl shadow-sm">➕ Tambah Unit</button>
@@ -325,7 +354,6 @@ export default function OwnerDashboard() {
                   <button onClick={() => setActiveTab('penyewa')} className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 whitespace-nowrap ${activeTab === 'penyewa' ? 'bg-white border-slate-300 text-emerald-800 -mb-0.5 shadow-sm' : 'bg-slate-100 border-transparent text-slate-600'}`}>👥 Daftar Penyewa ({tenants.length})</button>
                   <button onClick={() => setActiveTab('pengeluaran')} className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 whitespace-nowrap ${activeTab === 'pengeluaran' ? 'bg-white border-slate-300 text-red-800 -mb-0.5 shadow-sm' : 'bg-slate-100 border-transparent text-slate-600'}`}>📈 Pengeluaran ({expenses.length})</button>
                   <button onClick={() => setActiveTab('matrix')} className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 whitespace-nowrap ${activeTab === 'matrix' ? 'bg-white border-slate-300 text-slate-900 -mb-0.5 shadow-sm' : 'bg-slate-100 border-transparent text-slate-600'}`}>🏠 Matrix ({emptyRooms} Kosong)</button>
-                  {/* TAB AUDIT KHUSUS OWNER */}
                   {isOwner && (
                     <button onClick={() => setActiveTab('audit')} className={`py-3 px-5 text-[0.85rem] font-black rounded-t-2xl border-t-2 border-l-2 border-r-2 whitespace-nowrap ${activeTab === 'audit' ? 'bg-white border-slate-300 text-purple-800 -mb-0.5 shadow-sm' : 'bg-slate-100 border-transparent text-slate-600'}`}>📋 Jejak Audit</button>
                   )}
@@ -335,10 +363,11 @@ export default function OwnerDashboard() {
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between border-b pb-3 gap-2">
                       <h3 className="text-[1rem] font-black uppercase">Penghuni: {activeProperty.name || activeProperty.property_name}</h3>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleShareWA(activeProperty)} className="px-3 py-2 bg-emerald-600 text-white text-[0.75rem] font-bold rounded-2xl shadow">💬 Link WA</button>
-                        <button onClick={() => setPosterProp(activeProperty)} className="px-3 py-2 bg-slate-800 text-white text-[0.75rem] font-bold rounded-2xl shadow">🖨️ Poster QR</button>
-                        <button onClick={() => handleOpenRulesModal(activeProperty)} className="px-3 py-2 bg-amber-400 text-slate-950 text-[0.75rem] font-black rounded-2xl shadow">📜 Tata Tertib</button>
+                      <div className="flex gap-2 flex-wrap">
+                        {isOwner && (<button onClick={handleExportOwner} className="px-3 py-2 bg-slate-900 text-white text-[0.75rem] font-bold rounded-2xl shadow cursor-pointer">📥 Export Excel</button>)}
+                        <button onClick={() => handleShareWA(activeProperty)} className="px-3 py-2 bg-emerald-600 text-white text-[0.75rem] font-bold rounded-2xl shadow cursor-pointer">💬 Link WA</button>
+                        <button onClick={() => setPosterProp(activeProperty)} className="px-3 py-2 bg-slate-800 text-white text-[0.75rem] font-bold rounded-2xl shadow cursor-pointer">🖨️ Poster QR</button>
+                        {isOwner && (<button onClick={() => handleOpenRulesModal(activeProperty)} className="px-3 py-2 bg-amber-400 text-slate-950 text-[0.75rem] font-black rounded-2xl shadow cursor-pointer">📜 Tata Tertib</button>)}
                       </div>
                     </div>
 
@@ -351,12 +380,12 @@ export default function OwnerDashboard() {
                             const history = getThreeMonthHistory(t.payment_status || '', t.entry_date);
                             return (
                               <tr key={t.id} className="hover:bg-slate-50">
-                                <td className="p-3"><div className="font-black text-slate-900">{t.name}</div><span className="text-[0.65rem] font-bold px-2 bg-slate-100 rounded-md border mt-0.5 inline-block">{t.relation || 'Anggota'}</span></td>
-                                <td className="p-3"><span className="font-bold text-emerald-900 block">{t.room_number || '-'}</span><span className="text-[0.65rem] text-slate-500 font-mono font-bold">Masuk: {t.entry_date}</span></td>
-                                <td className="p-3">{isHeadPerson ? (<button onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)} className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black shadow-sm ${isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{isPaid ? '✅ LUNAS' : '❌ BELUM'}</button>) : (<span className="text-slate-400 font-bold text-[0.7rem] italic">- (Ikut PJ)</span>)}</td>
-                                <td className="p-3">{isHeadPerson ? (<div className="flex gap-1">{history.map((m, idx) => (<span key={idx} className={`text-[0.65rem] font-black px-2 py-0.5 rounded-lg border ${m.status === 'N/A' ? 'bg-slate-100 text-slate-400' : m.status === 'PAID' ? 'bg-emerald-50 text-emerald-900 border-emerald-300' : 'bg-red-50 text-red-900 border-red-300'}`}>{m.labelShort} {m.status === 'N/A' ? '-' : m.status === 'PAID' ? '✓' : '✗'}</span>))}</div>) : (<span className="text-slate-400 font-bold">-</span>)}</td>
+                                <td className="p-3"><div className="font-black text-slate-900">{t.name}</div><span className="text-[0.65rem] font-bold px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md border inline-block mt-0.5">{t.relation || 'Anggota'}</span></td>
+                                <td className="p-3"><span className="font-bold text-emerald-900 block">{t.room_number || '-'}</span><span className="text-[0.65rem] font-mono text-slate-500 font-bold block mt-0.5">Tgl Masuk: {t.entry_date}</span></td>
+                                <td className="p-3">{isHeadPerson ? (<button onClick={() => handleTogglePaymentStatus(t.id, t.payment_status)} className={`px-2.5 py-1 rounded-xl text-[0.7rem] font-black shadow-sm cursor-pointer ${isPaid ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-red-100 text-red-800 border border-red-300'}`}>{isPaid ? '✅ LUNAS' : '❌ BELUM'}</button>) : (<span className="text-slate-400 font-bold text-[0.7rem] italic">- (Ikut PJ)</span>)}</td>
+                                <td className="p-3">{isHeadPerson ? (<div className="flex gap-1">{history.map((m, idx) => (<span key={idx} className={`text-[0.65rem] font-black px-2 py-0.5 rounded-lg border ${m.status === 'N/A' ? 'bg-slate-100 text-slate-400 border-slate-200' : m.status === 'PAID' ? 'bg-emerald-50 text-emerald-900 border-emerald-300' : 'bg-red-50 text-red-900 border-red-300'}`}>{m.labelShort} {m.status === 'N/A' ? '-' : m.status === 'PAID' ? '✓' : '✗'}</span>))}</div>) : (<span className="text-slate-400 font-bold">-</span>)}</td>
                                 <td className="p-3 font-mono font-bold text-slate-900">{isHeadPerson ? `Rp ${Number(t.rent_price || 0).toLocaleString('id-ID')}` : 'Rp 0'}</td>
-                                <td className="p-3"><span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase ' + (t.status === 'VERIFIED' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900')}>{t.status === 'VERIFIED' ? '✅ TERVERIFIKASI' : '⚠️ MENUNGGU'}</span></td>
+                                <td className="p-3"><span className={'text-[0.65rem] font-black px-2 py-0.5 rounded-full uppercase inline-block ' + (t.status === 'VERIFIED' || t.status === 'ACTIVE' ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-amber-100 text-amber-900 border border-amber-300')}>{t.status === 'VERIFIED' || t.status === 'ACTIVE' ? '✅ TERVERIFIKASI' : '⚠️ MENUNGGU'}</span></td>
                                 <td className="p-3 text-right space-x-1 whitespace-nowrap">
                                   {isHeadPerson && !isPaid && (<button onClick={() => handleSendReminderWA(t)} className="px-2 py-1 bg-emerald-600 text-white text-[0.7rem] font-bold rounded-lg cursor-pointer">💬 Tagih</button>)}
                                   <button onClick={() => handleOpenEditTenant(t)} className="px-2 py-1 bg-amber-400 text-slate-950 text-[0.7rem] font-black rounded-lg cursor-pointer">✏️ Edit</button>
@@ -375,7 +404,7 @@ export default function OwnerDashboard() {
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <div className="flex justify-between items-center border-b pb-3">
                       <h3 className="text-[1rem] font-black text-slate-900 uppercase">Buku Kas Pengeluaran</h3>
-                      <button onClick={() => setShowAddExpenseModal(true)} className="px-4 py-2 bg-red-700 text-white text-[0.8rem] font-black rounded-2xl shadow">➕ Catat Pengeluaran</button>
+                      <button onClick={() => setShowAddExpenseModal(true)} className="px-4 py-2 bg-red-700 text-white text-[0.8rem] font-black rounded-2xl shadow cursor-pointer">➕ Catat Pengeluaran</button>
                     </div>
                     {expenses.length === 0 ? (
                       <div className="p-8 text-center border-2 border-dashed rounded-3xl bg-slate-50"><p className="text-[0.8rem] text-slate-500 font-medium">Belum ada pengeluaran dicatat.</p></div>
@@ -387,7 +416,7 @@ export default function OwnerDashboard() {
                             {expenses.map((exp) => (
                               <tr key={exp.id} className="hover:bg-slate-50">
                                 <td className="p-3 font-mono font-semibold">{exp.expense_date}</td><td className="p-3"><span className="px-2.5 py-0.5 bg-slate-200 text-slate-800 rounded-lg text-[0.7rem] font-bold">{exp.category}</span></td><td className="p-3 font-medium text-slate-800">{exp.title}</td><td className="p-3 font-mono font-black text-red-700">- Rp {Number(exp.amount || 0).toLocaleString('id-ID')}</td>
-                                <td className="p-3 text-right"><button onClick={() => handleDeleteExpense(exp.id, exp.title)} className="text-red-600 font-bold hover:underline">✕ Hapus</button></td>
+                                <td className="p-3 text-right"><button onClick={() => handleDeleteExpense(exp.id, exp.title)} className="text-red-600 font-bold hover:underline cursor-pointer">✕ Hapus</button></td>
                               </tr>
                             ))}
                           </tbody>
@@ -417,7 +446,6 @@ export default function OwnerDashboard() {
                   </div>
                 )}
 
-                {/* TAB AUDIT KHUSUS OWNER */}
                 {activeTab === 'audit' && isOwner && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <h3 className="text-[1rem] font-black text-slate-900 uppercase border-b pb-3">📋 Jejak Audit Sistem Owner</h3>
@@ -490,7 +518,7 @@ export default function OwnerDashboard() {
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg border-2 max-h-[90vh] overflow-y-auto">
-            <div className="p-4 bg-emerald-800 text-white flex justify-between"><h3 className="font-bold text-[0.9rem]">{editingProperty ? '✏️ Edit Properti & Pengelola' : '🏢 Daftar Properti Baru'}</h3><button onClick={() => {setShowAddPropModal(false); setEditingProperty(null);}}>✕</button></div>
+            <div className="p-4 bg-emerald-800 text-white flex justify-between"><h3 className="font-bold text-[0.9rem]">{editingProperty ? '✏️ Edit Properti & Pengelola' : '🏢 Daftar Properti Baru'}</h3><button onClick={() => {setShowAddPropModal(false); setEditingProperty(null);}} className="cursor-pointer text-xl">✕</button></div>
             <form onSubmit={handlePropFormSubmit} className="p-5 space-y-4 text-[0.8rem]">
               <div className="grid grid-cols-2 gap-2">
                 <div><label className="font-bold text-slate-800 mb-1">Nama Kos *</label><input type="text" required value={propName} onChange={(e) => setPropName(e.target.value)} className="w-full p-2 border-2 rounded-xl font-bold" /></div>
@@ -499,8 +527,9 @@ export default function OwnerDashboard() {
               <div className="bg-slate-50 p-3 rounded-2xl border-2"><span className="text-[0.7rem] font-black uppercase block mb-1">1. DATA PEMILIK SAH:</span><div className="flex gap-2"><input type="text" placeholder="Nama Pemilik" value={propOwnerName} onChange={(e) => setPropOwnerName(e.target.value)} className="w-full p-2 border-2 rounded-xl" /><input type="tel" placeholder="WA Pemilik" value={propOwnerPhone} onChange={(e) => setPropOwnerPhone(e.target.value)} className="w-full p-2 border-2 rounded-xl font-mono" /></div></div>
               <div className="bg-amber-50 p-3 rounded-2xl border-2 border-amber-300"><span className="text-[0.7rem] font-black uppercase block mb-1 text-amber-900">2. DATA PENGELOLA LOKASI:</span><div className="flex gap-2"><input type="text" placeholder="Nama Pengelola" value={propManagerName} onChange={(e) => setPropManagerName(e.target.value)} className="w-full p-2 border-2 border-amber-200 rounded-xl" /><input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={(e) => setPropManagerPhone(e.target.value)} className="w-full p-2 border-2 border-amber-200 rounded-xl font-mono" /></div></div>
               <div className="bg-slate-50 p-3 rounded-2xl border-2"><span className="text-[0.7rem] font-black uppercase block mb-1">3. REKENING BANK:</span><div className="flex gap-2 mb-2"><input type="text" placeholder="Bank" value={propBankName} onChange={(e) => setPropBankName(e.target.value)} className="w-1/3 p-2 border-2 rounded-xl" /><input type="text" placeholder="No Rekening" value={propBankAcc} onChange={(e) => setPropBankAcc(e.target.value)} className="w-2/3 p-2 border-2 rounded-xl font-mono" /></div><input type="text" placeholder="Atas Nama" value={propBankHolder} onChange={(e) => setPropBankHolder(e.target.value)} className="w-full p-2 border-2 rounded-xl" /></div>
-              <input type="text" maxLength={4} required placeholder="PIN 4 Digit Akses" value={propPin} onChange={(e) => setPropPin(e.target.value.replace(/\D/g, ''))} className="w-full p-2.5 border-2 border-emerald-400 rounded-xl font-mono font-black text-center text-lg text-emerald-900" />
-              <div className="flex justify-end gap-2 pt-2"><button type="submit" disabled={submittingProp} className="px-5 py-2.5 bg-emerald-700 text-white font-black rounded-xl">Simpan Properti</button></div>
+              <div><label className="font-bold text-slate-800 mb-1">Alamat Unit</label><input type="text" placeholder="Alamat Lengkap Kos" value={propAddress} onChange={(e) => setPropAddress(e.target.value)} className="w-full p-2 border-2 rounded-xl" /></div>
+              <input type="text" maxLength={4} required placeholder="PIN 4 Digit Akses" value={propPin} onChange={(e) => setPropPin(e.target.value.replace(/\D/g, ''))} className="w-full p-2.5 border-2 border-emerald-400 rounded-xl font-mono font-black text-center text-lg text-emerald-900 mt-2" />
+              <div className="flex justify-end gap-2 pt-2"><button type="submit" disabled={submittingProp} className="px-5 py-2.5 bg-emerald-700 text-white font-black rounded-xl cursor-pointer">Simpan Properti</button></div>
             </form>
           </div>
         </div>
