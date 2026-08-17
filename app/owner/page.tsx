@@ -257,11 +257,7 @@ export default function OwnerDashboard() {
   const netProfit = totalRentCollected - totalExpenses;
   
   const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
-  
-  // NAMA LOGIN AKTIF
-  const activeLoginName = isOwner 
-    ? (activeProperty?.owner_name || 'Pemilik Sah') 
-    : (activeProperty?.manager_name || 'Pengelola');
+  const activeLoginName = isOwner ? (activeProperty?.owner_name || 'Pemilik Sah') : (activeProperty?.manager_name || 'Pengelola');
 
   const handleExportOwner = () => {
     const headers = ["Nama Lengkap", "No WhatsApp", "Peran", "Kamar", "Tanggal Masuk", "Status RT", "Nominal Sewa", "Status Bayar"];
@@ -279,7 +275,7 @@ export default function OwnerDashboard() {
   };
 
   return (
-    <main style={{ fontSize: `${zoomPercent}%` }} className="min-h-screen p-3 md:p-8 bg-slate-50 text-slate-900 font-sans">
+    <main style={{ fontSize: `${zoomPercent}%` }} className="min-h-screen p-3 md:p-8 bg-slate-50 text-slate-900 transition-all font-sans">
       <div className="max-w-6xl mx-auto space-y-5">
         <header className="bg-emerald-800 text-white p-5 md:p-7 rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
@@ -289,9 +285,9 @@ export default function OwnerDashboard() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="bg-emerald-950/90 p-1.5 rounded-2xl border border-emerald-600/80 flex items-center gap-1.5 shadow-inner">
               <span className="text-[0.75rem] font-bold text-emerald-300 px-1">T↕</span>
-              <button onClick={handleZoomOut} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer">A-</button>
+              <button onClick={handleZoomOut} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400">A-</button>
               <span className="text-[0.7rem] font-mono font-black text-amber-300 px-1">{zoomPercent}%</span>
-              <button onClick={handleZoomIn} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400 hover:text-slate-950 transition-all cursor-pointer">A+</button>
+              <button onClick={handleZoomIn} className="px-2.5 py-1 rounded-xl text-[0.75rem] font-black bg-emerald-900 text-emerald-200 hover:bg-amber-400">A+</button>
             </div>
             <Link href="/" className="px-4 py-2 bg-emerald-950 hover:bg-emerald-900 text-white font-bold text-[0.75rem] rounded-2xl shadow">🚪 Keluar</Link>
           </div>
@@ -302,9 +298,9 @@ export default function OwnerDashboard() {
             <div className="w-16 h-16 bg-amber-100 text-amber-900 rounded-3xl flex items-center justify-center text-[1.8rem] mx-auto shadow-inner">🏢</div>
             <h2 className="text-[1.2rem] font-black">Masuk Dasbor Pemilik</h2>
             <form onSubmit={handleLoginSubmit} className="space-y-4 text-left">
-              <input type="tel" required placeholder="08xxxxxxxxxx" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border-2 rounded-2xl font-mono font-bold bg-white" />
-              <input type="password" maxLength={4} required placeholder="• • • •" value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border-2 rounded-2xl font-mono text-[1.2rem] font-bold text-center bg-white tracking-[0.4em]" />
-              <button type="submit" disabled={loginLoading || loginPin.length !== 4} className="w-full py-4 bg-emerald-700 text-white font-black rounded-2xl">{loginLoading ? 'Memeriksa...' : 'Buka Dasbor Saya →'}</button>
+              <input type="tel" required placeholder="08xxxxxxxxxx" value={loginPhone} onChange={(e) => setLoginPhone(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border-2 rounded-2xl font-mono font-bold bg-white focus:border-emerald-600" />
+              <input type="password" maxLength={4} required placeholder="• • • •" value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border-2 rounded-2xl font-mono text-[1.2rem] font-bold text-center bg-white tracking-[0.4em] focus:border-emerald-600" />
+              <button type="submit" disabled={loginLoading || loginPin.length !== 4} className="w-full py-4 bg-emerald-700 text-white font-black text-[0.95rem] rounded-2xl cursor-pointer shadow-md">{loginLoading ? 'Memeriksa...' : 'Buka Dasbor Saya →'}</button>
             </form>
             <div className="pt-3 border-t-2 text-center">
               <button onClick={handleOpenAddPropModal} className="text-[0.85rem] text-emerald-800 font-black hover:underline cursor-pointer">➕ Daftarkan Properti Kos Baru</button>
@@ -446,6 +442,7 @@ export default function OwnerDashboard() {
                   </div>
                 )}
 
+                {/* TAB AUDIT KHUSUS OWNER */}
                 {activeTab === 'audit' && isOwner && (
                   <div className="bg-white p-5 md:p-6 rounded-3xl shadow-md border-2 border-slate-200 space-y-4">
                     <h3 className="text-[1rem] font-black text-slate-900 uppercase border-b pb-3">📋 Jejak Audit Sistem Owner</h3>
@@ -476,6 +473,7 @@ export default function OwnerDashboard() {
         )}
       </div>
 
+      {/* SEMUA MODAL POP-UP (PASTI MUNCUL) */}
       {editingTenant && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm border-2">
@@ -511,6 +509,31 @@ export default function OwnerDashboard() {
                 <button type="submit" disabled={savingExpense} className="px-4 py-2 bg-red-700 text-white font-black rounded-xl cursor-pointer shadow w-full">Simpan Kas</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL POSTER QR PASTIKAN ADA */}
+      {posterProp && (
+        <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md border-2">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between print:hidden"><h3 className="font-bold text-[0.85rem]">🖨️ Poster Resmi QR RT</h3><button onClick={() => setPosterProp(null)} className="cursor-pointer text-xl">✕</button></div>
+            <div className="p-6 text-center space-y-4">
+              <h2 className="text-xl font-black uppercase">WAJIB LAPOR DIRI</h2><h3 className="text-lg font-black">{posterProp.name || posterProp.property_name}</h3>
+              <div className="bg-slate-50 p-4 rounded-2xl border inline-block"><img src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent((typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + posterProp.slug)}`} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl" /></div>
+            </div>
+            <div className="p-3 bg-slate-100 flex justify-end gap-2 print:hidden"><button onClick={() => window.print()} className="px-4 py-2 bg-slate-900 text-white font-black rounded-xl cursor-pointer">🖨️ Cetak Poster</button></div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TATA TERTIB PASTIKAN ADA */}
+      {editingRulesProp && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg border-2">
+            <div className="p-4 bg-emerald-800 text-white flex justify-between"><h3 className="font-bold text-[0.85rem]">📜 Tata Tertib ({editingRulesProp.name})</h3><button onClick={() => setEditingRulesProp(null)} className="cursor-pointer text-xl">✕</button></div>
+            <div className="p-4 bg-slate-50"><textarea rows={7} value={rulesText} onChange={(e) => setRulesText(e.target.value)} className="w-full p-3 border rounded-2xl font-mono text-[0.8rem]"></textarea></div>
+            <div className="p-3 bg-slate-100 flex justify-end gap-2"><button onClick={handleSaveRules} className="px-4 py-2 bg-emerald-700 text-white font-bold rounded-xl shadow cursor-pointer">Simpan Aturan</button></div>
           </div>
         </div>
       )}
