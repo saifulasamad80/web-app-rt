@@ -95,7 +95,6 @@ export default function RtDashboardPage() {
     checkAuthAndLoad();
   }, []);
 
-  // ⚡ AMBIL SEMUA DATA DALAM 1 REQUEST CEPAT
   const loadAllData = async () => {
     setLoadingData(true);
     try {
@@ -292,6 +291,17 @@ export default function RtDashboardPage() {
 
   const isSuperAdmin = currentUserEmail.toLowerCase() === 'ajipsas@gmail.com';
 
+  // HELPER CEK DOKUMEN NIKAH (SATU KELUARGA / PJ)
+  const isFamilyDocMissing = (t: any) => {
+    const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
+    if (!isMarried) return false;
+    // Cek apakah ada berkas pada baris ini atau baris PJ satu household
+    if (t.marriage_doc_url || t.kk_doc_url) return false;
+    const pj = tenants.find((item) => item.household_id && item.household_id === t.household_id && item.is_head);
+    if (pj && (pj.marriage_doc_url || pj.kk_doc_url)) return false;
+    return true;
+  };
+
   const filteredTenants = tenants.filter((t) => {
     const matchesSearch =
       (t.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -300,8 +310,7 @@ export default function RtDashboardPage() {
       (t.properties?.name || t.properties?.property_name || '').toLowerCase().includes(searchQuery.toLowerCase());
 
     const st = (t.status || '').toUpperCase();
-    const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
-    const isDocMissing = isMarried && !t.marriage_doc_url && !t.kk_doc_url;
+    const isDocMissing = isFamilyDocMissing(t);
 
     if (filterStatus === 'PENDING') return matchesSearch && st === 'PENDING';
     if (filterStatus === 'VERIFIED') return matchesSearch && (st === 'VERIFIED' || st === 'ACTIVE');
@@ -312,7 +321,7 @@ export default function RtDashboardPage() {
 
   const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
   const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
-  const countDocPending = tenants.filter((t) => (t.marital_status || '').toLowerCase().includes('nikah') && !t.marriage_doc_url && !t.kk_doc_url).length;
+  const countDocPending = tenants.filter((t) => isFamilyDocMissing(t) && t.is_head).length;
   const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
 
   return (
@@ -515,9 +524,12 @@ export default function RtDashboardPage() {
                   <tbody className="divide-y divide-slate-200">
                     {filteredTenants.map((t) => {
                       const st = (t.status || '').toUpperCase();
-                      const isMarried = (t.marital_status || '').toLowerCase().includes('nikah');
-                      // Dokumen kurang HANYA JIKA menikah dan TIDAK PUNYA buku nikah maupun KK
-                      const isDocMissing = isMarried && !t.marriage_doc_url && !t.kk_doc_url;
+                      const isDocMissing = isFamilyDocMissing(t);
+
+                      // Cari dokumen nikah dari baris ini atau baris PJ satu household
+                      const pj = tenants.find((item) => item.household_id && item.household_id === t.household_id && item.is_head);
+                      const activeMarriageDoc = t.marriage_doc_url || pj?.marriage_doc_url;
+                      const activeKkDoc = t.kk_doc_url || pj?.kk_doc_url;
 
                       return (
                         <tr key={t.id} className="hover:bg-slate-50 transition-colors">
@@ -555,9 +567,9 @@ export default function RtDashboardPage() {
                               <span className="text-[0.7rem] text-slate-400 font-medium">KTP -</span>
                             )}
 
-                            {t.marriage_doc_url ? (
+                            {activeMarriageDoc ? (
                               <button
-                                onClick={() => handleViewDocument(t.marriage_doc_url, `Buku Nikah: ${t.name}`)}
+                                onClick={() => handleViewDocument(activeMarriageDoc, `Buku Nikah: ${t.name}`)}
                                 className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-[0.7rem] rounded-lg font-black cursor-pointer"
                               >
                                 📎 Nikah
@@ -566,9 +578,9 @@ export default function RtDashboardPage() {
                               <span className="text-[0.7rem] text-slate-400 font-medium">Nikah -</span>
                             )}
 
-                            {t.kk_doc_url ? (
+                            {activeKkDoc ? (
                               <button
-                                onClick={() => handleViewDocument(t.kk_doc_url, `Kartu Keluarga: ${t.name}`)}
+                                onClick={() => handleViewDocument(activeKkDoc, `Kartu Keluarga: ${t.name}`)}
                                 className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[0.7rem] rounded-lg font-bold cursor-pointer"
                               >
                                 📁 KK
