@@ -244,14 +244,25 @@ export async function getOwnerPropertyDetails(propertyId: string) {
   }
 }
 
+// ⚡ QUERY TENANTS RT DENGAN FALLBACK JOIN MANUAL (ANTI-CRASH)
 export async function getAllTenantsForRt() {
   try {
-    const { data: tenants, error } = await supabase
-      .from('tenants')
-      .select('*, properties(*)')
-      .order('created_at', { ascending: false });
+    const [tRes, pRes] = await Promise.all([
+      supabase.from('tenants').select('*').order('created_at', { ascending: false }),
+      supabase.from('properties').select('*')
+    ]);
 
-    return { success: !error, tenants: tenants || [], error: error?.message };
+    if (tRes.error) {
+      return { success: false, tenants: [], error: tRes.error.message };
+    }
+
+    const propMap = new Map((pRes.data || []).map((p) => [p.id, p]));
+    const mergedTenants = (tRes.data || []).map((t) => ({
+      ...t,
+      properties: propMap.get(t.property_id) || null
+    }));
+
+    return { success: true, tenants: mergedTenants, error: undefined };
   } catch (err: any) {
     return { success: false, tenants: [], error: err.message };
   }
@@ -482,6 +493,7 @@ export async function deletePropertyExpenseWithAudit(expenseId: string, title: s
   return await deletePropertyExpense(expenseId, title, amount);
 }
 
+// ⚡ QUERY TENANT PORTAL DENGAN JOIN PROPERTY AMAN
 export async function getTenantPortalData(phoneInput: string) {
   if (!phoneInput) return { success: false, error: 'Nomor WhatsApp wajib diisi.' };
 
@@ -491,7 +503,7 @@ export async function getTenantPortalData(phoneInput: string) {
 
     const { data: tenantRecords, error: tenantErr } = await supabase
       .from('tenants')
-      .select('*, properties(*)')
+      .select('*')
       .or(`phone.ilike.%${suffix}%,phone.eq.${phoneInput.trim()},phone.eq.${rawClean}`)
       .order('created_at', { ascending: false });
 
@@ -504,6 +516,16 @@ export async function getTenantPortalData(phoneInput: string) {
 
     const headRooms = tenantRecords.filter((t) => t.is_head);
     const primary = headRooms.length > 0 ? headRooms[0] : tenantRecords[0];
+
+    let propertyData = null;
+    if (primary.property_id) {
+      const { data: pData } = await supabase
+        .from('properties')
+        .select('*')
+        .eq('id', primary.property_id)
+        .single();
+      propertyData = pData;
+    }
 
     let householdMembers = [primary];
     if (primary.household_id) {
@@ -519,24 +541,13 @@ export async function getTenantPortalData(phoneInput: string) {
 
     return {
       success: true,
-      tenant: primary,
+      tenant: { ...primary, properties: propertyData },
       allRooms: headRooms.length > 0 ? headRooms : [primary],
       household: householdMembers
     };
   } catch (err: any) {
     return { success: false, error: err.message };
   }
-}
-
-export async function getHouseholdMembersByHouseholdId(householdId: string) {
-  if (!householdId) return { success: false, members: [] };
-  const { data: members } = await supabase
-    .from('tenants')
-    .select('*')
-    .eq('household_id', householdId)
-    .order('is_head', { ascending: false });
-
-  return { success: true, members: members || [] };
 }
 
 export async function addMemberSusulan(formData: FormData) {
@@ -654,7 +665,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
         relation: occ.relation || (index === 0 ? 'Penanggung Jawab' : 'Anggota'),
         is_head: index === 0,
         birth_date: occ.birth_date || (index === 0 ? (formData.get('birth_date') as string) : null),
-        marital_status: index === 0 ? marital_status : 'Belum Menikah',
+        marital_status: index === 0 ? marital_status : (occ.marital_status || 'Belum Menikah'),
         occupation: index === 0 ? occupation : '',
         rent_price: index === 0 ? rent_price : 0,
         payment_status: 'UNPAID',

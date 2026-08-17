@@ -153,6 +153,9 @@ export default function TenantPortalPage() {
   const property = tenantData?.properties;
   const isPaid = (tenantData?.payment_status || '').toUpperCase() === 'PAID';
   const paymentHistory = tenantData ? getThreeMonthsHistory() : [];
+  
+  // Deteksi status nikah secara fleksibel
+  const isMarried = (tenantData?.marital_status || '').toLowerCase().includes('nikah');
   const hasMarriageDoc = !!(tenantData?.marriage_doc_url || tenantData?.kk_doc_url);
 
   const memberAgeCalculated = calculateAge(memberBirth);
@@ -272,8 +275,8 @@ export default function TenantPortalPage() {
               </div>
             </div>
 
-            {/* 2. KARTU UPLOAD DOKUMEN BUKU NIKAH / KK (LANGSUNG DITAMPILKAN DI ATAS JIKA BELUM ADA) */}
-            {tenantData.marital_status === 'Menikah' && (
+            {/* 2. KARTU UPLOAD DOKUMEN BUKU NIKAH / KK */}
+            {isMarried && (
               <div className={`p-5 md:p-6 rounded-3xl border-2 space-y-3 ${
                 hasMarriageDoc ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-amber-50 border-amber-400 text-amber-950 shadow-md'
               }`}>
