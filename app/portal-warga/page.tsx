@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { getTenantPortalData, uploadPendingDocument, addMemberSusulan, deleteTenant } from '../../src/actions/checkin-tenant';
 
@@ -36,12 +36,14 @@ function getThreeMonthHistory(paymentStatus: string, entryDateStr: string) {
 
 export default function TenantPortalPage() {
   const [phoneInput, setPhoneInput] = useState('');
-  const [authFactorInput, setAuthFactorInput] = useState(''); // 2FA (Tahun Lahir)
+  const [authFactorInput, setAuthFactorInput] = useState(''); 
   const [loading, setLoading] = useState(false);
   const [tenantData, setTenantData] = useState<any>(null);
   const [household, setHousehold] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState('');
-  const [copyMsg, setCopyMsg] = useState('');
+  
+  // FIX UX 5: Animasi Tombol Salin Rekening
+  const [copiedBank, setCopiedBank] = useState(false);
 
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -49,21 +51,34 @@ export default function TenantPortalPage() {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [showRulesAccordion, setShowRulesAccordion] = useState(false);
 
-  // Form member
   const [memberName, setMemberName] = useState(''); const [memberPhone, setMemberPhone] = useState('');
   const [memberBirth, setMemberBirth] = useState(''); const [memberRelation, setMemberRelation] = useState('Istri');
   const [memberKtpFile, setMemberKtpFile] = useState<File | null>(null); const [savingMember, setSavingMember] = useState(false);
+
+  // FIX UX 4: Panic Button Hold-to-call (Tekan Tahan 2 Detik)
+  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isHoldingPanic, setIsHoldingPanic] = useState(false);
+  
+  const handlePanicDown = () => {
+    setIsHoldingPanic(true);
+    holdTimeoutRef.current = setTimeout(() => {
+      setShowEmergencyModal(true);
+      setIsHoldingPanic(false);
+    }, 2000); 
+  };
+  const handlePanicUp = () => {
+    if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current);
+    setIsHoldingPanic(false);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); if (!phoneInput || !authFactorInput) return;
     setLoading(true); setErrorMsg('');
     
-    // Fetch data tenant
     const res = await getTenantPortalData(phoneInput);
     setLoading(false);
     
     if (res.success && res.tenant) { 
-      // VERIFIKASI 2FA: Tahun Lahir harus cocok dengan input user
       const realBirthYear = res.tenant.birth_date ? res.tenant.birth_date.substring(0,4) : '';
       if (realBirthYear && authFactorInput !== realBirthYear) {
         setErrorMsg('Otorisasi Gagal: Tahun Lahir (PIN) tidak sesuai dengan data terdaftar KTP.');
@@ -95,10 +110,11 @@ export default function TenantPortalPage() {
     if (confirm(`Hapus anggota "${name}" dari catatan hunian Anda?`)) { setHousehold(household.filter((m) => m.id !== memberId)); await deleteTenant(memberId); }
   };
 
-  const handleCopy = (text: string, label: string) => {
+  // UX Fix 5: Feedback Animasi Tombol
+  const handleCopyBank = (text: string) => {
     navigator.clipboard.writeText(text);
-    setCopyMsg(`${label} berhasil disalin ke clipboard!`);
-    setTimeout(() => setCopyMsg(''), 3000);
+    setCopiedBank(true);
+    setTimeout(() => setCopiedBank(false), 3000);
   };
 
   const isVerified = (tenantData?.status || '').toUpperCase() === 'VERIFIED';
@@ -116,12 +132,6 @@ export default function TenantPortalPage() {
           <Link href="/" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">🚪 Beranda</Link>
         </header>
 
-        {copyMsg && (
-          <div className="p-3.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded-2xl text-[0.85rem] font-bold text-center animate-fade-in shadow-sm">
-            ✅ {copyMsg}
-          </div>
-        )}
-
         {!tenantData ? (
           <form onSubmit={handleLogin} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center space-y-6">
             <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner">🛡️</div>
@@ -137,9 +147,13 @@ export default function TenantPortalPage() {
                 <input type="tel" required placeholder="08xxxxxxxx" value={phoneInput} onChange={e => setPhoneInput(e.target.value.replace(/\D/g, ''))} className="w-full p-4 border rounded-2xl font-mono text-sm font-bold focus:border-blue-500 outline-none transition-colors" />
               </div>
               <div className="pt-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">2. Tahun Lahir Anda (PIN 4 Digit)</label>
-                <input type="text" maxLength={4} required placeholder="Contoh: 1990" value={authFactorInput} onChange={e => setAuthFactorInput(e.target.value.replace(/\D/g, ''))} className="w-full p-4 border rounded-2xl font-mono text-center tracking-[0.5em] text-xl font-black focus:border-blue-500 outline-none transition-colors bg-slate-50" />
-                <p className="text-[10px] text-slate-400 mt-1.5 text-center">Sesuai dengan tahun pada KTP terdaftar.</p>
+                {/* FIX UX 6: Edukasi Tooltip Fisik KTP */}
+                <label className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                  <span>2. Tahun Lahir Anda (PIN)</span>
+                  <span className="text-[10px] text-blue-600 font-black bg-blue-50 px-2 py-0.5 rounded cursor-help shadow-sm border border-blue-100" title="Lihat 4 angka terakhir di kolom Tanggal Lahir pada KTP fisik Anda">ℹ️ Petunjuk</span>
+                </label>
+                <input type="password" maxLength={4} required placeholder="Cth: 1990" value={authFactorInput} onChange={e => setAuthFactorInput(e.target.value.replace(/\D/g, ''))} className="w-full p-4 border rounded-2xl font-mono text-center tracking-[0.5em] text-xl font-black focus:border-blue-500 outline-none transition-colors bg-slate-50" />
+                <p className="text-[10px] text-slate-400 mt-1.5 text-center">4 Digit Tahun Lahir sesuai data KTP.</p>
               </div>
             </div>
             <div className="pt-2">
@@ -148,16 +162,11 @@ export default function TenantPortalPage() {
           </form>
         ) : (
           <div className="space-y-5 animate-fade-in">
-            {/* STATUS RT CLEAN UI */}
-            <div className={`p-5 bg-white shadow-sm rounded-2xl border-l-4 ${isVerified ? 'border-l-emerald-500 border-y border-r border-slate-200' : 'border-l-amber-500 border-y border-r border-slate-200'}`}>
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-sm font-black text-slate-900">Status Kependudukan RT</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">{isVerified ? 'Data Anda telah diverifikasi oleh pengurus.' : 'Sedang dalam peninjauan pengurus.'}</p>
-                </div>
-                <span className={`text-[10px] font-black px-2.5 py-1 rounded-md uppercase ${isVerified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                  {isVerified ? '✅ Sah' : '⏳ Proses'}
-                </span>
+            {/* FIX UX 1: Full-width alert Status Kependudukan RT */}
+            <div className={`p-4 shadow-sm rounded-2xl border-2 flex justify-between items-center ${isVerified ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'}`}>
+              <div>
+                <h3 className={`text-sm font-black uppercase tracking-wider ${isVerified ? 'text-emerald-900' : 'text-amber-900'}`}>{isVerified ? '✅ Status Sah' : '⏳ Menunggu Verifikasi'}</h3>
+                <p className={`text-xs mt-0.5 font-semibold ${isVerified ? 'text-emerald-800' : 'text-amber-800'}`}>{isVerified ? 'Data Anda telah disetujui RT.' : 'Sedang ditinjau pengurus RT.'}</p>
               </div>
             </div>
 
@@ -169,19 +178,20 @@ export default function TenantPortalPage() {
                     <span className="text-xl">{hasMarriageDoc ? '✅' : '📎'}</span>
                     <h3 className="font-black text-sm text-slate-900 uppercase">Dokumen Nikah / KK</h3>
                   </div>
-                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${hasMarriageDoc ? 'bg-emerald-200 text-emerald-900' : 'bg-amber-200 text-amber-900'}`}>{hasMarriageDoc ? 'TERLAMPIR' : 'BELUM DIUNGGAH'}</span>
+                  {/* FIX UX 3: Kontras Warna Kuning (Buta Warna) - Teks Hitam Legam */}
+                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${hasMarriageDoc ? 'bg-emerald-200 text-emerald-900 border-emerald-300' : 'bg-amber-300 text-slate-900 border-amber-400 shadow-sm'}`}>{hasMarriageDoc ? 'TERLAMPIR' : 'BELUM DIUNGGAH'}</span>
                 </div>
                 {!hasMarriageDoc ? (
                   <form onSubmit={handleUploadDoc} className="space-y-3 pt-1">
                     <p className="text-xs text-amber-900 font-medium">Sesuai aturan ketertiban RT, mohon segera melampirkan foto Buku Nikah / Kartu Keluarga.</p>
                     <input type="file" required accept="image/*,.pdf" onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)} className="w-full p-2.5 border border-amber-300 rounded-xl bg-white text-xs" />
-                    <button type="submit" disabled={uploadingDoc || !docFile} className="w-full py-3.5 bg-amber-800 hover:bg-amber-900 text-white font-black rounded-xl shadow cursor-pointer transition-colors">{uploadingDoc ? 'Mengunggah...' : '📤 Unggah Dokumen'}</button>
+                    <button type="submit" disabled={uploadingDoc || !docFile} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-amber-100 font-black rounded-xl shadow cursor-pointer transition-colors">{uploadingDoc ? 'Mengunggah...' : '📤 Unggah Dokumen'}</button>
                   </form>
                 ) : (<p className="text-xs text-emerald-800 font-bold">✓ Berkas pernikahan telah tersimpan aman.</p>)}
               </div>
             )}
 
-            {/* TAGIHAN SEWA & RIWAYAT (LIST VERTIKAL) */}
+            {/* TAGIHAN SEWA & RIWAYAT */}
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
                <div className="flex justify-between items-center border-b pb-3">
                 <h3 className="font-black text-slate-900 text-sm">💳 TAGIHAN SEWA KAMAR</h3>
@@ -192,7 +202,6 @@ export default function TenantPortalPage() {
                 <span className="text-2xl font-black text-slate-900">Rp {Number(tenantData.rent_price || 0).toLocaleString('id-ID')}</span>
               </div>
 
-              {/* KOTAK REKENING PEMILIK */}
               {property?.bank_account_number && (
                 <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 space-y-2 mt-2">
                   <span className="text-[10px] font-extrabold text-blue-800 uppercase block tracking-wider">Rekening Resmi Pembayaran:</span>
@@ -201,8 +210,9 @@ export default function TenantPortalPage() {
                       <p className="font-black text-slate-900 text-sm">{property.bank_name} - {property.bank_account_number}</p>
                       <p className="text-xs text-slate-600 font-semibold">a.n. {property.bank_account_holder}</p>
                     </div>
-                    <button onClick={() => handleCopy(property.bank_account_number, 'Nomor Rekening')} className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer transition-colors">
-                      📋 Salin
+                    {/* FIX UX 5: Animasi Tombol Salin */}
+                    <button onClick={() => handleCopyBank(property.bank_account_number)} className={`px-3 py-2 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer transition-colors ${copiedBank ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                      {copiedBank ? '✅ Tersalin!' : '📋 Salin'}
                     </button>
                   </div>
                 </div>
@@ -210,12 +220,12 @@ export default function TenantPortalPage() {
 
               <div className="pt-5 border-t space-y-3">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Riwayat 3 Bulan Terakhir</span>
-                {/* LIST VERTIKAL DI MOBILE (Feedback UI/UX) */}
-                <div className="flex flex-col gap-2.5">
+                {/* FIX UX 2: Riwayat Vertikal yang Lega dan Bold yang disesuaikan */}
+                <div className="flex flex-col gap-3">
                   {paymentHistory.map((item, idx) => (
-                    <div key={idx} className={`flex justify-between items-center p-3.5 rounded-xl border ${item.status === 'N/A' ? 'bg-slate-50 border-slate-200' : item.status === 'PAID' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                      <span className={`text-sm font-bold ${item.status === 'N/A' ? 'text-slate-500' : 'text-slate-900'}`}>{item.labelLong}</span>
-                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-wider ${item.status === 'N/A' ? 'text-slate-500 bg-slate-200' : item.status === 'PAID' ? 'text-emerald-800 bg-emerald-200' : 'text-red-800 bg-red-200'}`}>
+                    <div key={idx} className={`flex justify-between items-center p-4 rounded-xl border shadow-sm ${item.status === 'N/A' ? 'bg-slate-50 border-slate-200' : item.status === 'PAID' ? 'bg-white border-emerald-200' : 'bg-white border-red-200'}`}>
+                      <span className={`text-sm ${item.status === 'N/A' ? 'text-slate-500 font-medium' : 'text-slate-600 font-semibold'}`}>{item.labelLong}</span>
+                      <span className={`text-[10px] font-black px-2.5 py-1.5 rounded-md uppercase tracking-wider border ${item.status === 'N/A' ? 'text-slate-500 bg-slate-200 border-slate-300' : item.status === 'PAID' ? 'text-emerald-800 bg-emerald-50 border-emerald-300' : 'text-red-800 bg-red-50 border-red-300'}`}>
                         {item.status === 'N/A' ? 'Belum Masuk' : item.status === 'PAID' ? '✓ Lunas' : '✗ Belum Bayar'}
                       </span>
                     </div>
@@ -257,9 +267,18 @@ export default function TenantPortalPage() {
             </div>
 
             {/* TOMBOL TATA TERTIB & DARURAT */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-4 select-none">
               <button onClick={() => setShowRulesAccordion(!showRulesAccordion)} className="p-5 bg-white hover:bg-slate-50 border border-slate-200 rounded-3xl shadow-sm font-bold text-sm flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors"><span className="text-3xl">📜</span><span>Tata Tertib</span></button>
-              <button onClick={() => setShowEmergencyModal(true)} className="p-5 bg-red-600 hover:bg-red-700 text-white rounded-3xl shadow-lg shadow-red-600/30 font-bold text-sm flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors"><span className="text-3xl animate-pulse">🚨</span><span>Darurat (Panic)</span></button>
+              
+              {/* FIX UX 4: Panic Button (Tekan Tahan 2 Detik) */}
+              <button 
+                onMouseDown={handlePanicDown} onMouseUp={handlePanicUp} onMouseLeave={handlePanicUp}
+                onTouchStart={handlePanicDown} onTouchEnd={handlePanicUp}
+                className={`p-5 text-white rounded-3xl font-bold text-sm flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${isHoldingPanic ? 'bg-red-800 scale-95 shadow-inner' : 'bg-red-600 shadow-lg shadow-red-600/30'}`}
+              >
+                <span className={`text-3xl ${!isHoldingPanic && 'animate-pulse'}`}>🚨</span>
+                <span>{isHoldingPanic ? 'Menahan...' : 'Tahan: Darurat'}</span>
+              </button>
             </div>
             
             {/* CHAT PENGELOLA */}
