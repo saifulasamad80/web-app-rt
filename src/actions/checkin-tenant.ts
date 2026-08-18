@@ -153,10 +153,13 @@ export async function addPropertyExpense(propertyId: string, title: string, cate
   return { success: !error, data: data ? data[0] : null, error: error?.message };
 }
 
+// PERBAIKAN: Fungsi deletePropertyExpense diperbarui untuk menarik title dan mencatat audit dengan deskriptif
 export async function deletePropertyExpense(expenseId: string, title?: string, amount?: number) {
   const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_BIAYA_KOS', performed_by: 'Owner / Pengelola Kos', details: `Menghapus pengeluaran: "${title}"` });
+    const { data: { session } } = await supabase.auth.getSession();
+    const userEmail = session?.user?.email || 'Owner / Pengelola Kos';
+    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_BIAYA_KOS', performed_by: userEmail, details: `Menghapus pengeluaran: "${title || 'Tidak ada judul'}"` });
     try { revalidatePath('/owner'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
