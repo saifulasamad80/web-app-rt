@@ -69,14 +69,12 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const nextStep = () => { if (validateStep(step)) setStep((s) => s + 1); };
   const prevStep = () => setStep((s) => s - 1);
 
-  // Filter hanya menerima format gambar
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: React.Dispatch<React.SetStateAction<File | null>>) => {
+  // FIX: Type safe image uploader
+  const handlePrimaryKtpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (!file.type.startsWith('image/')) {
-        alert('File harus berupa gambar (JPG/PNG). Anda tidak bisa mengunggah PDF atau file lain di kolom ini.');
-        e.target.value = ''; setter(null);
-      } else { setter(file); }
+      if (!file.type.startsWith('image/')) { alert('Harus berupa gambar (JPG/PNG).'); e.target.value = ''; setKtpFile(null); } 
+      else { setKtpFile(file); }
     }
   };
 
@@ -175,7 +173,9 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                         <div><input type="date" value={occ.birth_date} onChange={e=>{const u=[...occupants]; u[idx].birth_date=e.target.value; setOccupants(u);}} className="w-full p-2.5 border rounded-xl" />{errors[`occ_${idx}_birth`] && <p className="text-[10px] text-red-600">{errors[`occ_${idx}_birth`]}</p>}</div>
                       </div>
                       {age >= 17 && (
-                        <div><label className="text-xs font-bold block mb-1">Foto KTP Anggota *</label><input type="file" accept="image/*" onChange={e=>handleImageUpload(e, (file) => {const u=[...occupants]; u[idx].ktpFile=file; setOccupants(u)})} className="w-full p-2 border rounded-xl bg-white text-xs" />{errors[`occ_${idx}_ktp`] && <p className="text-[10px] text-red-600">{errors[`occ_${idx}_ktp`]}</p>}</div>
+                        <div><label className="text-xs font-bold block mb-1">Foto KTP Anggota *</label>
+                        <input type="file" accept="image/*" onChange={(e)=>{const file = e.target.files?.[0]; if(file){if(!file.type.startsWith('image/')){alert('Harus berupa gambar.'); e.target.value='';}else{const u=[...occupants]; u[idx].ktpFile=file; setOccupants(u);}}}} className="w-full p-2 border rounded-xl bg-white text-xs" />
+                        {errors[`occ_${idx}_ktp`] && <p className="text-[10px] text-red-600">{errors[`occ_${idx}_ktp`]}</p>}</div>
                       )}
                     </div>
                   );
@@ -191,7 +191,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               
               <div className="p-5 bg-slate-50 border rounded-2xl">
                 <label className="block font-bold text-sm mb-2">🪪 Foto KTP Penanggung Jawab *</label>
-                <input type="file" accept="image/*" onChange={e=>handleImageUpload(e, setKtpFile)} className="w-full p-2.5 border rounded-xl bg-white text-sm" />
+                <input type="file" accept="image/*" onChange={handlePrimaryKtpUpload} className="w-full p-2.5 border rounded-xl bg-white text-sm" />
                 {errors.ktpFile && <p className="text-xs text-red-600 mt-1">{errors.ktpFile}</p>}
               </div>
 

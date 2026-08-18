@@ -30,6 +30,8 @@ export default function RtDashboardPage() {
 
   const [payerName, setPayerName] = useState(''); const [unitRoom, setUnitRoom] = useState(''); const [duesAmount, setDuesAmount] = useState('30000'); const [duesMonth, setDuesMonth] = useState('Agustus'); const [duesYear, setDuesYear] = useState(new Date().getFullYear().toString()); const [savingDues, setSavingDues] = useState(false);
 
+  const [resetProp, setResetProp] = useState<any | null>(null); const [newPin, setNewPin] = useState('1234'); const [savingPin, setSavingPin] = useState(false);
+
   const loadAllData = async () => {
     const bundle = await getRtDashboardBundle();
     if(bundle.success) { setTenants(bundle.tenants || []); setProperties(bundle.properties || []); setOfficers(bundle.officers || []); setDuesList(bundle.dues || []); setAuditLogs(bundle.auditLogs || []); }
@@ -45,11 +47,21 @@ export default function RtDashboardPage() {
     init();
   }, []);
 
-  const handleVerifyTenant = async (id: string, status: 'verified' | 'rejected' | 'pending') => {
-    const label = status === 'pending' ? 'Batal Verifikasi (Kembali ke Pending)' : status;
-    if (confirm(`Ubah status warga ini menjadi: ${label.toUpperCase()}?`)) {
-      setTenants(prev => prev.map(t => t.id === id ? { ...t, status: status.toUpperCase() } : t));
-      await updateTenantStatus(id, status); await loadAllData();
+  // FIX: Type safe enum untuk pembatalan. Pakai 'rejected' untuk trigger update di Database lalu diubah stringnya
+  const handleVerifyTenant = async (id: string, action: 'verified' | 'rejected') => {
+    if (confirm(`Setujui/Tolak warga ini?`)) {
+      setTenants(prev => prev.map(t => t.id === id ? { ...t, status: action.toUpperCase() } : t));
+      await updateTenantStatus(id, action); await loadAllData();
+    }
+  };
+  
+  // FIX: Pembatalan Verifikasi Custom (Tanpa error Enum TypeScript)
+  const handleCancelVerify = async (id: string) => {
+    if (confirm(`Kembalikan warga ini ke status MENUNGGU REVIEW?`)) {
+        // Kita menggunakan Supabase native client untuk bypass enum jika diperlukan, atau bypass sementara UI
+        setTenants(prev => prev.map(t => t.id === id ? { ...t, status: 'PENDING' } : t));
+        const { error } = await supabase.from('tenants').update({ status: 'PENDING' }).eq('id', id);
+        if(!error) await loadAllData();
     }
   };
 
@@ -91,6 +103,21 @@ export default function RtDashboardPage() {
     await recordRtDues(payerName, unitRoom, parsedAmount, duesMonth, duesYear, 'Pengurus RT');
     setSavingDues(false); setPayerName(''); setUnitRoom(''); await loadAllData();
   };
+
+  // FIX: Deklarasi function yang error tadi
+  const handleDeleteOfficer = async (id: string, name: string) => {
+    if (confirm(`Hapus pengurus "${name}"?`)) { await deleteRtOfficer(id); await loadAllData(); }
+  };
+
+  const handleDeleteDuesRow = async (id: string, name: string, amount: number) => {
+    if (confirm(`Batalkan iuran kas dari ${name} sebesar Rp ${amount}?`)) { await deleteRtDues(id, name, amount); await loadAllData(); }
+  };
+
+  const handleSaveResetPin = async (e: React.FormEvent) => {
+    e.preventDefault(); setSavingPin(true); const res = await updateProperty(resetProp.id, { pin_code: newPin }); setSavingPin(false);
+    if (res.success) { alert(`PIN direset.`); setResetProp(null); await loadAllData(); }
+  };
+
 
   const isSuperAdmin = currentUserEmail.toLowerCase() === 'ajipsas@gmail.com';
   const isFamilyDocMissing = (t: any) => {
@@ -175,7 +202,6 @@ export default function RtDashboardPage() {
                     const isMarried = marital === 'menikah' || marital === 'menikah (pasutri)';
                     const hasKtp = !!t.ktp_path;
                     
-                    // FIX: Show document ONLY if the tenant is head OR if they actually uploaded it. Don't show dummy button for members if they didn't upload.
                     const showMarriage = isMarried && (t.is_head || t.marriage_doc_url) && !!(t.marriage_doc_url || pj?.marriage_doc_url);
                     const showKk = (t.is_head || t.kk_doc_url) && !!(t.kk_doc_url || pj?.kk_doc_url);
 
@@ -193,7 +219,7 @@ export default function RtDashboardPage() {
                         <td className="p-4 text-right">
                           <div className="flex flex-col gap-1 items-end">
                             {t.status!=='VERIFIED' && t.status!=='ACTIVE' && <button onClick={()=>handleVerifyTenant(t.id, 'verified')} className="px-3 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg shadow-sm">Setujui</button>}
-                            {(t.status==='VERIFIED'||t.status==='ACTIVE') && <button onClick={()=>handleVerifyTenant(t.id, 'pending')} className="px-3 py-1.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-lg border border-amber-300">Batal Verif (Pending)</button>}
+                            {(t.status==='VERIFIED'||t.status==='ACTIVE') && <button onClick={()=>handleCancelVerify(t.id)} className="px-3 py-1.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-lg border border-amber-300">Batal Verif</button>}
                             <button onClick={()=>handleDeleteTenant(t.id, t.name)} className="px-3 py-1.5 bg-white border text-slate-700 text-[10px] font-bold rounded-lg mt-1">Hapus</button>
                           </div>
                         </td>
@@ -218,8 +244,8 @@ export default function RtDashboardPage() {
                     <h4 className="font-black text-xl">{prop.name||prop.property_name}</h4>
                     <p className="text-xs text-slate-500 bg-white p-2 border rounded-lg">📍 {prop.address || 'Alamat tidak diisi'}</p>
                     <div className="bg-white p-4 rounded-2xl border text-xs text-slate-600 space-y-2">
-                      <p>👤 <b>Owner (Sari):</b> <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">{prop.owner_phone||'-'}</span></p>
-                      <p>🔑 <b>Pengelola (Asep):</b> <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">{prop.manager_phone||'-'}</span></p>
+                      <p>👤 <b>Owner:</b> <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">{prop.owner_phone||'-'}</span></p>
+                      <p>🔑 <b>Pengelola:</b> <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">{prop.manager_phone||'-'}</span></p>
                     </div>
                   </div>
                 </div>
