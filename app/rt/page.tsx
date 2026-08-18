@@ -10,6 +10,7 @@ import {
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || '', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '');
 
 export default function RtDashboardPage() {
+  const [zoomPercent, setZoomPercent] = useState<number>(100);
   const [activeTab, setActiveTab] = useState('warga');
   const [authChecking, setAuthChecking] = useState(true);
   const [currentUserEmail, setCurrentUserEmail] = useState('');
@@ -51,6 +52,9 @@ export default function RtDashboardPage() {
   const [duesMonth, setDuesMonth] = useState('Agustus');
   const [duesYear, setDuesYear] = useState(new Date().getFullYear().toString());
   const [savingDues, setSavingDues] = useState(false);
+
+  const handleZoomIn = () => setZoomPercent((prev) => Math.min(prev + 15, 160));
+  const handleZoomOut = () => setZoomPercent((prev) => Math.max(prev - 15, 85));
 
   const loadAllData = async () => {
     const bundle = await getRtDashboardBundle();
@@ -127,7 +131,7 @@ export default function RtDashboardPage() {
     if (confirm(`Batalkan iuran dari ${name}?`)) { await deleteRtDues(id, name, amount); await loadAllData(); }
   };
 
-  // --- UTILS ---
+  // --- UTILS & PERHITUNGAN VARIABEL (YANG KEMARIN ERROR/HILANG) ---
   const isSuperAdmin = currentUserEmail.toLowerCase() === 'ajipsas@gmail.com';
   const isFamilyDocMissing = (t: any) => {
     const marital = (t.marital_status || '').toLowerCase();
@@ -147,10 +151,15 @@ export default function RtDashboardPage() {
     return matchesSearch;
   });
 
+  const countPending = tenants.filter((t) => (t.status || '').toUpperCase() === 'PENDING').length;
+  const countVerified = tenants.filter((t) => (t.status || '').toUpperCase() === 'VERIFIED' || (t.status || '').toUpperCase() === 'ACTIVE').length;
+  const countDocPending = tenants.filter((t) => isFamilyDocMissing(t) && t.is_head).length;
+  const totalKasTerkumpul = duesList.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+
   if (authChecking) return <div className="min-h-screen flex items-center justify-center bg-slate-50 font-bold text-slate-500">Memuat Dasbor RT...</div>;
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans">
+    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans" style={{ fontSize: `${zoomPercent}%` }}>
       
       {/* SIDEBAR NAVIGATION */}
       <aside className="w-full md:w-64 bg-slate-900 text-white flex flex-col md:min-h-screen flex-shrink-0 shadow-xl z-10">
@@ -159,6 +168,19 @@ export default function RtDashboardPage() {
           <h1 className="text-xl font-black text-white mt-3">Dasbor Terpadu</h1>
           <p className="text-[10px] text-slate-400 mt-2 font-mono truncate">{currentUserEmail}</p>
         </div>
+        
+        {/* FITUR ZOOM DIKEMBALIKAN */}
+        <div className="p-4 border-b border-slate-800">
+          <div className="bg-slate-800 p-1.5 rounded-xl border border-slate-700 flex justify-between items-center shadow-inner">
+            <span className="text-[10px] font-bold text-slate-400 px-2">Zoom</span>
+            <div className="flex items-center gap-1">
+              <button onClick={handleZoomOut} className="px-2.5 py-1 rounded-lg text-xs font-black bg-slate-700 text-slate-200 hover:bg-amber-400 hover:text-slate-900 cursor-pointer">A-</button>
+              <span className="text-[10px] font-mono font-black text-amber-300 px-1">{zoomPercent}%</span>
+              <button onClick={handleZoomIn} className="px-2.5 py-1 rounded-lg text-xs font-black bg-slate-700 text-slate-200 hover:bg-amber-400 hover:text-slate-900 cursor-pointer">A+</button>
+            </div>
+          </div>
+        </div>
+
         <nav className="flex-1 p-4 flex flex-row md:flex-col gap-2 overflow-x-auto md:overflow-visible">
           <button onClick={()=>setActiveTab('warga')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${activeTab==='warga'?'bg-emerald-600 text-white shadow':'hover:bg-slate-800 text-slate-300'}`}>👥 Data Warga</button>
           <button onClick={()=>setActiveTab('properti')} className={`flex-shrink-0 text-left px-4 py-3 rounded-xl font-bold text-sm transition-colors cursor-pointer ${activeTab==='properti'?'bg-emerald-600 text-white shadow':'hover:bg-slate-800 text-slate-300'}`}>🏢 Unit Kos</button>
@@ -173,6 +195,14 @@ export default function RtDashboardPage() {
       {/* MAIN CONTENT */}
       <main className="flex-1 p-4 md:p-8 overflow-y-auto w-full">
         
+        {/* KOTAK INFORMASI RT DIKEMBALIKAN */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6">
+          <div className="bg-white border-2 border-slate-200 p-4 md:p-5 rounded-3xl shadow-sm text-center"><span className="text-3xl font-black text-slate-900 block">{tenants.length}</span><span className="text-[10px] font-black text-slate-500 mt-1 block uppercase">Total Warga Terdata</span></div>
+          <div className="bg-amber-50 border-2 border-amber-300 p-4 md:p-5 rounded-3xl shadow-sm text-center"><span className="text-3xl font-black text-amber-950 block">{countPending}</span><span className="text-[10px] font-black text-amber-800 mt-1 block uppercase">Menunggu Verifikasi</span></div>
+          <div className="bg-emerald-50 border-2 border-emerald-300 p-4 md:p-5 rounded-3xl shadow-sm text-center"><span className="text-3xl font-black text-emerald-950 block">{countVerified}</span><span className="text-[10px] font-black text-emerald-800 mt-1 block uppercase">Resmi Terverifikasi</span></div>
+          <div className="bg-red-50 border-2 border-red-300 p-4 md:p-5 rounded-3xl shadow-sm text-center"><span className="text-3xl font-black text-red-950 block">{countDocPending}</span><span className="text-[10px] font-black text-red-800 mt-1 block uppercase">Dokumen Kurang</span></div>
+        </div>
+
         {/* TAB 1: WARGA */}
         {activeTab === 'warga' && (
           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 animate-fade-in space-y-4">
@@ -185,9 +215,9 @@ export default function RtDashboardPage() {
             <div className="flex flex-col md:flex-row gap-3">
               <input type="text" placeholder="🔍 Cari nama, No WA, kamar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="flex-1 p-2.5 border border-slate-300 rounded-xl outline-none text-sm bg-slate-50 focus:border-emerald-500" />
               <div className="flex gap-2">
-                <button onClick={()=>setFilterStatus('ALL')} className={`px-3 py-2 rounded-xl text-xs font-bold ${filterStatus==='ALL'?'bg-slate-900 text-white':'bg-slate-100 text-slate-700'}`}>Semua</button>
-                <button onClick={()=>setFilterStatus('PENDING')} className={`px-3 py-2 rounded-xl text-xs font-bold ${filterStatus==='PENDING'?'bg-amber-400 text-slate-900':'bg-amber-50 text-amber-900'}`}>Menunggu</button>
-                <button onClick={()=>setFilterStatus('DOC_PENDING')} className={`px-3 py-2 rounded-xl text-xs font-bold ${filterStatus==='DOC_PENDING'?'bg-red-600 text-white':'bg-red-50 text-red-900'}`}>Dokumen Kurang</button>
+                <button onClick={()=>setFilterStatus('ALL')} className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${filterStatus==='ALL'?'bg-slate-900 text-white':'bg-slate-100 text-slate-700'}`}>Semua</button>
+                <button onClick={()=>setFilterStatus('PENDING')} className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${filterStatus==='PENDING'?'bg-amber-400 text-slate-900':'bg-amber-50 text-amber-900'}`}>Menunggu</button>
+                <button onClick={()=>setFilterStatus('DOC_PENDING')} className={`px-3 py-2 rounded-xl text-xs font-bold cursor-pointer ${filterStatus==='DOC_PENDING'?'bg-red-600 text-white':'bg-red-50 text-red-900'}`}>Dokumen Kurang</button>
               </div>
             </div>
 
