@@ -34,7 +34,6 @@ export async function getRtDashboardBundle() {
   }
 }
 
-// FIX: Tambahkan filter agar database membaca kata 'Pemilik' dan 'Pengelola' selain 'Owner'
 export async function getOwnerAuditLogs() {
   const { data } = await supabase.from('dues_audit_logs')
     .select('*')
@@ -201,9 +200,30 @@ export async function addMemberSusulan(formData: FormData) {
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
+// FITUR BARU: Cek Ketersediaan Kamar (Real-Time)
+export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
+  if (!propertyId || !roomNumber) return { available: true };
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('id')
+    .eq('property_id', propertyId)
+    .ilike('room_number', roomNumber.trim())
+    .in('status', ['PENDING', 'VERIFIED', 'ACTIVE'])
+    .limit(1);
+  if (error) return { available: true };
+  return { available: !data || data.length === 0 };
+}
+
 export async function submitMultiTenantsStrict(formData: FormData) {
   try {
     const property_id = formData.get('property_id') as string; const room_number = (formData.get('room_number') as string) || ''; const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
+    
+    // VALIDASI LAPIS KEDUA: Cegah bentrok kalau ada yang nekat submit berbarengan
+    if (room_number) {
+        const { data: exist } = await supabase.from('tenants').select('id').eq('property_id', property_id).ilike('room_number', room_number.trim()).in('status', ['PENDING', 'VERIFIED', 'ACTIVE']).limit(1);
+        if (exist && exist.length > 0) return { success: false, data: [], error: `Pendaftaran ditolak: Kamar "${room_number}" saat ini sudah terisi atau sedang dalam antrean pendaftaran.` };
+    }
+
     const rent_price = parseInt((formData.get('rent_price') as string || '0').replace(/\D/g, ''), 10) || 0; const marital_status = (formData.get('marital_status') as string) || 'Belum Menikah'; const occupation = (formData.get('occupation') as string) || '';
     const occupantsRaw = formData.get('occupants') as string; const household_id = `HH-${Date.now()}`;
     const uploadFile = async (file: File, prefix: string) => { const { data, error } = await supabase.storage.from('ktp-documents').upload(`${prefix}_${Date.now()}.jpg`, Buffer.from(await file.arrayBuffer()), { contentType: file.type || 'image/jpeg', upsert: true }); return error ? null : data?.path; };
