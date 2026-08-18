@@ -89,7 +89,8 @@ export default function HomePage() {
               <h2 className="text-[1.1rem] font-black text-slate-900">Portal Pengurus RT</h2>
               <p className="text-[0.85rem] text-slate-500 leading-relaxed">Buku register warga, verifikasi dokumen UU PDP, kelola pengurus, & kas RT.</p>
             </div>
-            <Link href="/login" className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-center rounded-xl text-[0.85rem] transition-colors">Masuk Dasbor RT</Link>
+            {/* FIX BUG LOGIN HANTU: Tombol langsung diarahkan ke /rt */}
+            <Link href="/rt" className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-center rounded-xl text-[0.85rem] transition-colors">Masuk Dasbor RT</Link>
           </div>
         </div>
       </div>
