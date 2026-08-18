@@ -24,7 +24,12 @@ export default function RtDashboardPage() {
 
   const [showAddOfficerModal, setShowAddOfficerModal] = useState(false);
   const [editingOfficer, setEditingOfficer] = useState<any | null>(null);
-  const [officerName, setOfficerName] = useState(''); const [officerRole, setOfficerRole] = useState('SEKRETARIS'); const [officerPhone, setOfficerPhone] = useState(''); const [officerEmail, setOfficerEmail] = useState(''); const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345'); const [savingOfficer, setSavingOfficer] = useState(false);
+  const [officerName, setOfficerName] = useState(''); 
+  const [officerRole, setOfficerRole] = useState('KETUA_RT'); // Default KETUA RT
+  const [officerPhone, setOfficerPhone] = useState(''); 
+  const [officerEmail, setOfficerEmail] = useState(''); 
+  const [officerInitialPassword, setOfficerInitialPassword] = useState('admin12345'); 
+  const [savingOfficer, setSavingOfficer] = useState(false);
 
   const [resetOfficerTarget, setResetOfficerTarget] = useState<any | null>(null); const [officerNewPassword, setOfficerNewPassword] = useState(''); const [resettingPassword, setResettingPassword] = useState(false);
 
@@ -47,18 +52,17 @@ export default function RtDashboardPage() {
     init();
   }, []);
 
-  // FIX: Type safe enum untuk pembatalan. Pakai 'rejected' untuk trigger update di Database lalu diubah stringnya
-  const handleVerifyTenant = async (id: string, action: 'verified' | 'rejected') => {
+  // FIX: Type parameter telah diperbaiki agar sesuai dengan Supabase /rt-actions.ts
+  const handleVerifyTenant = async (id: string, action: 'verified' | 'rejected' | 'active' | 'checked_out') => {
     if (confirm(`Setujui/Tolak warga ini?`)) {
       setTenants(prev => prev.map(t => t.id === id ? { ...t, status: action.toUpperCase() } : t));
       await updateTenantStatus(id, action); await loadAllData();
     }
   };
   
-  // FIX: Pembatalan Verifikasi Custom (Tanpa error Enum TypeScript)
+  // FIX: Mengembalikan status ke PENDING tanpa error enum
   const handleCancelVerify = async (id: string) => {
     if (confirm(`Kembalikan warga ini ke status MENUNGGU REVIEW?`)) {
-        // Kita menggunakan Supabase native client untuk bypass enum jika diperlukan, atau bypass sementara UI
         setTenants(prev => prev.map(t => t.id === id ? { ...t, status: 'PENDING' } : t));
         const { error } = await supabase.from('tenants').update({ status: 'PENDING' }).eq('id', id);
         if(!error) await loadAllData();
@@ -66,7 +70,7 @@ export default function RtDashboardPage() {
   };
 
   const handleDeleteTenant = async (id: string, name: string) => {
-    if (confirm(`Hapus warga "${name}" dari sistem?`)) { setTenants(prev => prev.filter(t => t.id !== id)); await deleteTenant(id); }
+    if (confirm(`Hapus warga "${name}" dari sistem?`)) { await deleteTenant(id); window.location.reload(); }
   };
 
   const handleViewDocument = async (filePath: string, title: string) => {
@@ -88,34 +92,33 @@ export default function RtDashboardPage() {
 
   const handleExecuteResetPassword = async (e: React.FormEvent) => {
     e.preventDefault(); setResettingPassword(true); const res = await resetOfficerPasswordBySuperAdmin(resetOfficerTarget.email, officerNewPassword, currentUserEmail); setResettingPassword(false);
-    if (res.success) { alert(`Sandi berhasil direset.`); setResetOfficerTarget(null); setOfficerNewPassword(''); await loadAllData(); }
+    if (res.success) { alert(`Sandi berhasil direset.`); window.location.reload(); }
   };
 
   const handleOfficerFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingOfficer(true);
     if (editingOfficer) { await updateRtOfficer(editingOfficer.id, officerName, officerRole, officerPhone, officerEmail); } 
     else { await addRtOfficer(officerName, officerRole, officerPhone, officerEmail, officerInitialPassword); }
-    setSavingOfficer(false); setShowAddOfficerModal(false); setEditingOfficer(null); await loadAllData();
+    window.location.reload();
+  };
+
+  const handleDeleteOfficer = async (id: string, name: string) => {
+    if (confirm(`Hapus pengurus "${name}"?`)) { await deleteRtOfficer(id); window.location.reload(); }
   };
 
   const handleRecordDuesSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingDues(true); const parsedAmount = parseInt(duesAmount.replace(/\D/g, ''), 10) || 0;
     await recordRtDues(payerName, unitRoom, parsedAmount, duesMonth, duesYear, 'Pengurus RT');
-    setSavingDues(false); setPayerName(''); setUnitRoom(''); await loadAllData();
-  };
-
-  // FIX: Deklarasi function yang error tadi
-  const handleDeleteOfficer = async (id: string, name: string) => {
-    if (confirm(`Hapus pengurus "${name}"?`)) { await deleteRtOfficer(id); await loadAllData(); }
+    window.location.reload();
   };
 
   const handleDeleteDuesRow = async (id: string, name: string, amount: number) => {
-    if (confirm(`Batalkan iuran kas dari ${name} sebesar Rp ${amount}?`)) { await deleteRtDues(id, name, amount); await loadAllData(); }
+    if (confirm(`Batalkan iuran kas dari ${name} sebesar Rp ${amount}?`)) { await deleteRtDues(id, name, amount); window.location.reload(); }
   };
 
   const handleSaveResetPin = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingPin(true); const res = await updateProperty(resetProp.id, { pin_code: newPin }); setSavingPin(false);
-    if (res.success) { alert(`PIN direset.`); setResetProp(null); await loadAllData(); }
+    if (res.success) { alert(`PIN direset.`); window.location.reload(); }
   };
 
 
@@ -235,7 +238,7 @@ export default function RtDashboardPage() {
         {/* TAB 2: PROPERTI KOS */}
         {activeTab === 'properti' && (
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border space-y-5">
-            <h2 className="text-2xl font-black border-b pb-4">Daftar Properti Kos</h2>
+            <h2 className="text-2xl font-black border-b pb-4">Daftar Properti Kos & Akses PIN</h2>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 pt-2">
               {properties.map((prop) => (
                 <div key={prop.id} className="p-6 rounded-3xl border bg-slate-50 flex flex-col justify-between">
@@ -248,6 +251,9 @@ export default function RtDashboardPage() {
                       <p>🔑 <b>Pengelola:</b> <span className="font-mono text-[10px] bg-slate-100 px-2 py-0.5 rounded">{prop.manager_phone||'-'}</span></p>
                     </div>
                   </div>
+                  <div className="pt-4 border-t border-slate-200 mt-4 flex justify-end">
+                    <button onClick={()=>{setResetProp(prop); setNewPin('1234');}} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl shadow-md">🔑 Reset PIN Properti</button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -257,7 +263,7 @@ export default function RtDashboardPage() {
         {/* TAB 3: PENGURUS */}
         {activeTab === 'pengurus' && (
           <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border space-y-5">
-            <div className="flex justify-between items-center border-b pb-4"><h2 className="text-2xl font-black">Manajemen Pengurus RT</h2>{isSuperAdmin && <button onClick={()=>{setEditingOfficer(null);setOfficerName('');setOfficerPhone('');setOfficerEmail('');setShowAddOfficerModal(true);}} className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-black rounded-xl shadow-md">➕ Tambah Pengurus</button>}</div>
+            <div className="flex justify-between items-center border-b pb-4"><h2 className="text-2xl font-black">Manajemen Pengurus RT</h2>{isSuperAdmin && <button onClick={()=>{setEditingOfficer(null);setOfficerName('');setOfficerRole('KETUA_RT');setOfficerPhone('');setOfficerEmail('');setShowAddOfficerModal(true);}} className="px-5 py-2.5 bg-emerald-600 text-white text-xs font-black rounded-xl shadow-md">➕ Tambah Pengurus</button>}</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
               {officers.map((off) => (
                 <div key={off.id} className="p-5 bg-white rounded-3xl border space-y-4 shadow-sm">
@@ -344,11 +350,54 @@ export default function RtDashboardPage() {
           <div className="bg-white rounded-3xl max-w-sm w-full border"><div className="p-5 bg-emerald-800 text-white flex justify-between"><h3 className="font-black text-base">{editingOfficer?'Edit Pengurus':'Daftar Pengurus Baru'}</h3><button onClick={()=>{setShowAddOfficerModal(false);setEditingOfficer(null);}} className="text-xl">✕</button></div>
             <form onSubmit={handleOfficerFormSubmit} className="p-6 space-y-4 bg-slate-50">
               <input type="text" required placeholder="Cth: Pak Budi" value={officerName} onChange={e=>setOfficerName(e.target.value)} className="w-full p-3 border rounded-xl font-bold" />
-              <select value={officerRole} onChange={e=>setOfficerRole(e.target.value)} className="w-full p-3 border rounded-xl font-bold"><option value="SEKRETARIS">Sekretaris RT</option><option value="BENDAHARA">Bendahara RT</option></select>
+              <select value={officerRole} onChange={e=>setOfficerRole(e.target.value)} className="w-full p-3 border rounded-xl font-bold">
+                <option value="KETUA_RT">Ketua RT</option>
+                <option value="SEKRETARIS">Sekretaris RT</option>
+                <option value="BENDAHARA">Bendahara RT</option>
+                <option value="LAINNYA">Lainnya (Other)</option>
+              </select>
               <input type="tel" required placeholder="08xxxxxxxx" value={officerPhone} onChange={e=>setOfficerPhone(e.target.value.replace(/\D/g,''))} className="w-full p-3 border rounded-xl font-mono" />
               <input type="email" required placeholder="email@domain.com" value={officerEmail} onChange={e=>setOfficerEmail(e.target.value)} className="w-full p-3 border rounded-xl" />
               {!editingOfficer && (<input type="text" required placeholder="Sandi Default" value={officerInitialPassword} onChange={e=>setOfficerInitialPassword(e.target.value)} className="w-full p-3 border rounded-xl font-mono" />)}
               <button type="submit" disabled={savingOfficer} className="w-full py-4 bg-emerald-700 text-white font-black rounded-xl">Simpan Data Pengurus</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Reset Password Pengurus */}
+      {resetOfficerTarget && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border">
+            <div className="p-5 bg-amber-500 text-slate-900 flex justify-between items-center"><h3 className="font-black text-base">Reset Sandi Pengurus</h3><button onClick={()=>setResetOfficerTarget(null)} className="cursor-pointer text-xl hover:text-red-700 leading-none">✕</button></div>
+            <form onSubmit={handleExecuteResetPassword} className="p-6 space-y-4 bg-slate-50 text-sm">
+              <div className="text-center pb-2 border-b border-slate-200"><p className="font-black text-slate-900 text-lg">{resetOfficerTarget.full_name}</p><p className="text-xs font-bold text-slate-500 font-mono mt-1">{resetOfficerTarget.email}</p></div>
+              <div className="pt-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">Ketik Sandi Baru</label>
+                <input type="text" required placeholder="Minimal 6 karakter" value={officerNewPassword} onChange={e=>setOfficerNewPassword(e.target.value)} className="w-full p-3.5 border rounded-xl font-mono font-bold bg-white outline-none focus:border-amber-500" />
+              </div>
+              <div className="pt-2">
+                <button type="submit" disabled={resettingPassword} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black text-base rounded-xl cursor-pointer shadow-md transition-colors disabled:bg-slate-400">Terapkan Sandi Baru</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Reset PIN Properti */}
+      {resetProp && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border">
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-base">Reset PIN Akses Kos</h3><button onClick={()=>setResetProp(null)} className="cursor-pointer text-xl hover:text-red-400 leading-none">✕</button></div>
+            <form onSubmit={handleSaveResetPin} className="p-6 space-y-4 bg-slate-50">
+              <p className="font-black text-slate-900 text-center text-lg">{resetProp.name}</p>
+              <div className="pt-2">
+                <label className="block text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-widest text-center">Masukkan 4 Digit Angka Baru</label>
+                <input type="text" maxLength={4} required value={newPin} onChange={e=>setNewPin(e.target.value.replace(/\D/g,''))} className="w-full text-center text-3xl tracking-[0.6em] p-4 border border-emerald-400 rounded-2xl font-mono font-black text-emerald-900 outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner bg-white" />
+              </div>
+              <div className="pt-4">
+                <button type="submit" disabled={savingPin} className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-base rounded-xl cursor-pointer shadow-md transition-colors disabled:bg-slate-400">Simpan Perubahan PIN</button>
+              </div>
             </form>
           </div>
         </div>
