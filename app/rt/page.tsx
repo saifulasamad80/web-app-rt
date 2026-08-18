@@ -19,10 +19,10 @@ export default function RtDashboard() {
   
   const [showExportConfirm, setShowExportConfirm] = useState(false);
 
-  // Modal Dues
-  const [showDuesModal, setShowDuesModal] = useState(false); const [duesPayer, setDuesPayer] = useState(''); const [duesBlock, setDuesBlock] = useState(''); const [duesAmount, setDuesAmount] = useState('50000'); const [duesMonth, setDuesMonth] = useState('Januari'); const [duesYear, setDuesYear] = useState('2026');
+  const [showDuesModal, setShowDuesModal] = useState(false); 
+  const [selectedTenantKas, setSelectedTenantKas] = useState('');
+  const [duesPayer, setDuesPayer] = useState(''); const [duesBlock, setDuesBlock] = useState(''); const [duesAmount, setDuesAmount] = useState('50000'); const [duesMonth, setDuesMonth] = useState('Januari'); const [duesYear, setDuesYear] = useState('2026');
 
-  // Modal Officers
   const [showOfficerModal, setShowOfficerModal] = useState(false); const [editOfficer, setEditOfficer] = useState<any>(null); const [offName, setOffName] = useState(''); const [offRole, setOffRole] = useState('ADMIN'); const [offPhone, setOffPhone] = useState(''); const [offEmail, setOffEmail] = useState(''); const [offPass, setOffPass] = useState('');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -66,16 +66,27 @@ export default function RtDashboard() {
   };
 
   const handleAddKas = async (e: React.FormEvent) => {
-    e.preventDefault(); const amt = parseInt(duesAmount.replace(/\D/g,''),10)||0;
+    e.preventDefault(); 
+    const amt = parseInt(duesAmount.replace(/\D/g,''),10)||0;
     const res = await recordRtDues(duesPayer, duesBlock, amt, duesMonth, duesYear, activeUser?.email || 'Admin RT');
-    if(res.success && res.data){ setDues([res.data, ...dues]); setShowDuesModal(false); }
+    if(res.success && res.data){ 
+      setDues([res.data, ...dues]); 
+      setShowDuesModal(false); 
+      setSelectedTenantKas(''); 
+      const b = await getRtDashboardBundle(); if(b.success) setAuditLogs(b.auditLogs||[]);
+    } else {
+      alert('Gagal menyimpan iuran kas.');
+    }
   };
 
   const handleDeleteKas = async (d: any) => {
-    if(confirm(`Hapus pencatatan Rp ${d.amount} dari ${d.payer_name}?`)){ await deleteRtDues(d.id, d.payer_name, d.amount); setDues(dues.filter(x=>x.id!==d.id)); }
+    if(confirm(`Hapus pencatatan Rp ${d.amount} dari ${d.payer_name}?`)){ 
+      await deleteRtDues(d.id, d.payer_name, d.amount); 
+      setDues(dues.filter(x=>x.id!==d.id)); 
+      const b = await getRtDashboardBundle(); if(b.success) setAuditLogs(b.auditLogs||[]);
+    }
   };
 
-  // FIX 5: Nambahin pesan Alert Error Biar Kalau Gagal, Pak RT Tau Kenapa
   const handleOfficerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(editOfficer){ 
@@ -94,10 +105,9 @@ export default function RtDashboard() {
     if(np && np.length>=6){ const res = await resetOfficerPasswordBySuperAdmin(email, np, activeUser?.email); if(res.success){ alert('Password berhasil direset.'); } else { alert(res.error||'Gagal reset.'); } }
   };
 
-  // FIX 3: Reset PIN Properti
   const handleResetPropPin = async (propId: string, oldPin: string, propName: string) => {
-    const newPin = prompt(`PIN akses saat ini untuk "${propName}" adalah: [ ${oldPin} ]\n\nMasukkan 4 Digit PIN Baru (Jika ingin diubah):`);
-    if (newPin === null) return; // Cancel
+    const newPin = prompt(`Mereset PIN akses keamanan properti "${propName}".\n\nMasukkan 4 Digit PIN Baru:`);
+    if (newPin === null) return; 
     const cleaned = newPin.replace(/\D/g, '').substring(0, 4);
     if (cleaned.length !== 4) { alert('GAGAL: PIN yang dimasukkan harus persis 4 digit angka!'); return; }
     const res = await updateProperty(propId, { pin_code: cleaned }, activeUser?.email || 'Admin RT');
@@ -114,6 +124,8 @@ export default function RtDashboard() {
   });
 
   const totalKas = dues.reduce((sum, d) => sum + (Number(d.amount)||0), 0);
+  const currentUserProfile = officers.find(o => o.email === activeUser?.email);
+  const isSuperAdmin = currentUserProfile?.role === 'SUPER_ADMIN' || activeUser?.email === 'ajipsas@gmail.com';
 
   if(!isLoggedIn) return (
     <main className="min-h-screen bg-slate-900 font-sans flex items-center justify-center p-4">
@@ -183,12 +195,10 @@ export default function RtDashboard() {
 
                    <div className="pl-2 pt-2 border-t flex flex-wrap gap-2">
                       {t.ktp_path && <button onClick={()=>openDocument(t.ktp_path, `KTP: ${t.name}`)} className="text-[10px] px-3 py-1.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200">🔍 KTP</button>}
-                      {/* FIX 1: Teks Dokumen Anak jadi cuma 'KK' */}
                       {(t.marriage_doc_url || t.kk_doc_url) && <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `${t.marital_status==='Menikah'?'Buku Nikah/KK':'Kartu Keluarga'}: ${t.name}`)} className="text-[10px] px-3 py-1.5 bg-purple-50 text-purple-700 font-bold rounded-lg border border-purple-200">🔍 {t.marital_status==='Menikah'?'Nikah / KK':'Kartu Keluarga'}</button>}
                    </div>
 
                    <div className="pl-2 pt-2 flex gap-2">
-                     {/* FIX 2: Fitur Undo 'Batalkan' buat Warga yang Statusnya VERIFIED */}
                      {t.status === 'PENDING' && <button onClick={()=>handleUpdateStatus(t.id, 'active')} className="flex-1 py-2 bg-emerald-600 text-white text-[10px] font-black rounded-lg uppercase tracking-wider">Sahkan</button>}
                      {t.status === 'VERIFIED' && <button onClick={()=>handleUpdateStatus(t.id, 'pending')} className="flex-1 py-2 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black rounded-lg uppercase tracking-wider">Batalkan</button>}
                      <button onClick={()=>handleDeleteTenant(t.id)} className="flex-1 py-2 bg-slate-100 text-red-600 text-[10px] font-black rounded-lg border hover:bg-red-50 uppercase tracking-wider">Hapus</button>
@@ -207,17 +217,12 @@ export default function RtDashboard() {
                     <td className="p-4"><span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase ${t.marital_status==='Menikah'?'bg-purple-100 text-purple-800':'bg-slate-100 text-slate-600'}`}>{t.marital_status}</span></td>
                     <td className="p-4 flex gap-2 pt-5">
                       {t.ktp_path && <button onClick={()=>openDocument(t.ktp_path, `KTP: ${t.name}`)} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 font-bold rounded border border-blue-200 hover:bg-blue-100">KTP</button>}
-                      
-                      {/* FIX 1: Teks Dokumen Anak jadi cuma 'KK' */}
                       {(t.marriage_doc_url || t.kk_doc_url) ? <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `${t.marital_status==='Menikah'?'Buku Nikah/KK':'Kartu Keluarga'}: ${t.name}`)} className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 font-bold rounded border border-purple-200 hover:bg-purple-100">{t.marital_status==='Menikah'?'Nikah / KK':'Kartu Keluarga'}</button> : t.marital_status==='Menikah' ? <span className="text-[10px] px-2 py-1 bg-red-50 text-red-600 font-bold border border-red-200 rounded">KOSONG</span> : null}
                     </td>
                     <td className="p-4"><span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${t.status==='PENDING'?'bg-amber-50 text-amber-800 border-amber-200':t.status==='VERIFIED'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-slate-50 text-slate-600 border-slate-200'}`}>{t.status==='PENDING'?'Menunggu':t.status==='VERIFIED'?'SAH':t.status}</span></td>
                     <td className="p-4 text-right space-x-2">
                       {t.status === 'PENDING' && <button onClick={()=>handleUpdateStatus(t.id, 'active')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors">Sahkan</button>}
-                      
-                      {/* FIX 2: Fitur Undo 'Batalkan' buat Desktop */}
                       {t.status === 'VERIFIED' && <button onClick={()=>handleUpdateStatus(t.id, 'pending')} className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-xs font-bold rounded-lg transition-colors">Batalkan</button>}
-                      
                       <button onClick={()=>handleDeleteTenant(t.id)} className="px-3 py-1.5 bg-slate-100 hover:bg-red-50 text-red-600 text-xs font-bold rounded-lg transition-colors">Hapus</button>
                     </td>
                   </tr>
@@ -245,15 +250,16 @@ export default function RtDashboard() {
                     <div className="flex justify-between text-xs"><span className="text-slate-400 font-bold">Kapasitas:</span><span className="font-black text-slate-700">{p.total_rooms} Kamar</span></div>
                   </div>
                   
-                  {/* FIX 3: Fitur Reset PIN untuk Properti */}
                   <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-3xl">
                     <div>
                       <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>
-                      <span className="font-mono text-slate-800 text-base font-black tracking-widest">{p.pin_code}</span>
+                      <span className="font-mono text-slate-800 text-base font-black tracking-widest">****</span>
                     </div>
-                    <button onClick={() => handleResetPropPin(p.id, p.pin_code, p.name)} className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-300">
-                      Ubah PIN
-                    </button>
+                    {isSuperAdmin && (
+                      <button onClick={() => handleResetPropPin(p.id, p.pin_code, p.name)} className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-300">
+                        Ubah PIN
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -293,25 +299,30 @@ export default function RtDashboard() {
               <button onClick={()=>{setEditOfficer(null); setOffName(''); setOffPhone(''); setOffEmail(''); setOffRole('ADMIN'); setShowOfficerModal(true);}} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">➕ Tambah Akun</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {officers.map(o => (
-                <div key={o.id} className="bg-white p-6 rounded-3xl border shadow-sm relative overflow-hidden group">
-                  <div className={`absolute top-0 left-0 w-1.5 h-full ${o.role==='SUPER_ADMIN'?'bg-purple-500':'bg-blue-500'}`}></div>
-                  <div className="pl-3">
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${o.role==='SUPER_ADMIN'?'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{o.role === 'SUPER_ADMIN' ? 'Ketua RT' : 'Admin / Staff'}</span>
-                    <h3 className="font-black text-lg text-slate-900 mt-2">{o.full_name}</h3>
-                    <p className="text-xs text-slate-500 font-mono mt-1">{o.email}</p>
-                    <p className="text-xs text-slate-500 font-mono">{o.phone_number}</p>
-                    
-                    {activeUser?.email === 'ajipsas@gmail.com' && o.email !== 'ajipsas@gmail.com' && (
-                      <div className="mt-4 pt-4 border-t flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                        <button onClick={()=>{setEditOfficer(o); setOffName(o.full_name); setOffPhone(o.phone_number); setOffEmail(o.email); setOffRole(o.role); setShowOfficerModal(true);}} className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md hover:bg-slate-200">Edit</button>
-                        <button onClick={()=>handleResetAdminPass(o.email)} className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md hover:bg-amber-100">Reset Sandi</button>
-                        <button onClick={async ()=>{if(confirm('Hapus admin ini?')){await deleteRtOfficer(o.id); setOfficers(officers.filter(x=>x.id!==o.id));}}} className="px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-md hover:bg-red-100">Hapus</button>
-                      </div>
-                    )}
+              {officers.map(o => {
+                const isAjipsas = o.email === 'ajipsas@gmail.com';
+                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : o.role === 'SUPER_ADMIN' ? 'Ketua RT' : 'Admin / Staff';
+                
+                return (
+                  <div key={o.id} className="bg-white p-6 rounded-3xl border shadow-sm relative overflow-hidden group">
+                    <div className={`absolute top-0 left-0 w-1.5 h-full ${o.role==='SUPER_ADMIN'?'bg-purple-500':'bg-blue-500'}`}></div>
+                    <div className="pl-3">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${o.role==='SUPER_ADMIN'?'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{roleLabel}</span>
+                      <h3 className="font-black text-lg text-slate-900 mt-2">{o.full_name}</h3>
+                      <p className="text-xs text-slate-500 font-mono mt-1">{o.email}</p>
+                      <p className="text-xs text-slate-500 font-mono">{o.phone_number}</p>
+                      
+                      {activeUser?.email === 'ajipsas@gmail.com' && !isAjipsas && (
+                        <div className="mt-4 pt-4 border-t flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <button onClick={()=>{setEditOfficer(o); setOffName(o.full_name); setOffPhone(o.phone_number); setOffEmail(o.email); setOffRole(o.role); setShowOfficerModal(true);}} className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md hover:bg-slate-200">Edit</button>
+                          <button onClick={()=>handleResetAdminPass(o.email)} className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md hover:bg-amber-100">Reset Sandi</button>
+                          <button onClick={async ()=>{if(confirm('Hapus admin ini?')){await deleteRtOfficer(o.id); setOfficers(officers.filter(x=>x.id!==o.id));}}} className="px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-md hover:bg-red-100">Hapus</button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -336,7 +347,6 @@ export default function RtDashboard() {
         )}
       </section>
 
-      {/* Lightbox Document UI */}
       {viewDocUrl && (
         <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col animate-fade-in">
           <div className="w-full bg-slate-900 p-4 flex justify-between items-center shadow-md z-10 border-b border-slate-700">
@@ -353,7 +363,6 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* Pop-up Keamanan Export Data Warga */}
       {showExportConfirm && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 border-2 border-amber-500 shadow-2xl">
@@ -370,25 +379,44 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* MODAL KAS RT */}
       {showDuesModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center"><h3 className="font-black text-sm">💰 Catat Iuran Warga</h3><button onClick={()=>setShowDuesModal(false)} className="text-xl font-bold hover:text-emerald-200">✕</button></div>
             <form onSubmit={handleAddKas} className="p-6 space-y-4 text-sm bg-slate-50">
               
-              {/* FIX 4: Dropdown Warga Otomatis Isi Kolom */}
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                <label className="text-[10px] font-black text-emerald-800 uppercase block mb-1">Pilih Cepat Warga Terdaftar (Opsional)</label>
-                <select onChange={(e) => {
-                  const sel = tenants.find(t => t.id === e.target.value);
-                  if(sel) {
-                    setDuesPayer(sel.name);
-                    setDuesBlock(`${sel.properties?.name || 'Properti'} - Kamar ${sel.room_number}`);
-                  }
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <label className="text-[10px] font-black text-emerald-800 uppercase block">Pilih Entitas Penyetor Auto-Fill (Opsional)</label>
+                <select value={selectedTenantKas} onChange={e => {
+                    const val = e.target.value;
+                    setSelectedTenantKas(val);
+                    if (!val) { setDuesPayer(''); setDuesBlock(''); return; }
+
+                    if (val.startsWith('prop-')) {
+                        const p = properties.find(x => x.id === val.replace('prop-', ''));
+                        if (p) {
+                            setDuesPayer(p.owner_name || p.manager_name || `Owner ${p.name}`);
+                            setDuesBlock(`Kolektif - ${p.name}`);
+                        }
+                    } else if (val.startsWith('ten-')) {
+                        const t = tenants.find(x => x.id === val.replace('ten-', ''));
+                        if (t) {
+                            setDuesPayer(t.name);
+                            setDuesBlock(`${t.properties?.name || 'Kontrakan'} - ${t.room_number}`);
+                        }
+                    }
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
-                   <option value="">-- Ketik Manual di Bawah Atau Pilih Nama --</option>
-                   {tenants.filter(t => t.is_head).map(t => <option key={t.id} value={t.id}>{t.name} ({t.properties?.name})</option>)}
+                   <option value="">-- Ketik Manual Atau Pilih Entitas --</option>
+                   <optgroup label="Pemilik Kos (Iuran Kolektif)">
+                       {properties.filter(p => p.type === 'kos').map(p => (
+                           <option key={`prop-${p.id}`} value={`prop-${p.id}`}>{p.owner_name || p.manager_name || 'Owner'} ({p.name})</option>
+                       ))}
+                   </optgroup>
+                   <optgroup label="Warga Kontrakan (Iuran Langsung)">
+                       {tenants.filter(t => t.is_head && t.properties?.type === 'kontrakan').map(t => (
+                           <option key={`ten-${t.id}`} value={`ten-${t.id}`}>{t.name} ({t.properties?.name} - {t.room_number})</option>
+                       ))}
+                   </optgroup>
                 </select>
               </div>
 
@@ -405,7 +433,6 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PENGURUS */}
       {showOfficerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
