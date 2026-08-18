@@ -21,7 +21,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [errors, setErrors] = useState<any>({});
 
   const [roomNumber, setRoomNumber] = useState('');
-  const [isCheckingRoom, setIsCheckingRoom] = useState(false); // Indikator Loading Cek Kamar
+  const [isCheckingRoom, setIsCheckingRoom] = useState(false);
   
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   
@@ -45,32 +45,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [loading, setLoading] = useState(false);
   const [successData, setSuccessData] = useState<any | null>(null);
 
-  // FITUR BARU: Pengecekan Kamar Real-Time pas onBlur (lepas fokus dari kotak input)
-  const handleRoomBlur = async () => {
-    if (!roomNumber.trim()) {
-      setErrors((prev: any) => ({ ...prev, roomNumber: "Nomor Kamar wajib diisi." }));
-      return;
-    }
-    
-    setIsCheckingRoom(true);
-    const res = await checkRoomAvailability(property.id, roomNumber);
-    setIsCheckingRoom(false);
-    
-    if (!res.available) {
-      setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Kamar "${roomNumber}" saat ini sudah terisi!` }));
-    }
-  };
-
-  const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setRoomNumber(e.target.value);
-    // Hapus error sementara dia ngetik ulang
-    setErrors((prev: any) => {
-      const newErr = { ...prev };
-      delete newErr.roomNumber;
-      return newErr;
-    });
-  };
-
   const validateField = (field: string, value: string) => {
     setErrors((prev: any) => {
       const newErr = { ...prev };
@@ -91,29 +65,50 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const validateStep = (currentStep: number) => {
     const newErr: any = {};
     if (currentStep === 1) {
-      if (!roomNumber) newErr.roomNumber = "Nomor Kamar wajib diisi.";
-      if (errors.roomNumber) newErr.roomNumber = errors.roomNumber; // Mencegah lolos kalau kamar terisi
+      if (!roomNumber.trim()) newErr.roomNumber = "Nomor Kamar wajib diisi.";
       if (!entryDate) newErr.entryDate = "Tanggal Masuk wajib diisi.";
     } else if (currentStep === 2) {
-      if (!primaryName) newErr.primaryName = "Nama Lengkap wajib diisi.";
-      if (!primaryPhone) newErr.primaryPhone = "Nomor WhatsApp wajib diisi.";
+      if (!primaryName.trim()) newErr.primaryName = "Nama Lengkap wajib diisi.";
+      if (!primaryPhone.trim()) newErr.primaryPhone = "Nomor WhatsApp wajib diisi.";
       if (!primaryBirthDate) newErr.primaryBirthDate = "Tanggal Lahir wajib diisi.";
-      if (!occupation) newErr.occupation = "Pekerjaan wajib diisi.";
-      if (!primaryAddress) newErr.primaryAddress = "Alamat Asal KTP wajib diisi.";
+      if (!occupation.trim()) newErr.occupation = "Pekerjaan wajib diisi.";
+      if (!primaryAddress.trim()) newErr.primaryAddress = "Alamat Asal KTP wajib diisi.";
     } else if (currentStep === 3) {
       occupants.forEach((occ, i) => {
-        if (!occ.name) newErr[`occ_${i}_name`] = "Nama anggota wajib diisi.";
+        if (!occ.name.trim()) newErr[`occ_${i}_name`] = "Nama anggota wajib diisi.";
         if (!occ.birth_date) newErr[`occ_${i}_birth`] = "Tanggal lahir wajib.";
         const age = calculateAge(occ.birth_date);
         if (age >= 17 && !occ.ktpFile) newErr[`occ_${i}_ktp`] = `Anggota usia ${age}th wajib foto KTP.`;
       });
     }
     setErrors({ ...errors, ...newErr });
-    return Object.keys(newErr).length === 0 && !errors.roomNumber;
+    return Object.keys(newErr).length === 0;
   };
 
-  const nextStep = () => { if (validateStep(step)) setStep((s) => s + 1); };
+  // FIX: Mengunci Langkah 1 jika kamar bentrok (Anti-Bypass)
+  const nextStep = async () => { 
+    if (!validateStep(step)) return;
+
+    if (step === 1) {
+       setIsCheckingRoom(true);
+       const res = await checkRoomAvailability(property.id, roomNumber);
+       setIsCheckingRoom(false);
+       
+       if (!res.available) {
+           setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Pendaftaran ditolak: Kamar "${roomNumber}" sudah terisi atau sedang dalam antrean.` }));
+           return; // BLOKIR DI SINI! User nggak bisa lanjut ke step 2.
+       }
+    }
+
+    setStep((s) => s + 1); 
+  };
+
   const prevStep = () => setStep((s) => s - 1);
+
+  const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRoomNumber(e.target.value);
+    setErrors((prev: any) => { const newErr = { ...prev }; delete newErr.roomNumber; return newErr; });
+  };
 
   const handlePrimaryKtpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -195,8 +190,8 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               <div>
                 <label className="block font-bold text-sm mb-1 text-slate-900">Nomor / Posisi Kamar *</label>
                 <div className="relative">
-                  <input type="text" value={roomNumber} onChange={handleRoomChange} onBlur={handleRoomBlur} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
-                  {isCheckingRoom && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 animate-pulse">Cek ketersediaan...</span>}
+                  <input type="text" value={roomNumber} onChange={handleRoomChange} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
+                  {isCheckingRoom && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 animate-pulse">Cek kamar...</span>}
                 </div>
                 {errors.roomNumber && <p className="text-xs text-red-600 mt-1.5 font-bold animate-slide-up">{errors.roomNumber}</p>}
               </div>
@@ -206,7 +201,9 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 <input type="date" aria-label="Format Tanggal: DD/MM/YYYY" value={entryDate} onChange={e => setEntryDate(e.target.value)} onBlur={() => validateField('entryDate', entryDate)} className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-emerald-500 transition-colors" />
                 {errors.entryDate && <p className="text-xs text-red-600 mt-1">{errors.entryDate}</p>}
               </div>
-              <button onClick={nextStep} className="w-full py-4 mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-colors">Selanjutnya →</button>
+              <button onClick={nextStep} disabled={isCheckingRoom} className="w-full py-4 mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-colors disabled:bg-slate-400">
+                {isCheckingRoom ? 'Memeriksa...' : 'Selanjutnya →'}
+              </button>
             </div>
           )}
 
@@ -371,9 +368,10 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 {errors.agreedRules && <p className="text-xs text-red-600 px-1">{errors.agreedRules}</p>}
               </div>
 
+              {/* FIX: Error ditaruh paling bawah di atas tombol submit */}
               {errors.server && (
                 <div className="p-4 mt-6 bg-red-50 border border-red-200 text-red-700 text-sm font-bold rounded-xl text-center animate-pulse shadow-sm">
-                  ⚠️ Pendaftaran Gagal: {errors.server}
+                  ⚠️ {errors.server}
                 </div>
               )}
 

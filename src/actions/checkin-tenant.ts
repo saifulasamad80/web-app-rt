@@ -200,28 +200,34 @@ export async function addMemberSusulan(formData: FormData) {
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
-// FITUR BARU: Cek Ketersediaan Kamar (Real-Time)
+// FIX: Pengecekan kamar menggunakan JavaScript Matching (100% Akurat & Anti-Error Tipe Data SQL)
 export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
   if (!propertyId || !roomNumber) return { available: true };
-  const { data, error } = await supabase
-    .from('tenants')
-    .select('id')
-    .eq('property_id', propertyId)
-    .ilike('room_number', roomNumber.trim())
-    .in('status', ['PENDING', 'VERIFIED', 'ACTIVE'])
-    .limit(1);
-  if (error) return { available: true };
-  return { available: !data || data.length === 0 };
+  
+  // Tarik semua kamar yang terisi/menunggu di properti ini
+  const { data, error } = await supabase.from('tenants').select('room_number').eq('property_id', propertyId).in('status', ['PENDING', 'VERIFIED', 'ACTIVE']);
+  if (error || !data) return { available: true }; 
+  
+  // Cek kecocokan secara spesifik (huruf besar/kecil diabaikan, spasi diabaikan)
+  const isTaken = data.some(t => t.room_number?.toLowerCase().trim() === roomNumber.toLowerCase().trim());
+  return { available: !isTaken };
 }
 
 export async function submitMultiTenantsStrict(formData: FormData) {
   try {
-    const property_id = formData.get('property_id') as string; const room_number = (formData.get('room_number') as string) || ''; const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
+    const property_id = formData.get('property_id') as string; 
+    const room_number = (formData.get('room_number') as string) || ''; 
+    const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
     
-    // VALIDASI LAPIS KEDUA: Cegah bentrok kalau ada yang nekat submit berbarengan
+    // FIX: VALIDASI LAPIS KEDUA (Mencegah "Nyerobot" / By-pass dari Frontend)
     if (room_number) {
-        const { data: exist } = await supabase.from('tenants').select('id').eq('property_id', property_id).ilike('room_number', room_number.trim()).in('status', ['PENDING', 'VERIFIED', 'ACTIVE']).limit(1);
-        if (exist && exist.length > 0) return { success: false, data: [], error: `Pendaftaran ditolak: Kamar "${room_number}" saat ini sudah terisi atau sedang dalam antrean pendaftaran.` };
+        const { data: exist } = await supabase.from('tenants').select('room_number').eq('property_id', property_id).in('status', ['PENDING', 'VERIFIED', 'ACTIVE']);
+        if (exist) {
+            const isTaken = exist.some(t => t.room_number?.toLowerCase().trim() === room_number.toLowerCase().trim());
+            if (isTaken) {
+                return { success: false, data: [], error: `Kamar "${room_number}" saat ini sudah terisi atau sedang dalam antrean pendaftaran.` };
+            }
+        }
     }
 
     const rent_price = parseInt((formData.get('rent_price') as string || '0').replace(/\D/g, ''), 10) || 0; const marital_status = (formData.get('marital_status') as string) || 'Belum Menikah'; const occupation = (formData.get('occupation') as string) || '';
