@@ -19,7 +19,6 @@ export default function OwnerDashboard() {
 
   const [showAddPropModal, setShowAddPropModal] = useState(false); const [editingProperty, setEditingProperty] = useState<any>(null);
   
-  // FIX: Mengembalikan State Rekening Bank yang sempat terhapus
   const [propName, setPropName] = useState(''); const [propType, setPropType] = useState<'kos'|'kontrakan'>('kos'); const [propTotalRooms, setPropTotalRooms] = useState(10); const [propOwnerPhone, setPropOwnerPhone] = useState(''); const [propManagerPhone, setPropManagerPhone] = useState(''); const [propOwnerName, setPropOwnerName] = useState(''); const [propManagerName, setPropManagerName] = useState(''); const [propBankName, setPropBankName] = useState('BCA'); const [propBankAcc, setPropBankAcc] = useState(''); const [propBankHolder, setPropBankHolder] = useState(''); const [propAddress, setPropAddress] = useState(''); const [propPin, setPropPin] = useState(''); const [submittingProp, setSubmittingProp] = useState(false);
   
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false); const [expenseTitle, setExpenseTitle] = useState(''); const [expenseCategory, setExpenseCategory] = useState('Listrik'); const [expenseAmount, setExpenseAmount] = useState(''); const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10)); const [savingExpense, setSavingExpense] = useState(false);
@@ -104,11 +103,9 @@ export default function OwnerDashboard() {
   const handlePropFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmittingProp(true);
     if (editingProperty) {
-      // FIX: Payload update menyimpan rekening bank
       await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_phone: propOwnerPhone, manager_phone: propManagerPhone, owner_name: propOwnerName, manager_name: propManagerName, address: propAddress, pin_code: propPin, bank_name: propBankName, bank_account_number: propBankAcc, bank_account_holder: propBankHolder }, currentActor);
       setShowAddPropModal(false); alert('Disimpan.'); window.location.reload();
     } else {
-      // FIX: Payload create menyimpan rekening bank
       await createProperty(propName, propType, propAddress, '', propPin, propOwnerName||loginPhone, propOwnerPhone||loginPhone, propManagerName, propManagerPhone, propTotalRooms, propBankName, propBankAcc, propBankHolder);
       setShowAddPropModal(false); alert('Berhasil daftar!'); window.location.reload();
     }
@@ -199,7 +196,6 @@ export default function OwnerDashboard() {
               <button type="submit" disabled={loginLoading} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl">Buka Dasbor</button>
             </form>
             <div className="pt-4 border-t text-center">
-              {/* Reset state properti saat klik Tambah Kos */}
               <button type="button" onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerName(''); setPropOwnerPhone(''); setPropManagerName(''); setPropManagerPhone(''); setPropBankName('BCA'); setPropBankAcc(''); setPropBankHolder(''); setShowAddPropModal(true);}} className="text-xs font-bold text-slate-600 hover:text-emerald-700">➕ Daftarkan Kos Baru</button>
             </div>
           </div>
@@ -279,9 +275,10 @@ export default function OwnerDashboard() {
                        <div className="flex justify-between items-center pt-3 border-t">
                          <span className="font-mono font-black text-sm">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</span>
                          <div className="flex gap-2">
-                           {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="text-xs font-bold text-white bg-emerald-600 px-3 py-1.5 rounded-lg">Tagih</button>}
-                           <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg">Edit</button>
-                           <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">Hapus</button>
+                           {/* FIX: Lepas Gembok Tombol Tagih WA untuk Pengelola */}
+                           {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="text-xs font-bold text-white bg-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-700">Tagih</button>}
+                           <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200">Edit</button>
+                           <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">Hapus</button>
                          </div>
                        </div>
                      </div>
@@ -298,11 +295,12 @@ export default function OwnerDashboard() {
                           <td className="p-4 font-bold">{t.room_number}</td>
                           <td className="p-4">{t.is_head ? <button onClick={()=>handleTogglePaymentOptimistic(t)} className={`px-2 py-1 rounded text-[10px] font-black border transition-colors ${t.payment_status==='PAID'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-red-50 text-red-800 border-red-200'}`}>{t.payment_status==='PAID'?'LUNAS':'BELUM'}</button> : '-'}</td>
                           <td className="p-4 font-mono font-bold">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</td>
-                          <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-black ${t.status==='VERIFIED'||t.status==='ACTIVE'?'bg-emerald-100':'bg-amber-100'}`}>{t.status==='VERIFIED'||t.status==='ACTIVE'?'✅ Sah':'⏳ Menunggu'}</span></td>
+                          <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-black ${t.status==='VERIFIED'||t.status==='ACTIVE'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{t.status==='VERIFIED'||t.status==='ACTIVE'?'✅ Sah':'⏳ Menunggu'}</span></td>
                           <td className="p-4 text-right space-x-2">
-                            {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Tagih</button>}
-                            <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="px-3 py-1.5 border text-xs font-bold rounded-lg">Edit</button>
-                            <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg">Hapus</button>
+                            {/* FIX: Lepas Gembok Tombol Tagih WA untuk Pengelola */}
+                            {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors">Tagih</button>}
+                            <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="px-3 py-1.5 border text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors">Edit</button>
+                            <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg transition-colors">Hapus</button>
                           </td>
                         </tr>
                       ))}
@@ -334,13 +332,13 @@ export default function OwnerDashboard() {
                <div className="bg-white p-6 rounded-b-3xl rounded-tr-3xl border space-y-4 -mt-1">
                  <div className="flex justify-between items-center border-b pb-3">
                    <h3 className="font-black text-lg">Buku Kas Keluar</h3>
-                   <button onClick={()=>setShowAddExpenseModal(true)} className="px-4 py-2 bg-red-600 text-white text-xs font-black rounded-xl">➕ Catat</button>
+                   <button onClick={()=>setShowAddExpenseModal(true)} className="px-4 py-2 bg-red-600 text-white text-xs font-black rounded-xl hover:bg-red-700 transition-colors">➕ Catat</button>
                  </div>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                    {expenses.map(e => (
                      <div key={e.id} className="p-4 border rounded-xl flex justify-between items-center bg-slate-50">
                        <div><p className="text-[10px] font-black text-slate-400 uppercase">{e.expense_date} • {e.category}</p><h4 className="font-black text-base">{e.title}</h4></div>
-                       <div className="text-right flex flex-col items-end"><p className="font-mono font-black text-red-600">-Rp {Number(e.amount).toLocaleString()}</p><button onClick={()=>setExpenseToDelete(e)} className="text-[10px] text-red-500 font-bold mt-2 uppercase">Hapus</button></div>
+                       <div className="text-right flex flex-col items-end"><p className="font-mono font-black text-red-600">-Rp {Number(e.amount).toLocaleString()}</p><button onClick={()=>setExpenseToDelete(e)} className="text-[10px] text-red-500 font-bold mt-2 uppercase hover:text-red-700">Hapus</button></div>
                      </div>
                    ))}
                  </div>
@@ -351,7 +349,7 @@ export default function OwnerDashboard() {
                <div className="bg-white p-6 rounded-b-3xl rounded-tr-3xl border space-y-4 -mt-1">
                  <div className="flex justify-between items-center border-b pb-3">
                    <h3 className="font-black text-lg">Jejak Audit Sistem</h3>
-                   <button onClick={handleExportAudit} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl">📥 Export Audit</button>
+                   <button onClick={handleExportAudit} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition-colors">📥 Export Audit</button>
                  </div>
                  <div className="space-y-3 pt-2">
                    {auditLogs.map(l => (
@@ -374,7 +372,6 @@ export default function OwnerDashboard() {
       )}
 
       {/* MODALS */}
-      {/* Modal Form Properti - DENGAN KOLOM REKENING KEMBALI */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
           <div className="bg-slate-50 rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl border relative">
@@ -397,7 +394,6 @@ export default function OwnerDashboard() {
                 <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setPropManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-200 focus:border-slate-800 rounded-lg font-mono outline-none" />
               </div>
 
-              {/* KOTAK REKENING BANK */}
               <div className="p-4 border-2 border-blue-300 bg-blue-50 rounded-xl space-y-3">
                 <p className="text-xs font-black text-blue-900 uppercase">Rekening Pembayaran Kos:</p>
                 <div className="flex gap-2">
@@ -424,7 +420,7 @@ export default function OwnerDashboard() {
       {editingTenant && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
-            <div className="p-5 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-base">Edit Data Sewa</h3><button onClick={()=>setEditingTenant(null)} className="text-xl">✕</button></div>
+            <div className="p-5 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-base">Edit Data Sewa</h3><button onClick={()=>setEditingTenant(null)} className="text-xl hover:text-red-400">✕</button></div>
             <form onSubmit={handleSaveTenantSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
               <div><label className="font-bold text-xs">Nama Penyewa</label><input type="text" value={tenantName} onChange={e=>setTenantName(e.target.value)} className="w-full p-3 border rounded-xl font-bold bg-white" /></div>
               <div><label className="font-bold text-xs">No Kamar / Unit</label><input type="text" value={tenantRoom} onChange={e=>setTenantRoom(e.target.value)} className="w-full p-3 border rounded-xl font-bold bg-white" /></div>
@@ -432,7 +428,7 @@ export default function OwnerDashboard() {
                 <label className="font-black text-xs text-emerald-900 block mb-2 uppercase tracking-wider">Harga Sewa Per Bulan (Rp)</label>
                 <input type="text" required value={tenantRentPrice} onChange={e=>setTenantRentPrice(e.target.value.replace(/\D/g,''))} className="w-full p-3 border border-emerald-400 rounded-xl font-mono font-black text-xl bg-white text-emerald-900" />
               </div>
-              <button type="submit" disabled={savingTenant} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl">Simpan Perubahan</button>
+              <button type="submit" disabled={savingTenant} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-colors">Simpan Perubahan</button>
             </form>
           </div>
         </div>
@@ -441,7 +437,7 @@ export default function OwnerDashboard() {
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
-            <div className="p-5 bg-red-600 text-white flex justify-between items-center"><h3 className="font-black text-base">Catat Pengeluaran</h3><button onClick={()=>setShowAddExpenseModal(false)} className="text-xl">✕</button></div>
+            <div className="p-5 bg-red-600 text-white flex justify-between items-center"><h3 className="font-black text-base">Catat Pengeluaran</h3><button onClick={()=>setShowAddExpenseModal(false)} className="text-xl hover:text-red-200">✕</button></div>
             <form onSubmit={handleAddExpenseSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
               <input type="text" required placeholder="Cth: Bayar Listrik" value={expenseTitle} onChange={e=>setExpenseTitle(e.target.value)} className="w-full p-3 border rounded-xl font-bold bg-white" />
               <div className="flex gap-3">
@@ -452,7 +448,7 @@ export default function OwnerDashboard() {
                 <label className="font-black text-xs text-red-900 block mb-2 uppercase">Total Nominal (Rp)</label>
                 <input type="text" required placeholder="0" value={expenseAmount} onChange={e=>setExpenseAmount(e.target.value.replace(/\D/g,''))} className="w-full p-3 border border-red-400 rounded-xl font-mono font-black text-2xl bg-white text-red-700" />
               </div>
-              <button type="submit" disabled={savingExpense} className="w-full py-4 bg-red-600 text-white font-black rounded-xl">Simpan ke Buku Kas</button>
+              <button type="submit" disabled={savingExpense} className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl transition-colors">Simpan ke Buku Kas</button>
             </form>
           </div>
         </div>
@@ -463,7 +459,7 @@ export default function OwnerDashboard() {
           <div className="bg-white rounded-3xl w-full max-w-lg border overflow-hidden shadow-2xl">
             <div className="p-5 bg-amber-100 text-amber-900 flex justify-between"><h3 className="font-black">📜 Edit Tata Tertib</h3><button onClick={() => setEditingRulesProp(null)} className="text-xl font-bold hover:text-red-500">✕</button></div>
             <div className="p-6 bg-slate-50"><textarea rows={7} value={rulesText} onChange={(e) => setRulesText(e.target.value)} className="w-full p-4 border rounded-2xl font-mono text-sm outline-none bg-white focus:border-amber-400"></textarea></div>
-            <div className="p-4 bg-white border-t flex justify-end"><button onClick={handleSaveRules} className="px-6 py-3 bg-slate-900 text-white font-bold rounded-xl">Simpan Aturan</button></div>
+            <div className="p-4 bg-white border-t flex justify-end"><button onClick={handleSaveRules} className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-colors">Simpan Aturan</button></div>
           </div>
         </div>
       )}
@@ -481,8 +477,8 @@ export default function OwnerDashboard() {
                <input type="text" placeholder="HAPUS" value={deleteConfirmText} onChange={e=>setDeleteConfirmText(e.target.value)} className="w-full p-3 border border-red-300 rounded-lg text-center font-bold font-mono uppercase focus:outline-none focus:border-red-600" />
              </div>
              <div className="flex gap-2 pt-2">
-               <button onClick={()=>{setTenantToDelete(null); setDeleteConfirmText('');}} className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl">Batal</button>
-               <button onClick={executeDeleteTenant} disabled={deleteConfirmText !== 'HAPUS'} className="w-1/2 py-3 bg-red-600 text-white font-black rounded-xl disabled:bg-slate-300">Hapus Data</button>
+               <button onClick={()=>{setTenantToDelete(null); setDeleteConfirmText('');}} className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Batal</button>
+               <button onClick={executeDeleteTenant} disabled={deleteConfirmText !== 'HAPUS'} className="w-1/2 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl disabled:bg-slate-300 transition-colors">Hapus Data</button>
              </div>
            </div>
          </div>
@@ -496,8 +492,8 @@ export default function OwnerDashboard() {
                <p className="text-sm text-slate-600 mt-2">Catatan kas <b>{expenseToDelete.title}</b> (Rp {expenseToDelete.amount.toLocaleString()}) akan dihapus dari buku.</p>
              </div>
              <div className="flex gap-2 pt-4">
-               <button onClick={()=>setExpenseToDelete(null)} className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl">Batal</button>
-               <button onClick={executeDeleteExpense} className="w-1/2 py-3 bg-red-600 text-white font-black rounded-xl">Ya, Hapus</button>
+               <button onClick={()=>setExpenseToDelete(null)} className="w-1/2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors">Batal</button>
+               <button onClick={executeDeleteExpense} className="w-1/2 py-3 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl transition-colors">Ya, Hapus</button>
              </div>
            </div>
          </div>
