@@ -15,12 +15,17 @@ function cleanDigits(phone?: string): string { return phone ? phone.replace(/\D/
 
 export async function getRtDashboardBundle() {
   try {
+    // FIX AUDIT: Memisahkan Jejak Audit RT dengan Jejak Audit Owner secara ketat
     const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
       supabase.from('tenants').select('*').order('created_at', { ascending: false }),
       supabase.from('properties').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').order('created_at', { ascending: true }),
       supabase.from('dues').select('*').order('created_at', { ascending: false }),
-      supabase.from('dues_audit_logs').select('*').order('created_at', { ascending: false }).limit(30)
+      supabase.from('dues_audit_logs').select('*')
+        .not('performed_by', 'ilike', '%Owner%')
+        .not('performed_by', 'ilike', '%Pemilik%')
+        .not('performed_by', 'ilike', '%Pengelola%')
+        .order('created_at', { ascending: false }).limit(30)
     ]);
 
     const propMap = new Map((pRes.data || []).map((p) => [p.id, p]));
@@ -41,6 +46,7 @@ export async function getOwnerAuditLogs() {
   return { success: true, logs: data || [] };
 }
 
+// FUNGSI BARU: Untuk mencatat aksi export Excel RT
 export async function logAdminAction(action_type: string, details: string, performed_by: string) {
   const { error } = await supabase.from('dues_audit_logs').insert({ action_type, details, performed_by });
   return { success: !error, error: error?.message };
@@ -296,7 +302,6 @@ export async function updateTenantPaymentStatus(tenantId: string, payment_status
   return { success: !error, error: error?.message };
 }
 
-// FIX 2: Bisa Menerima Perintah 'pending' untuk Batalkan Verifikasi
 export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out' | 'verified' | 'rejected' | 'pending') {
   const finalStatus = (status === 'active' || status === 'verified') ? 'VERIFIED' : status === 'rejected' ? 'REJECTED' : status === 'pending' ? 'PENDING' : status.toUpperCase();
   const { error } = await supabase.from('tenants').update({ status: finalStatus }).eq('id', tenantId);
