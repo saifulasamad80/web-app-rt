@@ -44,6 +44,12 @@ export async function getOwnerAuditLogs() {
   return { success: true, logs: data || [] };
 }
 
+// FIX UX 4: Fungsi Baru Khusus untuk Mencatat Tindakan Administratif (Export Data)
+export async function logAdminAction(action_type: string, details: string, performed_by: string) {
+  const { error } = await supabase.from('dues_audit_logs').insert({ action_type, details, performed_by });
+  return { success: !error, error: error?.message };
+}
+
 export async function loginRtAdminAction(emailInput: string, passwordInput: string) {
   if (!emailInput || !passwordInput) return { success: false, error: 'Email dan kata sandi pengurus wajib diisi.' };
   try {
@@ -203,25 +209,16 @@ export async function addMemberSusulan(formData: FormData) {
 
 export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
   if (!propertyId || !roomNumber) return { available: true };
-  
-  // HAPUS SINTAKS ANEH. Panggil bersih ke database.
-  const { data, error } = await supabase
-    .from('tenants')
-    .select('room_number, status')
-    .eq('property_id', propertyId);
-    
+  const { data, error } = await supabase.from('tenants').select('room_number, status').eq('property_id', propertyId);
   if (error || !data) return { available: true }; 
-  
   const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
   const targetRoom = String(roomNumber).toLowerCase().trim();
-
   const isTaken = data.some(t => {
     const tStatus = String(t.status || '').toUpperCase().trim();
     if (!activeStatuses.includes(tStatus)) return false;
     const tRoom = String(t.room_number || '').toLowerCase().trim();
     return tRoom === targetRoom;
   });
-  
   return { available: !isTaken };
 }
 
@@ -230,36 +227,19 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const property_id = formData.get('property_id') as string; 
     const room_number = (formData.get('room_number') as string) || ''; 
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
-    
-    // ============================================================================
-    // FIX MUTLAK (FAIL CLOSED): Jika Database Error, Pendaftaran Gagal Total!
-    // ============================================================================
     if (room_number) {
-        const { data: exist, error: existErr } = await supabase
-           .from('tenants')
-           .select('room_number, status')
-           .eq('property_id', property_id);
-           
-        // CEGAH FAIL OPEN: Jika database error, tolak! Jangan anggap aman.
-        if (existErr) {
-            return { success: false, data: [], error: 'Sistem Gagal Memverifikasi Keamanan Kamar. Silakan coba lagi.' };
-        }
-
+        const { data: exist, error: existErr } = await supabase.from('tenants').select('room_number, status').eq('property_id', property_id);
+        if (existErr) { return { success: false, data: [], error: 'Sistem Gagal Memverifikasi Keamanan Kamar. Silakan coba lagi.' }; }
         if (exist && exist.length > 0) {
             const targetRoom = String(room_number).toLowerCase().trim();
             const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
-            
             const isTaken = exist.some(t => {
                 const tStatus = String(t.status || '').toUpperCase().trim();
                 if (!activeStatuses.includes(tStatus)) return false;
                 const tRoom = String(t.room_number || '').toLowerCase().trim();
                 return tRoom === targetRoom;
             });
-
-            if (isTaken) {
-                // TENDANG BALIK KE LANGKAH 1 DARI IDE JENIUS LU!
-                return { success: false, data: [], error: `KAMAR_BENTROK` };
-            }
+            if (isTaken) { return { success: false, data: [], error: `KAMAR_BENTROK` }; }
         }
     }
 
