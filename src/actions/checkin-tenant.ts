@@ -124,12 +124,13 @@ export async function createProperty(name: string, type: 'kos' | 'kontrakan', ad
   return { success: true, data: data ? data[0] : null };
 }
 
-export async function updateProperty(propertyId: string, payload: any) {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function updateProperty(propertyId: string, payload: any, performedBy: string = 'Owner Kos') {
   const updateFields: any = { ...payload };
   if (payload.name !== undefined) updateFields.property_name = payload.name;
   const { error } = await supabase.from('properties').update(updateFields).eq('id', propertyId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'UPDATE_PROPERTI', performed_by: 'Owner / Pengelola Kos', details: `Memperbarui data unit kos` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'UPDATE_PROPERTI', performed_by: performedBy, details: `Memperbarui data unit kos` });
     try { revalidatePath('/owner'); revalidatePath('/rt'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
@@ -143,23 +144,22 @@ export async function deleteProperty(propertyId: string) {
   return { success: !error, error: error?.message };
 }
 
-export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string, notes?: string) {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function addPropertyExpense(propertyId: string, title: string, category: string, amount: number, expenseDate?: string, notes?: string, performedBy: string = 'Owner Kos') {
   if (!propertyId || !title || !amount) return { success: false, error: 'Wajib diisi.' };
   const { data, error } = await supabase.from('property_expenses').insert({ property_id: propertyId, title, category: category || 'Lainnya', amount, expense_date: expenseDate || new Date().toISOString().slice(0, 10), notes: notes || '' }).select();
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'TAMBAH_BIAYA_KOS', performed_by: 'Owner / Pengelola Kos', details: `Menambah pengeluaran: "${title}" (${category}) Rp ${amount.toLocaleString('id-ID')}` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'TAMBAH_BIAYA_KOS', performed_by: performedBy, details: `Menambah pengeluaran: "${title}" (${category}) Rp ${amount.toLocaleString('id-ID')}` });
     try { revalidatePath('/owner'); } catch (e) {}
   }
   return { success: !error, data: data ? data[0] : null, error: error?.message };
 }
 
-// PERBAIKAN: Fungsi deletePropertyExpense diperbarui untuk menarik title dan mencatat audit dengan deskriptif
-export async function deletePropertyExpense(expenseId: string, title?: string, amount?: number) {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function deletePropertyExpense(expenseId: string, title?: string, amount?: number, performedBy: string = 'Owner Kos') {
   const { error } = await supabase.from('property_expenses').delete().eq('id', expenseId);
   if (!error) {
-    const { data: { session } } = await supabase.auth.getSession();
-    const userEmail = session?.user?.email || 'Owner / Pengelola Kos';
-    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_BIAYA_KOS', performed_by: userEmail, details: `Menghapus pengeluaran: "${title || 'Tidak ada judul'}"` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_BIAYA_KOS', performed_by: performedBy, details: `Menghapus pengeluaran: "${title || 'Tidak ada judul'}" Rp ${(amount||0).toLocaleString('id-ID')}` });
     try { revalidatePath('/owner'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
@@ -236,10 +236,11 @@ export async function uploadPendingDocument(tenantId: string, docType: 'marriage
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
-export async function updateTenantPaymentStatus(tenantId: string, payment_status: 'PAID' | 'UNPAID') {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function updateTenantPaymentStatus(tenantId: string, payment_status: 'PAID' | 'UNPAID', performedBy: string = 'Owner Kos') {
   const { error } = await supabase.from('tenants').update({ payment_status }).eq('id', tenantId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'UPDATE_PEMBAYARAN', performed_by: 'Owner / Pengelola Kos', details: `Mengubah tagihan penyewa menjadi ${payment_status}` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'UPDATE_PEMBAYARAN', performed_by: performedBy, details: `Mengubah tagihan penyewa menjadi ${payment_status}` });
     try { revalidatePath('/owner'); revalidatePath('/portal-warga'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
@@ -252,19 +253,21 @@ export async function updateTenantStatus(tenantId: string, status: 'active' | 'c
   return { success: !error, error: error?.message };
 }
 
-export async function updateTenantData(tenantId: string, payload: any) {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function updateTenantData(tenantId: string, payload: any, performedBy: string = 'Owner Kos') {
   const { error } = await supabase.from('tenants').update(payload).eq('id', tenantId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'EDIT_PENYEWA', performed_by: 'Owner / Pengelola Kos', details: `Mengubah rincian data / harga sewa penyewa` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'EDIT_PENYEWA', performed_by: performedBy, details: `Mengubah rincian data / harga sewa penyewa` });
     try { revalidatePath('/owner'); revalidatePath('/rt'); revalidatePath('/portal-warga'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
 }
 
-export async function deleteTenant(tenantId: string) {
+// FIX: Tambahkan parameter performedBy untuk mencatat Identitas Pelaku
+export async function deleteTenant(tenantId: string, performedBy: string = 'Owner Kos') {
   const { error } = await supabase.from('tenants').delete().eq('id', tenantId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_PENYEWA', performed_by: 'Owner / Pengelola Kos', details: `Menghapus data penyewa` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_PENYEWA', performed_by: performedBy, details: `Menghapus data penyewa` });
     try { revalidatePath('/owner'); revalidatePath('/rt'); revalidatePath('/portal-warga'); } catch (e) {}
   }
   return { success: !error, error: error?.message };

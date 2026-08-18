@@ -17,21 +17,23 @@ export default function OwnerDashboard() {
   const [tenants, setTenants] = useState<any[]>([]); const [expenses, setExpenses] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  // Modals Data
   const [showAddPropModal, setShowAddPropModal] = useState(false); const [editingProperty, setEditingProperty] = useState<any>(null);
   const [propName, setPropName] = useState(''); const [propType, setPropType] = useState<'kos'|'kontrakan'>('kos'); const [propTotalRooms, setPropTotalRooms] = useState(10); const [propOwnerPhone, setPropOwnerPhone] = useState(''); const [propManagerPhone, setPropManagerPhone] = useState(''); const [propOwnerName, setPropOwnerName] = useState(''); const [propManagerName, setPropManagerName] = useState(''); const [propAddress, setPropAddress] = useState(''); const [propPin, setPropPin] = useState(''); const [submittingProp, setSubmittingProp] = useState(false);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false); const [expenseTitle, setExpenseTitle] = useState(''); const [expenseCategory, setExpenseCategory] = useState('Listrik'); const [expenseAmount, setExpenseAmount] = useState(''); const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10)); const [savingExpense, setSavingExpense] = useState(false);
   const [editingTenant, setEditingTenant] = useState<any>(null); const [tenantName, setTenantName] = useState(''); const [tenantRoom, setTenantRoom] = useState(''); const [tenantRentPrice, setTenantRentPrice] = useState('1500000'); const [savingTenant, setSavingTenant] = useState(false);
   const [editingRulesProp, setEditingRulesProp] = useState<any>(null); const [rulesText, setRulesText] = useState(''); const [savingRules, setSavingRules] = useState(false);
 
-  // UX Improvements: Destructive Modals & Toasts
   const [tenantToDelete, setTenantToDelete] = useState<any>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState<{ id: string, text: string, type: 'info'|'success'|'payment', onUndo?: () => void } | null>(null);
   const [pendingPayments, setPendingPayments] = useState<{[key: string]: NodeJS.Timeout}>({});
 
-  // FUNGSI BARU: Untuk menarik ulang data Audit tanpa merefresh halaman
+  // IDENTIFIKASI SIAPA YANG SEDANG LOGIN (Sari / Asep)
+  const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
+  const activeLoginName = isOwner ? (activeProperty?.owner_name || 'Owner Kos') : (activeProperty?.manager_name || 'Pengelola Kos');
+  const currentActor = `${activeLoginName} (${isOwner ? 'Pemilik' : 'Pengelola'})`;
+
   const refreshAuditLogs = async () => {
     const al = await getOwnerAuditLogs();
     if (al && al.logs) {
@@ -50,27 +52,25 @@ export default function OwnerDashboard() {
 
   const handleSelectProperty = async (prop: any) => { setActiveProperty(prop); const d = await getOwnerPropertyDetails(prop.id); if (d.success) { setTenants(d.tenants||[]); setExpenses(d.expenses||[]); } };
 
-  // AUDIT ITEM 14: Kustom Modal Hapus Destruktif
   const executeDeleteTenant = async () => {
     if(deleteConfirmText !== 'HAPUS') return;
     setTenants(prev => prev.filter(t => t.id !== tenantToDelete.id));
-    await deleteTenant(tenantToDelete.id);
+    await deleteTenant(tenantToDelete.id, currentActor); // Kirim Identitas
     setTenantToDelete(null); setDeleteConfirmText('');
     setToastMessage({ id: 'del', text: 'Data penyewa berhasil dihapus.', type: 'success' });
-    await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    await refreshAuditLogs();
     setTimeout(() => setToastMessage(null), 3000);
   };
 
   const executeDeleteExpense = async () => {
     setExpenses(expenses.filter((e) => e.id !== expenseToDelete.id)); 
-    await deletePropertyExpense(expenseToDelete.id);
+    await deletePropertyExpense(expenseToDelete.id, expenseToDelete.title, expenseToDelete.amount, currentActor); // Kirim Identitas
     setExpenseToDelete(null);
     setToastMessage({ id: 'del_exp', text: 'Catatan pengeluaran dihapus.', type: 'success' });
-    await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    await refreshAuditLogs();
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  // AUDIT ITEM 13: Optimistic UI & Undo Payment Toggle
   const handleTogglePaymentOptimistic = (t: any) => {
     const newStatus = t.payment_status === 'PAID' ? 'UNPAID' : 'PAID';
     const oldStatus = t.payment_status;
@@ -79,8 +79,8 @@ export default function OwnerDashboard() {
     if (pendingPayments[t.id]) clearTimeout(pendingPayments[t.id]);
 
     const timeoutId = setTimeout(async () => {
-       await updateTenantPaymentStatus(t.id, newStatus);
-       await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+       await updateTenantPaymentStatus(t.id, newStatus, currentActor); // Kirim Identitas
+       await refreshAuditLogs();
        setToastMessage(null);
     }, 5000);
     
@@ -102,10 +102,10 @@ export default function OwnerDashboard() {
   const handlePropFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmittingProp(true);
     if (editingProperty) {
-      await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_phone: propOwnerPhone, manager_phone: propManagerPhone, owner_name: propOwnerName, manager_name: propManagerName, address: propAddress, pin_code: propPin });
+      await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_phone: propOwnerPhone, manager_phone: propManagerPhone, owner_name: propOwnerName, manager_name: propManagerName, address: propAddress, pin_code: propPin }, currentActor);
       setShowAddPropModal(false); alert('Disimpan.'); window.location.reload();
     } else {
-      await createProperty(propName, propType, propAddress, '', propPin, propOwnerPhone||loginPhone, propOwnerPhone||loginPhone, propManagerPhone, propManagerPhone, propTotalRooms, '', '', '');
+      await createProperty(propName, propType, propAddress, '', propPin, propOwnerName||loginPhone, propOwnerPhone||loginPhone, propManagerName, propManagerPhone, propTotalRooms, '', '', '');
       setShowAddPropModal(false); alert('Berhasil daftar!'); window.location.reload();
     }
   };
@@ -113,28 +113,28 @@ export default function OwnerDashboard() {
   const handleSaveRules = async () => {
     if (!editingRulesProp) return; setSavingRules(true);
     const res = await updateHouseRules(editingRulesProp.id, rulesText); setSavingRules(false);
-    if (res.success) { alert('Tata tertib diperbarui.'); setEditingRulesProp(null); if (activeProperty) setActiveProperty({ ...activeProperty, house_rules: rulesText }); await refreshAuditLogs(); } // PERBAIKAN: Refresh data audit
+    if (res.success) { alert('Tata tertib diperbarui.'); setEditingRulesProp(null); if (activeProperty) setActiveProperty({ ...activeProperty, house_rules: rulesText }); await refreshAuditLogs(); }
   };
 
   const handleAddExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingExpense(true); const parsed = parseInt(expenseAmount.replace(/\D/g,''),10)||0;
-    const res = await addPropertyExpense(activeProperty.id, expenseTitle, expenseCategory, parsed, expenseDate);
+    const res = await addPropertyExpense(activeProperty.id, expenseTitle, expenseCategory, parsed, expenseDate, '', currentActor); // Kirim Identitas
     setSavingExpense(false); 
     if(res.success && res.data){ 
         setExpenses([res.data, ...expenses]); 
         setShowAddExpenseModal(false); 
-        await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+        await refreshAuditLogs();
     }
   };
 
   const handleSaveTenantSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingTenant(true); const parsed = parseInt(tenantRentPrice.replace(/\D/g,''),10)||0;
-    const res = await updateTenantData(editingTenant.id, { name: tenantName, room_number: tenantRoom, rent_price: parsed });
+    const res = await updateTenantData(editingTenant.id, { name: tenantName, room_number: tenantRoom, rent_price: parsed }, currentActor); // Kirim Identitas
     setSavingTenant(false); 
     if(res.success){ 
         setTenants(prev=>prev.map(t=>t.id===editingTenant.id?{...t, name:tenantName, room_number:tenantRoom, rent_price:parsed}:t)); 
         setEditingTenant(null); 
-        await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+        await refreshAuditLogs();
     }
   };
 
@@ -150,7 +150,6 @@ export default function OwnerDashboard() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.setAttribute("download", `Laporan_Audit_Kos.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
-  // AUDIT ITEM 16: Fallback penyalinan WA
   const fallbackCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setToastMessage({ id: 'wa', text: 'Pesan disalin ke clipboard! Paste manual jika WA tidak terbuka.', type: 'success' });
@@ -172,8 +171,6 @@ export default function OwnerDashboard() {
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
-  const activeLoginName = isOwner ? (activeProperty?.owner_name || 'Owner') : (activeProperty?.manager_name || 'Pengelola');
   const totalRooms = activeProperty?.total_rooms || 10;
   const occupiedRoomSet = new Set<string>();
   tenants.forEach(t => { if(t.status==='ACTIVE'||t.status==='VERIFIED'||t.status==='PENDING') { const pn=parseRoomNumber(t.room_number); if(pn!==null) occupiedRoomSet.add(`r-${pn}`); else if(t.room_number) occupiedRoomSet.add(t.room_number); } });
@@ -227,14 +224,12 @@ export default function OwnerDashboard() {
               </div>
             </header>
 
-            {/* AUDIT ITEM 12: Pemisahan Metrik Okupansi Donat */}
             <div className={`grid grid-cols-2 gap-4 ${isOwner ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
               <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-3xl col-span-2 md:col-span-1"><p className="text-[10px] font-black text-emerald-800 uppercase mb-1">Pemasukan Sewa</p><h3 className="text-xl font-black text-emerald-950">Rp {totalRent.toLocaleString('id-ID')}</h3></div>
               <div className="bg-red-50 border border-red-200 p-5 rounded-3xl col-span-2 md:col-span-1"><p className="text-[10px] font-black text-red-800 uppercase mb-1">Pengeluaran Kas</p><h3 className="text-xl font-black text-red-950">Rp {totalExp.toLocaleString('id-ID')}</h3></div>
               {isOwner && (
                 <div className="bg-white border border-amber-300 p-5 rounded-3xl shadow-sm col-span-2 md:col-span-1"><p className="text-[10px] font-black text-amber-600 uppercase mb-1">Laba Bersih Kos</p><h3 className="text-xl font-black">Rp {(totalRent-totalExp).toLocaleString('id-ID')}</h3></div>
               )}
-              {/* Circular Progress Bar Okupansi */}
               <div className="bg-white border p-5 rounded-3xl shadow-sm flex items-center justify-between col-span-2 md:col-span-1">
                 <div><p className="text-[10px] font-black text-slate-500 uppercase">Okupansi</p><h3 className="text-lg font-black">{countActive}/{totalRooms}</h3></div>
                 <div className="relative w-12 h-12">
@@ -244,7 +239,6 @@ export default function OwnerDashboard() {
               </div>
             </div>
 
-            {/* AUDIT ITEM 11: Efek Fade pada Wadah Tab */}
             <div className="relative">
               <div className="flex gap-2 overflow-x-auto border-b pb-1 pr-6 hide-scrollbar relative z-10">
                 <button onClick={()=>setActiveTab('penyewa')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='penyewa'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>👥 Daftar Penyewa</button>
@@ -252,14 +246,11 @@ export default function OwnerDashboard() {
                 <button onClick={()=>setActiveTab('pengeluaran')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='pengeluaran'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📉 Pengeluaran</button>
                 {isOwner && <button onClick={()=>setActiveTab('audit')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='audit'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📋 Jejak Audit</button>}
               </div>
-              {/* Fade Gradient on Mobile */}
               <div className="absolute top-0 right-0 h-full w-12 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none md:hidden z-20"></div>
             </div>
 
-            {/* TAB PENYEWA */}
             {activeTab === 'penyewa' && (
                <div className="bg-white p-5 rounded-b-3xl rounded-tr-3xl border -mt-1 space-y-4">
-                 
                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-3 gap-3">
                    <h3 className="font-black text-lg">Daftar Penghuni</h3>
                    <div className="flex gap-2 w-full md:w-auto">
@@ -291,7 +282,6 @@ export default function OwnerDashboard() {
                    {tenants.length === 0 && <p className="text-center text-slate-400 font-bold py-6">Belum ada penyewa.</p>}
                  </div>
 
-                 {/* AUDIT ITEM 15: scope="col" pada Tabel */}
                  <div className="hidden md:block overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black"><tr><th scope="col" className="p-4">Identitas Penyewa</th><th scope="col" className="p-4">Kamar</th><th scope="col" className="p-4">Status Tagihan</th><th scope="col" className="p-4">Harga Sewa</th><th scope="col" className="p-4">Status RT</th><th scope="col" className="p-4 text-right">Aksi</th></tr></thead>
                     <tbody className="divide-y">
@@ -314,7 +304,6 @@ export default function OwnerDashboard() {
                </div>
             )}
 
-            {/* TAB MATRIX DENGAN IKON */}
             {activeTab === 'matrix' && (
               <div className="bg-white p-6 rounded-b-3xl rounded-tr-3xl border space-y-4 -mt-1">
                 <h3 className="font-black text-lg border-b pb-2">Matrix Okupansi Kamar</h3>
@@ -334,7 +323,6 @@ export default function OwnerDashboard() {
               </div>
             )}
 
-            {/* TAB PENGELUARAN */}
             {activeTab === 'pengeluaran' && (
                <div className="bg-white p-6 rounded-b-3xl rounded-tr-3xl border space-y-4 -mt-1">
                  <div className="flex justify-between items-center border-b pb-3">
@@ -352,7 +340,6 @@ export default function OwnerDashboard() {
                </div>
             )}
 
-            {/* TAB AUDIT OWNER */}
             {activeTab === 'audit' && isOwner && (
                <div className="bg-white p-6 rounded-b-3xl rounded-tr-3xl border space-y-4 -mt-1">
                  <div className="flex justify-between items-center border-b pb-3">
@@ -361,9 +348,14 @@ export default function OwnerDashboard() {
                  </div>
                  <div className="space-y-3 pt-2">
                    {auditLogs.map(l => (
-                     <div key={l.id} className="p-4 border rounded-xl text-sm bg-slate-50 flex flex-col md:flex-row gap-2 shadow-sm">
-                       <span className="text-[10px] text-slate-500 font-mono font-bold md:w-32">{new Date(l.created_at).toLocaleString('id-ID')}</span>
-                       <div className="flex-1"><p className="font-black text-sm">{l.action_type}</p><p className="text-xs text-slate-600">{l.details}</p></div>
+                     <div key={l.id} className="p-4 border rounded-xl text-sm bg-slate-50 flex flex-col md:flex-row gap-3 shadow-sm items-start">
+                       <span className="text-[10px] text-slate-500 font-mono font-bold md:w-32 pt-1">{new Date(l.created_at).toLocaleString('id-ID')}</span>
+                       <div className="flex-1">
+                         <p className="font-black text-sm">{l.action_type}</p>
+                         {/* FIX: MENAMPILKAN NAMA PELAKU (SARI / ASEP) DI LOG AUDIT */}
+                         <div className="my-1.5"><span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-md border border-amber-200">👤 Oleh: {l.performed_by}</span></div>
+                         <p className="text-xs text-slate-600 leading-relaxed">{l.details}</p>
+                       </div>
                      </div>
                    ))}
                    {auditLogs.length === 0 && <p className="text-center text-sm text-slate-500 font-bold py-4">Belum ada riwayat aktivitas yang terekam.</p>}
@@ -376,22 +368,14 @@ export default function OwnerDashboard() {
       )}
 
       {/* MODALS */}
-      {/* Modal Form Properti */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-50 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border">
-            {/* Header Modal */}
-            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-black text-sm">{editingProperty ? 'Edit Properti' : 'Pendaftaran Kos Baru'}</h3>
-              <button onClick={()=>{setShowAddPropModal(false);setEditingProperty(null);}} className="font-bold text-lg leading-none hover:text-red-400">✕</button>
-            </div>
-            
-            {/* Form Body */}
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-sm">{editingProperty ? 'Edit Properti' : 'Pendaftaran Kos Baru'}</h3><button onClick={()=>{setShowAddPropModal(false);setEditingProperty(null);}} className="font-bold text-lg leading-none hover:text-red-400">✕</button></div>
             <form onSubmit={handlePropFormSubmit} className="p-4 space-y-3 text-sm">
               <input type="text" required placeholder="Nama Kos / Properti" value={propName} onChange={e=>setPropName(e.target.value)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl font-bold bg-white outline-none" />
               <input type="number" required placeholder="10" value={propTotalRooms} onChange={e=>setPropTotalRooms(parseInt(e.target.value,10)||1)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl font-bold bg-white outline-none" />
               <input type="text" placeholder="Alamat Kos Lengkap" value={propAddress} onChange={e=>setPropAddress(e.target.value)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl bg-white outline-none" />
-              
               <div className="p-3 border-2 border-slate-800 rounded-xl space-y-2 bg-white">
                 <p className="text-[10px] font-black text-slate-800">Akses No WA:</p>
                 <input type="text" placeholder="Nama Owner (Cth: Sari)" value={propOwnerName} onChange={e=>setPropOwnerName(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg outline-none" />
@@ -399,20 +383,13 @@ export default function OwnerDashboard() {
                 <input type="text" placeholder="Nama Pengelola (Cth: Asep)" value={propManagerName} onChange={e=>setPropManagerName(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg outline-none mt-2" />
                 <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setPropManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
               </div>
-
-              <div className="pt-1">
-                <input type="text" maxLength={4} required placeholder="Buat PIN 4 Digit" value={propPin} onChange={e=>setPropPin(e.target.value.replace(/\D/g,''))} className="w-full p-3 border-2 border-slate-400 rounded-full font-mono text-center tracking-[0.8em] font-black text-xl bg-white text-slate-400 focus:text-slate-900 focus:border-slate-800 outline-none" />
-              </div>
-              
-              <div className="pt-2">
-                <button type="submit" disabled={submittingProp} className="w-full py-3 bg-slate-900 text-white font-black rounded-xl">Simpan Data</button>
-              </div>
+              <div className="pt-1"><input type="text" maxLength={4} required placeholder="Buat PIN 4 Digit" value={propPin} onChange={e=>setPropPin(e.target.value.replace(/\D/g,''))} className="w-full p-3 border-2 border-slate-400 rounded-full font-mono text-center tracking-[0.8em] font-black text-xl bg-white text-slate-400 focus:text-slate-900 focus:border-slate-800 outline-none" /></div>
+              <div className="pt-2"><button type="submit" disabled={submittingProp} className="w-full py-3 bg-slate-900 text-white font-black rounded-xl">Simpan Data</button></div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal Edit Penyewa */}
       {editingTenant && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
@@ -430,7 +407,6 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* Modal Tambah Pengeluaran */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
@@ -451,7 +427,6 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* Modal Tata Tertib */}
       {editingRulesProp && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg border overflow-hidden shadow-2xl">
@@ -462,7 +437,6 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* AUDIT ITEM 14: Kustom Modal Konfirmasi Hapus Destruktif */}
       {tenantToDelete && (
          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
            <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 border-2 border-red-500 shadow-2xl">
@@ -498,7 +472,6 @@ export default function OwnerDashboard() {
          </div>
       )}
 
-      {/* TOAST NOTIFICATION (Optimistic UI & WA Link Fallback) */}
       {toastMessage && (
         <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-4 animate-slide-up border ${toastMessage.type === 'payment' ? 'bg-slate-900 text-white border-slate-700' : toastMessage.type === 'success' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-white text-slate-800 border-slate-200'}`}>
           <span className="text-sm font-bold">{toastMessage.text}</span>
