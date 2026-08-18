@@ -6,15 +6,10 @@ import { revalidatePath } from 'next/cache';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// ============================================================================
-// FIX MUTLAK: MEMATIKAN CACHE NEXT.JS AGAR DATA REAL-TIME 100% AKURAT
-// ============================================================================
+// Memaksa Supabase menarik data fresh, mengabaikan memori cache Next.js
 const supabase = createClient(supabaseUrl, supabaseServiceKey, { 
   auth: { persistSession: false },
-  global: {
-    // Memaksa setiap query ke database tidak boleh menggunakan cache memori lama
-    fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
-  }
+  global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
 });
 
 function cleanDigits(phone?: string): string { return phone ? phone.replace(/\D/g, '') : ''; }
@@ -34,9 +29,7 @@ export async function getRtDashboardBundle() {
 
     let officersList = oRes.data || [];
     if (officersList.length === 0) {
-      officersList = [
-        { id: '1', full_name: 'Saiful Anwar Samad (Ajip)', role: 'SUPER_ADMIN', phone_number: '082113546883', email: 'ajipsas@gmail.com' }
-      ];
+      officersList = [{ id: '1', full_name: 'Saiful Anwar Samad (Ajip)', role: 'SUPER_ADMIN', phone_number: '082113546883', email: 'ajipsas@gmail.com' }];
     }
     return { success: true, tenants: mergedTenants, properties: pRes.data || [], officers: officersList, dues: dRes.data || [], auditLogs: aRes.data || [] };
   } catch (err: any) {
@@ -45,11 +38,7 @@ export async function getRtDashboardBundle() {
 }
 
 export async function getOwnerAuditLogs() {
-  const { data } = await supabase.from('dues_audit_logs')
-    .select('*')
-    .or('performed_by.ilike.%Owner%,performed_by.ilike.%Pemilik%,performed_by.ilike.%Pengelola%')
-    .order('created_at', { ascending: false })
-    .limit(30);
+  const { data } = await supabase.from('dues_audit_logs').select('*').or('performed_by.ilike.%Owner%,performed_by.ilike.%Pemilik%,performed_by.ilike.%Pengelola%').order('created_at', { ascending: false }).limit(30);
   return { success: true, logs: data || [] };
 }
 
@@ -210,47 +199,19 @@ export async function addMemberSusulan(formData: FormData) {
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
-// Mengecek ketersediaan dengan bypass cache mutlak di parameter agar selalu fresh
-export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
-  if (!propertyId || !roomNumber) return { available: true };
-  
-  const { data, error } = await supabase
-    .from('tenants')
-    .select('room_number, status')
-    .eq('property_id', propertyId)
-    .neq('id', `cache-bypass-${Date.now()}`); // Force URL unik agar Next.js tidak pakai memori
-    
-  if (error || !data) return { available: true }; 
-  
-  const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
-  const targetRoom = String(roomNumber).toLowerCase().trim();
-
-  const isTaken = data.some(t => {
-    const tStatus = String(t.status || '').toUpperCase().trim();
-    if (!activeStatuses.includes(tStatus)) return false;
-    
-    const tRoom = String(t.room_number || '').toLowerCase().trim();
-    return tRoom === targetRoom;
-  });
-  
-  return { available: !isTaken };
-}
-
 export async function submitMultiTenantsStrict(formData: FormData) {
   try {
     const property_id = formData.get('property_id') as string; 
     const room_number = (formData.get('room_number') as string) || ''; 
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
     
-    // LAPIS KEDUA PENGAMAN (Jika masih diterobos juga, akan diblok sebelum di-save ke DB)
+    // ============================================================================
+    // IDE JENIUS LU: VALIDASI TEPAT SEBELUM DATA MASUK DATABASE (SAAT KLIK KIRIM)
+    // ============================================================================
     if (room_number) {
-        const { data: exist } = await supabase
-           .from('tenants')
-           .select('room_number, status')
-           .eq('property_id', property_id)
-           .neq('id', `cache-bypass-${Date.now()}`); // Force URL unik
+        const { data: exist } = await supabase.from('tenants').select('room_number, status').eq('property_id', property_id);
            
-        if (exist) {
+        if (exist && exist.length > 0) {
             const targetRoom = String(room_number).toLowerCase().trim();
             const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
             
@@ -262,7 +223,8 @@ export async function submitMultiTenantsStrict(formData: FormData) {
             });
 
             if (isTaken) {
-                return { success: false, data: [], error: `Pendaftaran Ditolak: Kamar / Posisi "${room_number}" saat ini sudah terisi atau sedang dalam antrean pendaftaran. Hubungi pengelola.` };
+                // Lempar sandi khusus "KAMAR_BENTROK" ke UI biar dilempar balik ke Langkah 1
+                return { success: false, data: [], error: `KAMAR_BENTROK` };
             }
         }
     }

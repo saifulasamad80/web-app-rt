@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { submitMultiTenantsStrict, checkRoomAvailability } from '../../../src/actions/checkin-tenant';
+import { submitMultiTenantsStrict } from '../../../src/actions/checkin-tenant';
 
 interface Property { id: string; name: string; property_name?: string; type: string; slug: string; address?: string; house_rules?: string; total_rooms?: number; }
 interface OccupantItem { name: string; phone: string; birth_date: string; relation: string; ktpFile: File | null; }
@@ -21,8 +21,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [errors, setErrors] = useState<any>({});
 
   const [roomNumber, setRoomNumber] = useState('');
-  const [isCheckingRoom, setIsCheckingRoom] = useState(false);
-  
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   
   const [primaryName, setPrimaryName] = useState('');
@@ -85,41 +83,8 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     return Object.keys(newErr).length === 0;
   };
 
-  // FIX: Mengecek kamar otomatis begitu dia selesai ngetik
-  const handleRoomBlur = async () => {
-    if (!roomNumber.trim()) {
-      setErrors((prev: any) => ({ ...prev, roomNumber: "Nomor Kamar wajib diisi." }));
-      return;
-    }
-    setIsCheckingRoom(true);
-    const res = await checkRoomAvailability(property.id, roomNumber);
-    setIsCheckingRoom(false);
-    
-    if (!res.available) {
-      setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Kamar "${roomNumber}" sudah terisi!` }));
-    }
-  };
-
-  // FIX: Memblokir Paksa & Memunculkan Pop-up Alert di Tengah Layar
-  const nextStep = async () => { 
-    if (!validateStep(step)) return;
-
-    if (step === 1) {
-       setIsCheckingRoom(true);
-       const res = await checkRoomAvailability(property.id, roomNumber);
-       setIsCheckingRoom(false);
-       
-       if (!res.available) {
-           // POP-UP ALERT BAWAAN HP YANG GAK BISA DIABAIKAN
-           alert(`⛔ PENDAFTARAN DITOLAK!\n\nKamar "${roomNumber}" saat ini sudah terisi atau sedang dalam antrean pendaftaran.\n\nSilakan gunakan nomor kamar lain atau hubungi pemilik kos.`);
-           setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Kamar "${roomNumber}" sudah terisi!` }));
-           return; 
-       }
-    }
-
-    setStep((s) => s + 1); 
-  };
-
+  // Langsung lanjut ke langkah berikutnya
+  const nextStep = () => { if (validateStep(step)) setStep((s) => s + 1); };
   const prevStep = () => setStep((s) => s - 1);
 
   const handleRoomChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -164,8 +129,21 @@ export default function CheckinClientForm({ property }: { property: Property }) 
 
     const res = await submitMultiTenantsStrict(formData);
     setLoading(false);
-    if (res && res.success) { setSuccessData({ name: primaryName, room: roomNumber, property: property.name }); } 
-    else { setErrors({ server: res?.error || 'Gagal mengirim data. Silakan coba lagi.' }); }
+    
+    if (res && res.success) { 
+      setSuccessData({ name: primaryName, room: roomNumber, property: property.name }); 
+    } else { 
+      // ============================================================================
+      // IDE JENIUS LU BEKERJA DI SINI: MUNDUR KE LANGKAH 1 KALAU BENTROK
+      // ============================================================================
+      if (res?.error === 'KAMAR_BENTROK') {
+          setStep(1); // Tendang pengguna balik ke Langkah 1 secara instan
+          setErrors({ roomNumber: `⛔ PENDAFTARAN DITOLAK: Kamar "${roomNumber}" sudah terisi atau dalam antrean!` });
+          alert(`Pendaftaran ditolak karena Kamar "${roomNumber}" sudah terisi. Silakan masukkan nomor/nama kamar lain.`);
+      } else {
+          setErrors({ server: res?.error || 'Gagal mengirim data. Silakan coba lagi.' }); 
+      }
+    }
   };
 
   if (successData) return (
@@ -207,8 +185,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               <div>
                 <label className="block font-bold text-sm mb-1 text-slate-900">Nomor / Posisi Kamar *</label>
                 <div className="relative">
-                  <input type="text" value={roomNumber} onChange={handleRoomChange} onBlur={handleRoomBlur} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
-                  {isCheckingRoom && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 animate-pulse">Cek kamar...</span>}
+                  <input type="text" value={roomNumber} onChange={handleRoomChange} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
                 </div>
                 {errors.roomNumber && <p className="text-xs text-red-600 mt-1.5 font-bold animate-slide-up">{errors.roomNumber}</p>}
               </div>
@@ -218,9 +195,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 <input type="date" aria-label="Format Tanggal: DD/MM/YYYY" value={entryDate} onChange={e => setEntryDate(e.target.value)} onBlur={() => validateField('entryDate', entryDate)} className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 outline-none focus:border-emerald-500 transition-colors" />
                 {errors.entryDate && <p className="text-xs text-red-600 mt-1">{errors.entryDate}</p>}
               </div>
-              <button onClick={nextStep} disabled={isCheckingRoom} className="w-full py-4 mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-colors disabled:bg-slate-400">
-                {isCheckingRoom ? 'Memeriksa...' : 'Selanjutnya →'}
-              </button>
+              <button onClick={nextStep} className="w-full py-4 mt-2 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl transition-colors">Selanjutnya →</button>
             </div>
           )}
 
