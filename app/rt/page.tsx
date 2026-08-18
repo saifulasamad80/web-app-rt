@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getRtDashboardBundle, loginRtAdminAction, updateTenantStatus, deleteTenant, recordRtDues, deleteRtDues, getDocumentSignedUrl, addRtOfficer, updateRtOfficer, deleteRtOfficer, resetOfficerPasswordBySuperAdmin, logAdminAction } from '../../src/actions/checkin-tenant';
+import { getRtDashboardBundle, loginRtAdminAction, updateTenantStatus, deleteTenant, recordRtDues, deleteRtDues, getDocumentSignedUrl, addRtOfficer, updateRtOfficer, deleteRtOfficer, resetOfficerPasswordBySuperAdmin, logAdminAction, updateProperty } from '../../src/actions/checkin-tenant';
 
 export default function RtDashboard() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -17,7 +17,6 @@ export default function RtDashboard() {
   const [filterWarga, setFilterWarga] = useState<'all'|'pending'|'incomplete'>('all');
   const [viewDocUrl, setViewDocUrl] = useState<string|null>(null); const [docModalTitle, setDocModalTitle] = useState('');
   
-  // FIX UX 4: Pop-up Keamanan Export Data
   const [showExportConfirm, setShowExportConfirm] = useState(false);
 
   // Modal Dues
@@ -37,7 +36,7 @@ export default function RtDashboard() {
 
   const handleUpdateStatus = async (id: string, newStatus: any) => {
     await updateTenantStatus(id, newStatus);
-    setTenants(prev => prev.map(t => t.id === id ? { ...t, status: newStatus==='active'?'VERIFIED':newStatus==='rejected'?'REJECTED':t.status } : t));
+    setTenants(prev => prev.map(t => t.id === id ? { ...t, status: newStatus==='active'?'VERIFIED':newStatus==='rejected'?'REJECTED':newStatus==='pending'?'PENDING':t.status } : t));
   };
 
   const handleDeleteTenant = async (id: string) => {
@@ -49,23 +48,15 @@ export default function RtDashboard() {
     if(res.success && res.url) { setViewDocUrl(res.url); setDocModalTitle(title); } else { alert('Gagal memuat dokumen.'); }
   };
 
-  const triggerExportWarga = () => {
-    setShowExportConfirm(true); // Membuka pop-up keamanan (Audit Fix 4)
-  };
+  const triggerExportWarga = () => { setShowExportConfirm(true); };
 
   const executeSecureExport = async () => {
     setShowExportConfirm(false);
-    
-    // CATAT KE JEJAK AUDIT (Security Fix)
     await logAdminAction('EKSPOR_DATA_WARGA', 'Mengunduh rekapitulasi data sensitif kependudukan seluruh warga.', activeUser?.email || 'Admin RT');
-    
     const rows = tenants.map(t => [`"${t.name||""}"`, `"${t.phone||""}"`, `"${t.properties?.name||"-"}"`, `"${t.room_number||"-"}"`, `"${t.entry_date||""}"`, `"${t.marital_status||""}"`, `"${t.status||""}"`]);
     const csv = [["Nama", "WA", "Properti", "Kamar", "Tgl Masuk", "Status Sipil", "Status RT"].join(","), ...rows.map(r=>r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.setAttribute("download", `Laporan_Warga_RT.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    
-    // Refresh Audit Log di latar belakang
-    const b = await getRtDashboardBundle();
-    if(b.success) setAuditLogs(b.auditLogs||[]);
+    const b = await getRtDashboardBundle(); if(b.success) setAuditLogs(b.auditLogs||[]);
   };
 
   const handleExportKas = () => {
@@ -76,7 +67,7 @@ export default function RtDashboard() {
 
   const handleAddKas = async (e: React.FormEvent) => {
     e.preventDefault(); const amt = parseInt(duesAmount.replace(/\D/g,''),10)||0;
-    const res = await recordRtDues(duesPayer, duesBlock, amt, duesMonth, duesYear, 'Admin RT');
+    const res = await recordRtDues(duesPayer, duesBlock, amt, duesMonth, duesYear, activeUser?.email || 'Admin RT');
     if(res.success && res.data){ setDues([res.data, ...dues]); setShowDuesModal(false); }
   };
 
@@ -84,15 +75,36 @@ export default function RtDashboard() {
     if(confirm(`Hapus pencatatan Rp ${d.amount} dari ${d.payer_name}?`)){ await deleteRtDues(d.id, d.payer_name, d.amount); setDues(dues.filter(x=>x.id!==d.id)); }
   };
 
+  // FIX 5: Nambahin pesan Alert Error Biar Kalau Gagal, Pak RT Tau Kenapa
   const handleOfficerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(editOfficer){ const res=await updateRtOfficer(editOfficer.id, offName, offRole, offPhone, offEmail); if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:offRole, phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } }
-    else { const res=await addRtOfficer(offName, offRole, offPhone, offEmail, offPass); if(res.success && res.data){ setOfficers([...officers, res.data]); setShowOfficerModal(false); } }
+    if(editOfficer){ 
+      const res=await updateRtOfficer(editOfficer.id, offName, offRole, offPhone, offEmail); 
+      if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:offRole, phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } 
+      else { alert(res.error || 'Gagal mengubah data pengurus.'); }
+    } else { 
+      const res=await addRtOfficer(offName, offRole, offPhone, offEmail, offPass); 
+      if(res.success && res.data){ setOfficers([...officers, res.data]); setShowOfficerModal(false); } 
+      else { alert(`Gagal menambah pengurus!\nAlasan: ${res.error || 'Email mungkin sudah terdaftar di sistem.'}`); }
+    }
   };
 
   const handleResetAdminPass = async (email: string) => {
     const np = prompt(`Masukkan password baru untuk ${email} (min 6 karakter):`);
     if(np && np.length>=6){ const res = await resetOfficerPasswordBySuperAdmin(email, np, activeUser?.email); if(res.success){ alert('Password berhasil direset.'); } else { alert(res.error||'Gagal reset.'); } }
+  };
+
+  // FIX 3: Reset PIN Properti
+  const handleResetPropPin = async (propId: string, oldPin: string, propName: string) => {
+    const newPin = prompt(`PIN akses saat ini untuk "${propName}" adalah: [ ${oldPin} ]\n\nMasukkan 4 Digit PIN Baru (Jika ingin diubah):`);
+    if (newPin === null) return; // Cancel
+    const cleaned = newPin.replace(/\D/g, '').substring(0, 4);
+    if (cleaned.length !== 4) { alert('GAGAL: PIN yang dimasukkan harus persis 4 digit angka!'); return; }
+    const res = await updateProperty(propId, { pin_code: cleaned }, activeUser?.email || 'Admin RT');
+    if (res.success) {
+      setProperties(properties.map(p => p.id === propId ? {...p, pin_code: cleaned} : p));
+      alert('PIN berhasil diubah dan tersimpan!');
+    } else { alert(res.error || 'Gagal mengubah PIN Properti.'); }
   };
 
   const filteredTenants = tenants.filter(t => {
@@ -120,7 +132,6 @@ export default function RtDashboard() {
 
   return (
     <main className="min-h-screen bg-slate-100 font-sans flex flex-col md:flex-row">
-      {/* FIX UX 1: Sidebar Overflow Y Auto (Biar gak mentok di bawah) */}
       <aside className="w-full md:w-64 bg-slate-900 text-slate-300 md:min-h-screen flex flex-col sticky top-0 z-40 max-h-screen overflow-y-auto hide-scrollbar border-r border-slate-800">
         <div className="p-6 border-b border-slate-800">
           <div className="flex items-center gap-3"><span className="text-3xl">🏛️</span><div><h1 className="text-white font-black text-lg leading-tight">Dasbor RT</h1><p className="text-[10px] text-blue-400 font-black tracking-widest uppercase">Admin Area</p></div></div>
@@ -151,7 +162,6 @@ export default function RtDashboard() {
               </div>
             </div>
 
-            {/* FIX UX 2: Responsive Tabel -> Layout Card di HP */}
             <div className="block md:hidden space-y-4">
               {filteredTenants.map(t => (
                 <div key={t.id} className="bg-white p-5 rounded-2xl shadow-sm border space-y-3 relative overflow-hidden">
@@ -162,7 +172,7 @@ export default function RtDashboard() {
                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t.properties?.name || 'Properti Dihapus'} • {t.room_number || '-'}</p>
                      </div>
                      <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${t.status==='PENDING'?'bg-amber-50 text-amber-800 border-amber-200':t.status==='VERIFIED'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                        {t.status==='PENDING'?'⏳ REVIEW':t.status==='VERIFIED'?'✅ SAH':t.status}
+                        {t.status==='PENDING'?'⏳ MENUNGGU':t.status==='VERIFIED'?'✅ SAH':t.status}
                      </span>
                    </div>
                    
@@ -173,18 +183,20 @@ export default function RtDashboard() {
 
                    <div className="pl-2 pt-2 border-t flex flex-wrap gap-2">
                       {t.ktp_path && <button onClick={()=>openDocument(t.ktp_path, `KTP: ${t.name}`)} className="text-[10px] px-3 py-1.5 bg-blue-50 text-blue-700 font-bold rounded-lg border border-blue-200">🔍 KTP</button>}
-                      {(t.marriage_doc_url || t.kk_doc_url) && <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `Buku Nikah/KK: ${t.name}`)} className="text-[10px] px-3 py-1.5 bg-purple-50 text-purple-700 font-bold rounded-lg border border-purple-200">🔍 Nikah/KK</button>}
+                      {/* FIX 1: Teks Dokumen Anak jadi cuma 'KK' */}
+                      {(t.marriage_doc_url || t.kk_doc_url) && <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `${t.marital_status==='Menikah'?'Buku Nikah/KK':'Kartu Keluarga'}: ${t.name}`)} className="text-[10px] px-3 py-1.5 bg-purple-50 text-purple-700 font-bold rounded-lg border border-purple-200">🔍 {t.marital_status==='Menikah'?'Nikah / KK':'Kartu Keluarga'}</button>}
                    </div>
 
                    <div className="pl-2 pt-2 flex gap-2">
+                     {/* FIX 2: Fitur Undo 'Batalkan' buat Warga yang Statusnya VERIFIED */}
                      {t.status === 'PENDING' && <button onClick={()=>handleUpdateStatus(t.id, 'active')} className="flex-1 py-2 bg-emerald-600 text-white text-[10px] font-black rounded-lg uppercase tracking-wider">Sahkan</button>}
+                     {t.status === 'VERIFIED' && <button onClick={()=>handleUpdateStatus(t.id, 'pending')} className="flex-1 py-2 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black rounded-lg uppercase tracking-wider">Batalkan</button>}
                      <button onClick={()=>handleDeleteTenant(t.id)} className="flex-1 py-2 bg-slate-100 text-red-600 text-[10px] font-black rounded-lg border hover:bg-red-50 uppercase tracking-wider">Hapus</button>
                    </div>
                 </div>
               ))}
             </div>
 
-            {/* Layout Table di Desktop */}
             <div className="hidden md:block bg-white border rounded-3xl shadow-sm overflow-hidden">
               <table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-black tracking-wider border-b"><tr><th className="p-4">Warga</th><th className="p-4">Properti / Kamar</th><th className="p-4">Status Sipil</th><th className="p-4">Dokumen Tersimpan</th><th className="p-4">Status RT</th><th className="p-4 text-right">Aksi</th></tr></thead>
               <tbody className="divide-y">
@@ -195,11 +207,17 @@ export default function RtDashboard() {
                     <td className="p-4"><span className={`px-2.5 py-1 rounded text-[10px] font-black uppercase ${t.marital_status==='Menikah'?'bg-purple-100 text-purple-800':'bg-slate-100 text-slate-600'}`}>{t.marital_status}</span></td>
                     <td className="p-4 flex gap-2 pt-5">
                       {t.ktp_path && <button onClick={()=>openDocument(t.ktp_path, `KTP: ${t.name}`)} className="text-[10px] px-2 py-1 bg-blue-50 text-blue-700 font-bold rounded border border-blue-200 hover:bg-blue-100">KTP</button>}
-                      {(t.marriage_doc_url || t.kk_doc_url) ? <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `Buku Nikah/KK: ${t.name}`)} className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 font-bold rounded border border-purple-200 hover:bg-purple-100">Nikah/KK</button> : t.marital_status==='Menikah' ? <span className="text-[10px] px-2 py-1 bg-red-50 text-red-600 font-bold border border-red-200 rounded">KOSONG</span> : null}
+                      
+                      {/* FIX 1: Teks Dokumen Anak jadi cuma 'KK' */}
+                      {(t.marriage_doc_url || t.kk_doc_url) ? <button onClick={()=>openDocument(t.marriage_doc_url||t.kk_doc_url, `${t.marital_status==='Menikah'?'Buku Nikah/KK':'Kartu Keluarga'}: ${t.name}`)} className="text-[10px] px-2 py-1 bg-purple-50 text-purple-700 font-bold rounded border border-purple-200 hover:bg-purple-100">{t.marital_status==='Menikah'?'Nikah / KK':'Kartu Keluarga'}</button> : t.marital_status==='Menikah' ? <span className="text-[10px] px-2 py-1 bg-red-50 text-red-600 font-bold border border-red-200 rounded">KOSONG</span> : null}
                     </td>
                     <td className="p-4"><span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider border ${t.status==='PENDING'?'bg-amber-50 text-amber-800 border-amber-200':t.status==='VERIFIED'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-slate-50 text-slate-600 border-slate-200'}`}>{t.status==='PENDING'?'Menunggu':t.status==='VERIFIED'?'SAH':t.status}</span></td>
                     <td className="p-4 text-right space-x-2">
                       {t.status === 'PENDING' && <button onClick={()=>handleUpdateStatus(t.id, 'active')} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors">Sahkan</button>}
+                      
+                      {/* FIX 2: Fitur Undo 'Batalkan' buat Desktop */}
+                      {t.status === 'VERIFIED' && <button onClick={()=>handleUpdateStatus(t.id, 'pending')} className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 text-xs font-bold rounded-lg transition-colors">Batalkan</button>}
+                      
                       <button onClick={()=>handleDeleteTenant(t.id)} className="px-3 py-1.5 bg-slate-100 hover:bg-red-50 text-red-600 text-xs font-bold rounded-lg transition-colors">Hapus</button>
                     </td>
                   </tr>
@@ -225,6 +243,17 @@ export default function RtDashboard() {
                     <div className="flex justify-between text-xs"><span className="text-slate-400 font-bold">Owner:</span><span className="font-black text-slate-700">{p.owner_name} ({p.owner_phone})</span></div>
                     {p.manager_name && <div className="flex justify-between text-xs"><span className="text-slate-400 font-bold">Pengelola:</span><span className="font-black text-slate-700">{p.manager_name}</span></div>}
                     <div className="flex justify-between text-xs"><span className="text-slate-400 font-bold">Kapasitas:</span><span className="font-black text-slate-700">{p.total_rooms} Kamar</span></div>
+                  </div>
+                  
+                  {/* FIX 3: Fitur Reset PIN untuk Properti */}
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-3xl">
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>
+                      <span className="font-mono text-slate-800 text-base font-black tracking-widest">{p.pin_code}</span>
+                    </div>
+                    <button onClick={() => handleResetPropPin(p.id, p.pin_code, p.name)} className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-300">
+                      Ubah PIN
+                    </button>
                   </div>
                 </div>
               ))}
@@ -307,7 +336,7 @@ export default function RtDashboard() {
         )}
       </section>
 
-      {/* FIX UX 3: Lightbox Document UI (Tombol X dipindah ke Header Hitam Solid) */}
+      {/* Lightbox Document UI */}
       {viewDocUrl && (
         <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col animate-fade-in">
           <div className="w-full bg-slate-900 p-4 flex justify-between items-center shadow-md z-10 border-b border-slate-700">
@@ -324,7 +353,7 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* FIX UX 4: Pop-up Keamanan Export Data Warga */}
+      {/* Pop-up Keamanan Export Data Warga */}
       {showExportConfirm && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 border-2 border-amber-500 shadow-2xl">
@@ -347,6 +376,22 @@ export default function RtDashboard() {
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center"><h3 className="font-black text-sm">💰 Catat Iuran Warga</h3><button onClick={()=>setShowDuesModal(false)} className="text-xl font-bold hover:text-emerald-200">✕</button></div>
             <form onSubmit={handleAddKas} className="p-6 space-y-4 text-sm bg-slate-50">
+              
+              {/* FIX 4: Dropdown Warga Otomatis Isi Kolom */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <label className="text-[10px] font-black text-emerald-800 uppercase block mb-1">Pilih Cepat Warga Terdaftar (Opsional)</label>
+                <select onChange={(e) => {
+                  const sel = tenants.find(t => t.id === e.target.value);
+                  if(sel) {
+                    setDuesPayer(sel.name);
+                    setDuesBlock(`${sel.properties?.name || 'Properti'} - Kamar ${sel.room_number}`);
+                  }
+                }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
+                   <option value="">-- Ketik Manual di Bawah Atau Pilih Nama --</option>
+                   {tenants.filter(t => t.is_head).map(t => <option key={t.id} value={t.id}>{t.name} ({t.properties?.name})</option>)}
+                </select>
+              </div>
+
               <input type="text" required placeholder="Nama Penyetor (Cth: Bpk. Budi)" value={duesPayer} onChange={e=>setDuesPayer(e.target.value)} className="w-full p-3 border rounded-xl bg-white font-bold outline-none focus:border-emerald-500" />
               <input type="text" required placeholder="Blok / Kamar (Cth: A-12)" value={duesBlock} onChange={e=>setDuesBlock(e.target.value)} className="w-full p-3 border rounded-xl bg-white font-bold outline-none focus:border-emerald-500" />
               <div className="flex gap-2">
@@ -366,7 +411,6 @@ export default function RtDashboard() {
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
             <div className="p-5 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-sm">{editOfficer?'Edit Pengurus':'Tambah Pengurus RT'}</h3><button onClick={()=>setShowOfficerModal(false)} className="text-xl font-bold hover:text-red-400">✕</button></div>
             
-            {/* FIX UX 5: Form Pengurus Menggunakan Tag <fieldset> & <legend> (Standar Aksesibilitas WCAG) */}
             <form onSubmit={handleOfficerSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
               <fieldset className="space-y-4 border p-4 rounded-2xl bg-white border-slate-200">
                 <legend className="px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Kredensial Admin</legend>

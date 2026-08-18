@@ -6,9 +6,6 @@ import { revalidatePath } from 'next/cache';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// ============================================================================
-// Paksa Supabase agar selalu real-time (tanpa cache memori)
-// ============================================================================
 const supabase = createClient(supabaseUrl, supabaseServiceKey, { 
   auth: { persistSession: false },
   global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
@@ -44,7 +41,6 @@ export async function getOwnerAuditLogs() {
   return { success: true, logs: data || [] };
 }
 
-// FIX UX 4: Fungsi Baru Khusus untuk Mencatat Tindakan Administratif (Export Data)
 export async function logAdminAction(action_type: string, details: string, performed_by: string) {
   const { error } = await supabase.from('dues_audit_logs').insert({ action_type, details, performed_by });
   return { success: !error, error: error?.message };
@@ -74,10 +70,25 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
   } catch (err: any) { return { success: false, error: err?.message }; }
 }
 
+// FIX 5: Benerin Bug Tambah Pengurus (Mengikat ID Supabase Auth ke Tabel Profiles)
 export async function addRtOfficer(fullName: string, role: string, phone: string, email: string, initialPassword?: string) {
-  if (!fullName || !phone || !email) return { success: false, error: 'Wajib diisi.' };
-  if (initialPassword && initialPassword.length >= 6) { try { await supabase.auth.admin.createUser({ email: email.trim().toLowerCase(), password: initialPassword, email_confirm: true, user_metadata: { name: fullName, role } }); } catch (e) {} }
-  const { data, error } = await supabase.from('profiles').insert({ full_name: fullName, role, phone_number: phone.trim(), email: email.trim().toLowerCase() }).select();
+  if (!fullName || !phone || !email) return { success: false, error: 'Semua kolom wajib diisi.' };
+  let newUserId = null;
+  
+  if (initialPassword && initialPassword.length >= 6) { 
+    try { 
+      const authRes = await supabase.auth.admin.createUser({ 
+        email: email.trim().toLowerCase(), password: initialPassword, email_confirm: true, user_metadata: { name: fullName, role } 
+      }); 
+      if (authRes.error) return { success: false, error: authRes.error.message }; // Tangkap error jika email ganda
+      newUserId = authRes.data.user.id;
+    } catch (e:any) { return { success: false, error: e.message }; } 
+  }
+  
+  const insertData: any = { full_name: fullName, role, phone_number: phone.trim(), email: email.trim().toLowerCase() };
+  if (newUserId) insertData.id = newUserId; // Kunci relasinya di sini!
+  
+  const { data, error } = await supabase.from('profiles').insert(insertData).select();
   if (!error) try { revalidatePath('/rt'); } catch (e) {}
   return { success: !error, data: data ? data[0] : null, error: error?.message };
 }
@@ -285,8 +296,9 @@ export async function updateTenantPaymentStatus(tenantId: string, payment_status
   return { success: !error, error: error?.message };
 }
 
-export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out' | 'verified' | 'rejected') {
-  const finalStatus = status === 'active' || status === 'verified' ? 'VERIFIED' : status === 'rejected' ? 'REJECTED' : status.toUpperCase();
+// FIX 2: Bisa Menerima Perintah 'pending' untuk Batalkan Verifikasi
+export async function updateTenantStatus(tenantId: string, status: 'active' | 'checked_out' | 'verified' | 'rejected' | 'pending') {
+  const finalStatus = (status === 'active' || status === 'verified') ? 'VERIFIED' : status === 'rejected' ? 'REJECTED' : status === 'pending' ? 'PENDING' : status.toUpperCase();
   const { error } = await supabase.from('tenants').update({ status: finalStatus }).eq('id', tenantId);
   if (!error) try { revalidatePath('/owner'); revalidatePath('/rt'); revalidatePath('/portal-warga'); } catch (e) {}
   return { success: !error, error: error?.message };
