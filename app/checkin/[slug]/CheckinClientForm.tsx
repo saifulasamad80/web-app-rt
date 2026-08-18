@@ -85,7 +85,22 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     return Object.keys(newErr).length === 0;
   };
 
-  // FIX: Mengunci Langkah 1 jika kamar bentrok (Anti-Bypass)
+  // FIX: Mengecek kamar otomatis begitu dia selesai ngetik
+  const handleRoomBlur = async () => {
+    if (!roomNumber.trim()) {
+      setErrors((prev: any) => ({ ...prev, roomNumber: "Nomor Kamar wajib diisi." }));
+      return;
+    }
+    setIsCheckingRoom(true);
+    const res = await checkRoomAvailability(property.id, roomNumber);
+    setIsCheckingRoom(false);
+    
+    if (!res.available) {
+      setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Kamar "${roomNumber}" sudah terisi!` }));
+    }
+  };
+
+  // FIX: Memblokir Paksa & Memunculkan Pop-up Alert di Tengah Layar
   const nextStep = async () => { 
     if (!validateStep(step)) return;
 
@@ -95,8 +110,10 @@ export default function CheckinClientForm({ property }: { property: Property }) 
        setIsCheckingRoom(false);
        
        if (!res.available) {
-           setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Pendaftaran ditolak: Kamar "${roomNumber}" sudah terisi atau sedang dalam antrean.` }));
-           return; // BLOKIR DI SINI! User nggak bisa lanjut ke step 2.
+           // POP-UP ALERT BAWAAN HP YANG GAK BISA DIABAIKAN
+           alert(`⛔ PENDAFTARAN DITOLAK!\n\nKamar "${roomNumber}" saat ini sudah terisi atau sedang dalam antrean pendaftaran.\n\nSilakan gunakan nomor kamar lain atau hubungi pemilik kos.`);
+           setErrors((prev: any) => ({ ...prev, roomNumber: `⛔ Kamar "${roomNumber}" sudah terisi!` }));
+           return; 
        }
     }
 
@@ -190,7 +207,7 @@ export default function CheckinClientForm({ property }: { property: Property }) 
               <div>
                 <label className="block font-bold text-sm mb-1 text-slate-900">Nomor / Posisi Kamar *</label>
                 <div className="relative">
-                  <input type="text" value={roomNumber} onChange={handleRoomChange} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
+                  <input type="text" value={roomNumber} onChange={handleRoomChange} onBlur={handleRoomBlur} className={`w-full p-3 border-2 rounded-xl bg-slate-50 font-bold outline-none transition-colors ${errors.roomNumber ? 'border-red-500 bg-red-50 text-red-900' : 'focus:border-emerald-500 border-slate-200'}`} />
                   {isCheckingRoom && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 animate-pulse">Cek kamar...</span>}
                 </div>
                 {errors.roomNumber && <p className="text-xs text-red-600 mt-1.5 font-bold animate-slide-up">{errors.roomNumber}</p>}
@@ -368,7 +385,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
                 {errors.agreedRules && <p className="text-xs text-red-600 px-1">{errors.agreedRules}</p>}
               </div>
 
-              {/* FIX: Error ditaruh paling bawah di atas tombol submit */}
               {errors.server && (
                 <div className="p-4 mt-6 bg-red-50 border border-red-200 text-red-700 text-sm font-bold rounded-xl text-center animate-pulse shadow-sm">
                   ⚠️ {errors.server}
