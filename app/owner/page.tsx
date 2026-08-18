@@ -109,7 +109,6 @@ export default function OwnerDashboard() {
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
-  // FUNGSI SHARE WA BARU
   const handleShareWA = (prop: any) => {
     if (!prop) return;
     const checkinUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + prop.slug;
@@ -166,7 +165,6 @@ export default function OwnerDashboard() {
                     <button onClick={()=>{setEditingRulesProp(activeProperty); setRulesText(activeProperty.house_rules||'');}} className="px-3 py-2 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-lg">📜 Tata Tertib</button>
                   </>
                 )}
-                {/* FIX: KLIK KELUAR KE HOME */}
                 <button onClick={()=>{window.location.href='/';}} className="px-3 py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg">🔒 Keluar</button>
               </div>
             </header>
@@ -190,7 +188,6 @@ export default function OwnerDashboard() {
             {activeTab === 'penyewa' && (
                <div className="bg-white p-5 rounded-b-3xl rounded-tr-3xl border -mt-1 space-y-4">
                  
-                 {/* FIX: HEADER DENGAN TOMBOL WA LINK YANG SELALU MUNCUL DI MOBILE & DESKTOP */}
                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-3 gap-3">
                    <h3 className="font-black text-lg">Daftar Penghuni</h3>
                    <div className="flex gap-2 w-full md:w-auto">
@@ -327,7 +324,7 @@ export default function OwnerDashboard() {
               <div className="p-3 border-2 border-slate-800 rounded-xl space-y-2 bg-white">
                 <p className="text-[10px] font-black text-slate-800">Akses No WA:</p>
                 <input type="tel" placeholder="WA Owner" value={propOwnerPhone} onChange={e=>setPropOwnerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
-                <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
+                <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setPropManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
               </div>
 
               {/* Kotak PIN (Persis Seperti Screenshot) */}
