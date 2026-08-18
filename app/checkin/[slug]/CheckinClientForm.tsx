@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { submitMultiTenantsStrict } from '../../../src/actions/checkin-tenant';
+import { submitMultiTenantsStrict, checkRoomAvailability } from '../../../src/actions/checkin-tenant';
 
 interface Property { id: string; name: string; property_name?: string; type: string; slug: string; address?: string; house_rules?: string; total_rooms?: number; }
 interface OccupantItem { name: string; phone: string; birth_date: string; relation: string; ktpFile: File | null; }
@@ -21,6 +21,8 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [errors, setErrors] = useState<any>({});
 
   const [roomNumber, setRoomNumber] = useState('');
+  const [isCheckingRoom, setIsCheckingRoom] = useState(false);
+  
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   
   const [primaryName, setPrimaryName] = useState('');
@@ -41,7 +43,31 @@ export default function CheckinClientForm({ property }: { property: Property }) 
   const [agreedRules, setAgreedRules] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState('Kirim Pendaftaran 🚀');
   const [successData, setSuccessData] = useState<any | null>(null);
+
+  // FIX UX: Efek teks berganti otomatis saat loading lambat karena file besar
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (loading) {
+      let count = 0;
+      const messages = [
+        'Mengunggah dokumen & foto KTP...',
+        'Resolusi foto cukup besar, mohon tunggu...',
+        'Menerapkan enkripsi keamanan...',
+        'Memvalidasi data ke server...',
+        'Sedikit lagi selesai...'
+      ];
+      setLoadingText(messages[0]);
+      interval = setInterval(() => {
+        count++;
+        setLoadingText(messages[count % messages.length]);
+      }, 3500); // Ganti teks tiap 3.5 detik
+    } else {
+      setLoadingText('Kirim Pendaftaran 🚀');
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
 
   const validateField = (field: string, value: string) => {
     setErrors((prev: any) => {
@@ -83,7 +109,6 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     return Object.keys(newErr).length === 0;
   };
 
-  // Langsung lanjut ke langkah berikutnya
   const nextStep = () => { if (validateStep(step)) setStep((s) => s + 1); };
   const prevStep = () => setStep((s) => s - 1);
 
@@ -133,11 +158,8 @@ export default function CheckinClientForm({ property }: { property: Property }) 
     if (res && res.success) { 
       setSuccessData({ name: primaryName, room: roomNumber, property: property.name }); 
     } else { 
-      // ============================================================================
-      // IDE JENIUS LU BEKERJA DI SINI: MUNDUR KE LANGKAH 1 KALAU BENTROK
-      // ============================================================================
       if (res?.error === 'KAMAR_BENTROK') {
-          setStep(1); // Tendang pengguna balik ke Langkah 1 secara instan
+          setStep(1);
           setErrors({ roomNumber: `⛔ PENDAFTARAN DITOLAK: Kamar "${roomNumber}" sudah terisi atau dalam antrean!` });
           alert(`Pendaftaran ditolak karena Kamar "${roomNumber}" sudah terisi. Silakan masukkan nomor/nama kamar lain.`);
       } else {
@@ -368,8 +390,11 @@ export default function CheckinClientForm({ property }: { property: Property }) 
 
               <div className="flex flex-col-reverse md:flex-row gap-3 mt-4 pt-4">
                 <button onClick={prevStep} className="w-full md:w-1/3 py-4 md:py-3.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-xl transition-colors min-h-[50px]">← Kembali</button>
-                <button onClick={handleSubmit} disabled={loading} className="w-full md:w-2/3 py-4 md:py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-black rounded-xl shadow-lg transition-colors min-h-[50px] disabled:bg-slate-400">
-                  {loading ? 'Mengirim Data...' : 'Kirim Pendaftaran 🚀'}
+                
+                {/* FIX UX: Tombol Loading yang Interaktif */}
+                <button onClick={handleSubmit} disabled={loading} className={`w-full md:w-2/3 py-4 md:py-3.5 text-white font-black rounded-xl shadow-lg transition-all min-h-[50px] flex items-center justify-center gap-2 ${loading ? 'bg-slate-600 animate-pulse' : 'bg-emerald-700 hover:bg-emerald-800'}`}>
+                  {loading && <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>}
+                  <span>{loadingText}</span>
                 </button>
               </div>
             </div>
