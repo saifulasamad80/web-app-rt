@@ -6,7 +6,9 @@ import { revalidatePath } from 'next/cache';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Memaksa Supabase menarik data fresh, mengabaikan memori cache Next.js
+// ============================================================================
+// Paksa Supabase agar selalu real-time (tanpa cache memori)
+// ============================================================================
 const supabase = createClient(supabaseUrl, supabaseServiceKey, { 
   auth: { persistSession: false },
   global: { fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' }) }
@@ -199,6 +201,30 @@ export async function addMemberSusulan(formData: FormData) {
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
+export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
+  if (!propertyId || !roomNumber) return { available: true };
+  
+  // HAPUS SINTAKS ANEH. Panggil bersih ke database.
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('room_number, status')
+    .eq('property_id', propertyId);
+    
+  if (error || !data) return { available: true }; 
+  
+  const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
+  const targetRoom = String(roomNumber).toLowerCase().trim();
+
+  const isTaken = data.some(t => {
+    const tStatus = String(t.status || '').toUpperCase().trim();
+    if (!activeStatuses.includes(tStatus)) return false;
+    const tRoom = String(t.room_number || '').toLowerCase().trim();
+    return tRoom === targetRoom;
+  });
+  
+  return { available: !isTaken };
+}
+
 export async function submitMultiTenantsStrict(formData: FormData) {
   try {
     const property_id = formData.get('property_id') as string; 
@@ -206,11 +232,19 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
     
     // ============================================================================
-    // IDE JENIUS LU: VALIDASI TEPAT SEBELUM DATA MASUK DATABASE (SAAT KLIK KIRIM)
+    // FIX MUTLAK (FAIL CLOSED): Jika Database Error, Pendaftaran Gagal Total!
     // ============================================================================
     if (room_number) {
-        const { data: exist } = await supabase.from('tenants').select('room_number, status').eq('property_id', property_id);
+        const { data: exist, error: existErr } = await supabase
+           .from('tenants')
+           .select('room_number, status')
+           .eq('property_id', property_id);
            
+        // CEGAH FAIL OPEN: Jika database error, tolak! Jangan anggap aman.
+        if (existErr) {
+            return { success: false, data: [], error: 'Sistem Gagal Memverifikasi Keamanan Kamar. Silakan coba lagi.' };
+        }
+
         if (exist && exist.length > 0) {
             const targetRoom = String(room_number).toLowerCase().trim();
             const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
@@ -223,7 +257,7 @@ export async function submitMultiTenantsStrict(formData: FormData) {
             });
 
             if (isTaken) {
-                // Lempar sandi khusus "KAMAR_BENTROK" ke UI biar dilempar balik ke Langkah 1
+                // TENDANG BALIK KE LANGKAH 1 DARI IDE JENIUS LU!
                 return { success: false, data: [], error: `KAMAR_BENTROK` };
             }
         }
