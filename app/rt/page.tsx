@@ -79,9 +79,10 @@ export default function RtDashboard() {
     }
   };
 
+  // FIX FOTO 5: Ngirim nama user ke backend biar Audit Log-nya nyatet nama adminnya!
   const handleDeleteKas = async (d: any) => {
     if(confirm(`Hapus pencatatan Rp ${d.amount} dari ${d.payer_name}?`)){ 
-      await deleteRtDues(d.id, d.payer_name, d.amount); 
+      await deleteRtDues(d.id, d.payer_name, d.amount, activeUser?.email || 'Admin RT'); 
       setDues(dues.filter(x=>x.id!==d.id)); 
       const b = await getRtDashboardBundle(); if(b.success) setAuditLogs(b.auditLogs||[]);
     }
@@ -96,7 +97,7 @@ export default function RtDashboard() {
     } else { 
       const res=await addRtOfficer(offName, offRole, offPhone, offEmail, offPass); 
       if(res.success && res.data){ setOfficers([...officers, res.data]); setShowOfficerModal(false); } 
-      else { alert(`Gagal menambah pengurus!\nAlasan: ${res.error || 'Email mungkin sudah terdaftar di sistem.'}`); }
+      else { alert(`Gagal menambah pengurus!\nAlasan: ${res.error || 'Terjadi kesalahan sistem.'}`); }
     }
   };
 
@@ -181,7 +182,7 @@ export default function RtDashboard() {
                    <div className="flex justify-between items-start pl-2">
                      <div>
                        <h3 className="font-black text-slate-900 text-base">{t.name}</h3>
-                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t.properties?.name || 'Properti Dihapus'} • {t.room_number || '-'}</p>
+                       <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mt-0.5">{t.properties?.name || <span className="text-red-500 italic">Dihapus</span>} • {t.room_number || '-'}</p>
                      </div>
                      <span className={`text-[10px] font-black px-2 py-1 rounded-md border ${t.status==='PENDING'?'bg-amber-50 text-amber-800 border-amber-200':t.status==='VERIFIED'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-slate-50 text-slate-600 border-slate-200'}`}>
                         {t.status==='PENDING'?'⏳ MENUNGGU':t.status==='VERIFIED'?'✅ SAH':t.status}
@@ -252,8 +253,7 @@ export default function RtDashboard() {
                   
                   <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-3xl">
                     <div>
-                      <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>
-                      <span className="font-mono text-slate-800 text-base font-black tracking-widest">****</span>
+                      {isSuperAdmin && <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>}
                     </div>
                     {isSuperAdmin && (
                       <button onClick={() => handleResetPropPin(p.id, p.pin_code, p.name)} className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-300">
@@ -402,7 +402,7 @@ export default function RtDashboard() {
                         const t = tenants.find(x => x.id === val.replace('ten-', ''));
                         if (t) {
                             setDuesPayer(t.name);
-                            setDuesBlock(`${t.properties?.name || 'Kontrakan'} - ${t.room_number}`);
+                            setDuesBlock(`${t.properties?.name || 'Kontrakan'} - Kamar ${t.room_number}`);
                         }
                     }
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">

@@ -15,7 +15,6 @@ function cleanDigits(phone?: string): string { return phone ? phone.replace(/\D/
 
 export async function getRtDashboardBundle() {
   try {
-    // FIX AUDIT: Memisahkan Jejak Audit RT dengan Jejak Audit Owner secara ketat
     const [tRes, pRes, oRes, dRes, aRes] = await Promise.all([
       supabase.from('tenants').select('*').order('created_at', { ascending: false }),
       supabase.from('properties').select('*').order('created_at', { ascending: false }),
@@ -46,7 +45,6 @@ export async function getOwnerAuditLogs() {
   return { success: true, logs: data || [] };
 }
 
-// FUNGSI BARU: Untuk mencatat aksi export Excel RT
 export async function logAdminAction(action_type: string, details: string, performed_by: string) {
   const { error } = await supabase.from('dues_audit_logs').insert({ action_type, details, performed_by });
   return { success: !error, error: error?.message };
@@ -76,7 +74,7 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
   } catch (err: any) { return { success: false, error: err?.message }; }
 }
 
-// FIX 5: Benerin Bug Tambah Pengurus (Mengikat ID Supabase Auth ke Tabel Profiles)
+// FIX ERROR FOTO 4: Hapus penyimpanan kolom 'email' ke tabel profiles agar tidak bentrok dengan schema database lu
 export async function addRtOfficer(fullName: string, role: string, phone: string, email: string, initialPassword?: string) {
   if (!fullName || !phone || !email) return { success: false, error: 'Semua kolom wajib diisi.' };
   let newUserId = null;
@@ -86,21 +84,27 @@ export async function addRtOfficer(fullName: string, role: string, phone: string
       const authRes = await supabase.auth.admin.createUser({ 
         email: email.trim().toLowerCase(), password: initialPassword, email_confirm: true, user_metadata: { name: fullName, role } 
       }); 
-      if (authRes.error) return { success: false, error: authRes.error.message }; // Tangkap error jika email ganda
+      if (authRes.error) return { success: false, error: authRes.error.message }; 
       newUserId = authRes.data.user.id;
     } catch (e:any) { return { success: false, error: e.message }; } 
   }
   
-  const insertData: any = { full_name: fullName, role, phone_number: phone.trim(), email: email.trim().toLowerCase() };
-  if (newUserId) insertData.id = newUserId; // Kunci relasinya di sini!
+  // HANYA memasukkan full_name, role, dan phone_number. (email dibuang dari insertData)
+  const insertData: any = { full_name: fullName, role, phone_number: phone.trim() };
+  if (newUserId) insertData.id = newUserId; 
   
   const { data, error } = await supabase.from('profiles').insert(insertData).select();
   if (!error) try { revalidatePath('/rt'); } catch (e) {}
-  return { success: !error, data: data ? data[0] : null, error: error?.message };
+  
+  // Karena kolom email dihilangkan, kita tetap balikin emailnya dari input lu biar Frontend nggak bingung
+  const returnedData = data ? { ...data[0], email: email.trim().toLowerCase() } : null;
+  
+  return { success: !error, data: returnedData, error: error?.message };
 }
 
+// FIX ERROR UPDATE PENGURUS: Hapus penyimpanan kolom 'email' juga di sini
 export async function updateRtOfficer(id: string, fullName: string, role: string, phone: string, email: string) {
-  const { error } = await supabase.from('profiles').update({ full_name: fullName, role, phone_number: phone.trim(), email: email.trim().toLowerCase() }).eq('id', id);
+  const { error } = await supabase.from('profiles').update({ full_name: fullName, role, phone_number: phone.trim() }).eq('id', id);
   if (!error) try { revalidatePath('/rt'); } catch (e) {}
   return { success: !error, error: error?.message };
 }
@@ -352,10 +356,11 @@ export async function recordRtDues(payerName: string, blockNumber: string, amoun
   return { success: true, data: data ? data[0] : null };
 }
 
-export async function deleteRtDues(duesId: string, payerName: string, amount: number) {
+// FIX 5: Menangkap Identitas Pengurus saat menghapus Iuran Kas
+export async function deleteRtDues(duesId: string, payerName: string, amount: number, performedBy: string = 'Pengurus RT') {
   const { error } = await supabase.from('dues').delete().eq('id', duesId);
   if (!error) {
-    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_KAS', performed_by: 'Pengurus RT', details: `Menghapus transaksi iuran Rp ${amount.toLocaleString('id-ID')} dari: ${payerName}` });
+    await supabase.from('dues_audit_logs').insert({ action_type: 'HAPUS_KAS', performed_by: performedBy, details: `Menghapus transaksi iuran Rp ${amount.toLocaleString('id-ID')} dari: ${payerName}` });
     try { revalidatePath('/rt'); } catch (e) {}
   }
   return { success: !error, error: error?.message };
