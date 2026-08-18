@@ -17,26 +17,27 @@ export default function OwnerDashboard() {
   const [tenants, setTenants] = useState<any[]>([]); const [expenses, setExpenses] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
-  // Modals
+  // Modals Data
   const [showAddPropModal, setShowAddPropModal] = useState(false); const [editingProperty, setEditingProperty] = useState<any>(null);
-  
-  // FIX: VARIABEL STATE YANG KETINGGALAN UDAH DITAMBAH DI SINI
-  const [propName, setPropName] = useState(''); 
-  const [propType, setPropType] = useState<'kos'|'kontrakan'>('kos'); 
-  const [propTotalRooms, setPropTotalRooms] = useState(10); 
-  const [propOwnerName, setPropOwnerName] = useState(''); 
-  const [propOwnerPhone, setPropOwnerPhone] = useState(''); 
-  const [propManagerName, setPropManagerName] = useState(''); 
-  const [propManagerPhone, setPropManagerPhone] = useState(''); 
-  const [propAddress, setPropAddress] = useState(''); 
-  const [propPin, setPropPin] = useState(''); 
-  const [submittingProp, setSubmittingProp] = useState(false);
-  
+  const [propName, setPropName] = useState(''); const [propType, setPropType] = useState<'kos'|'kontrakan'>('kos'); const [propTotalRooms, setPropTotalRooms] = useState(10); const [propOwnerPhone, setPropOwnerPhone] = useState(''); const [propManagerPhone, setPropManagerPhone] = useState(''); const [propOwnerName, setPropOwnerName] = useState(''); const [propManagerName, setPropManagerName] = useState(''); const [propAddress, setPropAddress] = useState(''); const [propPin, setPropPin] = useState(''); const [submittingProp, setSubmittingProp] = useState(false);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false); const [expenseTitle, setExpenseTitle] = useState(''); const [expenseCategory, setExpenseCategory] = useState('Listrik'); const [expenseAmount, setExpenseAmount] = useState(''); const [expenseDate, setExpenseDate] = useState(new Date().toISOString().slice(0, 10)); const [savingExpense, setSavingExpense] = useState(false);
-  
   const [editingTenant, setEditingTenant] = useState<any>(null); const [tenantName, setTenantName] = useState(''); const [tenantRoom, setTenantRoom] = useState(''); const [tenantRentPrice, setTenantRentPrice] = useState('1500000'); const [savingTenant, setSavingTenant] = useState(false);
-
   const [editingRulesProp, setEditingRulesProp] = useState<any>(null); const [rulesText, setRulesText] = useState(''); const [savingRules, setSavingRules] = useState(false);
+
+  // UX Improvements: Destructive Modals & Toasts
+  const [tenantToDelete, setTenantToDelete] = useState<any>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [expenseToDelete, setExpenseToDelete] = useState<any>(null);
+  const [toastMessage, setToastMessage] = useState<{ id: string, text: string, type: 'info'|'success'|'payment', onUndo?: () => void } | null>(null);
+  const [pendingPayments, setPendingPayments] = useState<{[key: string]: NodeJS.Timeout}>({});
+
+  // FUNGSI BARU: Untuk menarik ulang data Audit tanpa merefresh halaman
+  const refreshAuditLogs = async () => {
+    const al = await getOwnerAuditLogs();
+    if (al && al.logs) {
+      setAuditLogs(al.logs);
+    }
+  };
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoginLoading(true); setLoginError('');
@@ -49,19 +50,53 @@ export default function OwnerDashboard() {
 
   const handleSelectProperty = async (prop: any) => { setActiveProperty(prop); const d = await getOwnerPropertyDetails(prop.id); if (d.success) { setTenants(d.tenants||[]); setExpenses(d.expenses||[]); } };
 
-  const handleHardDeleteTenant = async (id: string, name: string) => {
-    const confirmation = prompt(`PERINGATAN: Ketik "HAPUS" untuk menghapus permanen data ${name}:`);
-    if (confirmation === 'HAPUS') { setTenants(prev => prev.filter(t => t.id !== id)); await deleteTenant(id); }
+  // AUDIT ITEM 14: Kustom Modal Hapus Destruktif
+  const executeDeleteTenant = async () => {
+    if(deleteConfirmText !== 'HAPUS') return;
+    setTenants(prev => prev.filter(t => t.id !== tenantToDelete.id));
+    await deleteTenant(tenantToDelete.id);
+    setTenantToDelete(null); setDeleteConfirmText('');
+    setToastMessage({ id: 'del', text: 'Data penyewa berhasil dihapus.', type: 'success' });
+    await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleTogglePayment = async (id: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'PAID' ? 'UNPAID' : 'PAID';
-    setTenants(prev => prev.map(t => t.id === id ? { ...t, payment_status: newStatus } : t));
-    await updateTenantPaymentStatus(id, newStatus);
+  const executeDeleteExpense = async () => {
+    setExpenses(expenses.filter((e) => e.id !== expenseToDelete.id)); 
+    await deletePropertyExpense(expenseToDelete.id);
+    setExpenseToDelete(null);
+    setToastMessage({ id: 'del_exp', text: 'Catatan pengeluaran dihapus.', type: 'success' });
+    await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleDeleteExpense = async (id: string, title: string) => {
-    if (confirm(`Hapus pengeluaran "${title}"?`)) { setExpenses(expenses.filter((e) => e.id !== id)); await deletePropertyExpense(id); }
+  // AUDIT ITEM 13: Optimistic UI & Undo Payment Toggle
+  const handleTogglePaymentOptimistic = (t: any) => {
+    const newStatus = t.payment_status === 'PAID' ? 'UNPAID' : 'PAID';
+    const oldStatus = t.payment_status;
+    
+    setTenants(prev => prev.map(item => item.id === t.id ? { ...item, payment_status: newStatus } : item));
+    if (pendingPayments[t.id]) clearTimeout(pendingPayments[t.id]);
+
+    const timeoutId = setTimeout(async () => {
+       await updateTenantPaymentStatus(t.id, newStatus);
+       await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+       setToastMessage(null);
+    }, 5000);
+    
+    setPendingPayments(prev => ({ ...prev, [t.id]: timeoutId }));
+
+    setToastMessage({
+       id: t.id,
+       text: `Status tagihan ${t.name} diubah menjadi ${newStatus === 'PAID' ? 'LUNAS' : 'BELUM BAYAR'}`,
+       type: 'payment',
+       onUndo: () => {
+           clearTimeout(timeoutId);
+           setTenants(prev => prev.map(item => item.id === t.id ? { ...item, payment_status: oldStatus } : item));
+           setToastMessage({ id: 'info', text: 'Perubahan dibatalkan.', type: 'info' });
+           setTimeout(() => setToastMessage(null), 3000);
+       }
+    });
   };
 
   const handlePropFormSubmit = async (e: React.FormEvent) => {
@@ -70,7 +105,7 @@ export default function OwnerDashboard() {
       await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_phone: propOwnerPhone, manager_phone: propManagerPhone, owner_name: propOwnerName, manager_name: propManagerName, address: propAddress, pin_code: propPin });
       setShowAddPropModal(false); alert('Disimpan.'); window.location.reload();
     } else {
-      await createProperty(propName, propType, propAddress, '', propPin, propOwnerName||loginPhone, propOwnerPhone||loginPhone, propManagerName, propManagerPhone, propTotalRooms, '', '', '');
+      await createProperty(propName, propType, propAddress, '', propPin, propOwnerPhone||loginPhone, propOwnerPhone||loginPhone, propManagerPhone, propManagerPhone, propTotalRooms, '', '', '');
       setShowAddPropModal(false); alert('Berhasil daftar!'); window.location.reload();
     }
   };
@@ -78,19 +113,29 @@ export default function OwnerDashboard() {
   const handleSaveRules = async () => {
     if (!editingRulesProp) return; setSavingRules(true);
     const res = await updateHouseRules(editingRulesProp.id, rulesText); setSavingRules(false);
-    if (res.success) { alert('Tata tertib diperbarui.'); setEditingRulesProp(null); if (activeProperty) setActiveProperty({ ...activeProperty, house_rules: rulesText }); }
+    if (res.success) { alert('Tata tertib diperbarui.'); setEditingRulesProp(null); if (activeProperty) setActiveProperty({ ...activeProperty, house_rules: rulesText }); await refreshAuditLogs(); } // PERBAIKAN: Refresh data audit
   };
 
   const handleAddExpenseSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingExpense(true); const parsed = parseInt(expenseAmount.replace(/\D/g,''),10)||0;
     const res = await addPropertyExpense(activeProperty.id, expenseTitle, expenseCategory, parsed, expenseDate);
-    setSavingExpense(false); if(res.success && res.data){ setExpenses([res.data, ...expenses]); setShowAddExpenseModal(false); }
+    setSavingExpense(false); 
+    if(res.success && res.data){ 
+        setExpenses([res.data, ...expenses]); 
+        setShowAddExpenseModal(false); 
+        await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    }
   };
 
   const handleSaveTenantSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSavingTenant(true); const parsed = parseInt(tenantRentPrice.replace(/\D/g,''),10)||0;
     const res = await updateTenantData(editingTenant.id, { name: tenantName, room_number: tenantRoom, rent_price: parsed });
-    setSavingTenant(false); if(res.success){ setTenants(prev=>prev.map(t=>t.id===editingTenant.id?{...t, name:tenantName, room_number:tenantRoom, rent_price:parsed}:t)); setEditingTenant(null); }
+    setSavingTenant(false); 
+    if(res.success){ 
+        setTenants(prev=>prev.map(t=>t.id===editingTenant.id?{...t, name:tenantName, room_number:tenantRoom, rent_price:parsed}:t)); 
+        setEditingTenant(null); 
+        await refreshAuditLogs(); // PERBAIKAN: Refresh data audit
+    }
   };
 
   const handleExportOwner = () => {
@@ -105,9 +150,17 @@ export default function OwnerDashboard() {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.setAttribute("download", `Laporan_Audit_Kos.csv`); document.body.appendChild(link); link.click(); document.body.removeChild(link);
   };
 
+  // AUDIT ITEM 16: Fallback penyalinan WA
+  const fallbackCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setToastMessage({ id: 'wa', text: 'Pesan disalin ke clipboard! Paste manual jika WA tidak terbuka.', type: 'success' });
+    setTimeout(() => setToastMessage(null), 5000);
+  };
+
   const handleSendReminderWA = (t: any) => {
     const rawPhone = (t.phone || '').replace(/\D/g, ''); const cleanPhone = rawPhone.startsWith('0') ? '62' + rawPhone.slice(1) : rawPhone;
-    const message = `Halo Kak *${t.name}*,\nMengingatkan tagihan sewa *${activeProperty.name}* (${t.room_number}) sebesar *Rp ${Number(t.rent_price || 0).toLocaleString('id-ID')}*. Terima kasih.`;
+    const message = `Halo Kak *${t.name}*,\nMengingatkan tagihan sewa *${activeProperty?.name}* (${t.room_number}) sebesar *Rp ${Number(t.rent_price || 0).toLocaleString('id-ID')}*. Terima kasih.`;
+    fallbackCopy(message);
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -115,6 +168,7 @@ export default function OwnerDashboard() {
     if (!prop) return;
     const checkinUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + prop.slug;
     const message = `Halo calon penghuni *${prop.name || prop.property_name}*,\n\nMohon lengkapi data lapor diri RT Anda secara digital melalui tautan resmi ini:\n\n👉 ${checkinUrl}\n\nTerima kasih.`;
+    fallbackCopy(message);
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
   };
 
@@ -127,6 +181,8 @@ export default function OwnerDashboard() {
   const countActive = occupiedRoomSet.size; 
   const totalRent = tenants.filter(t=>t.is_head && t.payment_status==='PAID').reduce((s,t)=>s+(Number(t.rent_price)||0),0); 
   const totalExp = expenses.reduce((s,e)=>s+(Number(e.amount)||0),0);
+  const occupancyPercentage = Math.round((countActive / totalRooms) * 100) || 0;
+  const strokeDash = `${occupancyPercentage}, 100`;
 
   return (
     <>
@@ -145,7 +201,7 @@ export default function OwnerDashboard() {
           </div>
         </main>
       ) : (
-        <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans pb-20">
+        <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans pb-20 relative">
           <div className="max-w-5xl mx-auto space-y-6">
             
             <header className="bg-white p-5 rounded-3xl shadow-sm border flex flex-col md:flex-row justify-between md:items-center gap-4">
@@ -171,19 +227,33 @@ export default function OwnerDashboard() {
               </div>
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-3xl"><p className="text-[10px] font-black text-emerald-800 uppercase mb-1">Pemasukan Sewa</p><h3 className="text-2xl font-black text-emerald-950">Rp {totalRent.toLocaleString('id-ID')}</h3></div>
-              <div className="bg-red-50 border border-red-200 p-6 rounded-3xl"><p className="text-[10px] font-black text-red-800 uppercase mb-1">Pengeluaran Kas</p><h3 className="text-2xl font-black text-red-950">Rp {totalExp.toLocaleString('id-ID')}</h3></div>
-              {isOwner ? (
-                <div className="bg-white border border-amber-300 p-6 rounded-3xl shadow-sm"><p className="text-[10px] font-black text-amber-600 uppercase mb-1">Laba Bersih Kos</p><h3 className="text-2xl font-black">Rp {(totalRent-totalExp).toLocaleString('id-ID')}</h3><p className="text-[10px] text-slate-500 mt-1">Okupansi: {countActive}/{totalRooms}</p></div>
-              ) : (<div className="bg-slate-100 border p-6 rounded-3xl flex items-center justify-center"><p className="text-xs font-black text-slate-500">🔒 Khusus Owner</p></div>)}
+            {/* AUDIT ITEM 12: Pemisahan Metrik Okupansi Donat */}
+            <div className={`grid grid-cols-2 gap-4 ${isOwner ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+              <div className="bg-emerald-50 border border-emerald-200 p-5 rounded-3xl col-span-2 md:col-span-1"><p className="text-[10px] font-black text-emerald-800 uppercase mb-1">Pemasukan Sewa</p><h3 className="text-xl font-black text-emerald-950">Rp {totalRent.toLocaleString('id-ID')}</h3></div>
+              <div className="bg-red-50 border border-red-200 p-5 rounded-3xl col-span-2 md:col-span-1"><p className="text-[10px] font-black text-red-800 uppercase mb-1">Pengeluaran Kas</p><h3 className="text-xl font-black text-red-950">Rp {totalExp.toLocaleString('id-ID')}</h3></div>
+              {isOwner && (
+                <div className="bg-white border border-amber-300 p-5 rounded-3xl shadow-sm col-span-2 md:col-span-1"><p className="text-[10px] font-black text-amber-600 uppercase mb-1">Laba Bersih Kos</p><h3 className="text-xl font-black">Rp {(totalRent-totalExp).toLocaleString('id-ID')}</h3></div>
+              )}
+              {/* Circular Progress Bar Okupansi */}
+              <div className="bg-white border p-5 rounded-3xl shadow-sm flex items-center justify-between col-span-2 md:col-span-1">
+                <div><p className="text-[10px] font-black text-slate-500 uppercase">Okupansi</p><h3 className="text-lg font-black">{countActive}/{totalRooms}</h3></div>
+                <div className="relative w-12 h-12">
+                  <svg viewBox="0 0 36 36" className="w-12 h-12 stroke-current text-slate-200 fill-none stroke-[3]"><path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /></svg>
+                  <svg viewBox="0 0 36 36" className="w-12 h-12 stroke-current text-emerald-500 fill-none stroke-[3] absolute top-0 left-0 transition-all duration-1000 ease-out" strokeDasharray={strokeDash}><path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" /></svg>
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-2 overflow-x-auto border-b pb-1">
-              <button onClick={()=>setActiveTab('penyewa')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='penyewa'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>👥 Daftar Penyewa</button>
-              <button onClick={()=>setActiveTab('matrix')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='matrix'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>🏠 Matrix Kamar</button>
-              <button onClick={()=>setActiveTab('pengeluaran')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='pengeluaran'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📉 Pengeluaran</button>
-              {isOwner && <button onClick={()=>setActiveTab('audit')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='audit'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📋 Jejak Audit</button>}
+            {/* AUDIT ITEM 11: Efek Fade pada Wadah Tab */}
+            <div className="relative">
+              <div className="flex gap-2 overflow-x-auto border-b pb-1 pr-6 hide-scrollbar relative z-10">
+                <button onClick={()=>setActiveTab('penyewa')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='penyewa'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>👥 Daftar Penyewa</button>
+                <button onClick={()=>setActiveTab('matrix')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='matrix'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>🏠 Matrix Kamar</button>
+                <button onClick={()=>setActiveTab('pengeluaran')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='pengeluaran'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📉 Pengeluaran</button>
+                {isOwner && <button onClick={()=>setActiveTab('audit')} className={`px-5 py-3 font-bold text-sm rounded-t-2xl whitespace-nowrap ${activeTab==='audit'?'bg-white border-t border-l border-r text-emerald-800':'bg-transparent text-slate-500'}`}>📋 Jejak Audit</button>}
+              </div>
+              {/* Fade Gradient on Mobile */}
+              <div className="absolute top-0 right-0 h-full w-12 bg-gradient-to-l from-slate-50 to-transparent pointer-events-none md:hidden z-20"></div>
             </div>
 
             {/* TAB PENYEWA */}
@@ -198,7 +268,6 @@ export default function OwnerDashboard() {
                    </div>
                  </div>
                  
-                 {/* Card Mobile */}
                  <div className="grid grid-cols-1 md:hidden gap-4">
                    {tenants.map(t => (
                      <div key={t.id} className="bg-white p-5 border rounded-2xl shadow-sm space-y-3">
@@ -207,14 +276,14 @@ export default function OwnerDashboard() {
                            <h4 className="font-black text-base">{t.name}</h4>
                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${t.is_head?'bg-amber-100 text-amber-900':'bg-slate-100 text-slate-600'}`}>{t.is_head?'Penanggung Jawab':'Anggota'}</span>
                          </div>
-                         {t.is_head && <button onClick={()=>handleTogglePayment(t.id, t.payment_status)} className={`text-[10px] font-black px-2 py-1 rounded border h-fit ${t.payment_status==='PAID'?'bg-emerald-50 text-emerald-800':'bg-red-50 text-red-800'}`}>{t.payment_status==='PAID'?'✓ LUNAS':'✗ BELUM BAYAR'}</button>}
+                         {t.is_head && <button onClick={()=>handleTogglePaymentOptimistic(t)} className={`text-[10px] font-black px-2 py-1 rounded border h-fit transition-colors ${t.payment_status==='PAID'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-red-50 text-red-800 border-red-200'}`}>{t.payment_status==='PAID'?'✓ LUNAS':'✗ BELUM BAYAR'}</button>}
                        </div>
                        <div className="flex justify-between items-center pt-3 border-t">
                          <span className="font-mono font-black text-sm">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</span>
                          <div className="flex gap-2">
                            {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="text-xs font-bold text-white bg-emerald-600 px-3 py-1.5 rounded-lg">Tagih</button>}
                            <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg">Edit</button>
-                           <button onClick={()=>handleHardDeleteTenant(t.id, t.name)} className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">Hapus</button>
+                           <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg">Hapus</button>
                          </div>
                        </div>
                      </div>
@@ -222,21 +291,21 @@ export default function OwnerDashboard() {
                    {tenants.length === 0 && <p className="text-center text-slate-400 font-bold py-6">Belum ada penyewa.</p>}
                  </div>
 
-                 {/* Table Desktop */}
+                 {/* AUDIT ITEM 15: scope="col" pada Tabel */}
                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black"><tr><th className="p-4">Identitas Penyewa</th><th className="p-4">Kamar</th><th className="p-4">Status Tagihan</th><th className="p-4">Harga Sewa</th><th className="p-4">Status RT</th><th className="p-4 text-right">Aksi</th></tr></thead>
+                    <table className="w-full text-left text-sm whitespace-nowrap"><thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-black"><tr><th scope="col" className="p-4">Identitas Penyewa</th><th scope="col" className="p-4">Kamar</th><th scope="col" className="p-4">Status Tagihan</th><th scope="col" className="p-4">Harga Sewa</th><th scope="col" className="p-4">Status RT</th><th scope="col" className="p-4 text-right">Aksi</th></tr></thead>
                     <tbody className="divide-y">
                       {tenants.map(t => (
                         <tr key={t.id} className="hover:bg-slate-50">
                           <td className="p-4"><div className="font-black text-base">{t.name}</div><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${t.is_head?'bg-amber-100 text-amber-900':'bg-slate-100 text-slate-600'}`}>{t.is_head?'Penanggung Jawab':'Anggota'}</span></td>
                           <td className="p-4 font-bold">{t.room_number}</td>
-                          <td className="p-4">{t.is_head ? <button onClick={()=>handleTogglePayment(t.id, t.payment_status)} className={`px-2 py-1 rounded text-[10px] font-black border ${t.payment_status==='PAID'?'bg-emerald-50 text-emerald-800':'bg-red-50 text-red-800'}`}>{t.payment_status==='PAID'?'LUNAS':'BELUM'}</button> : '-'}</td>
+                          <td className="p-4">{t.is_head ? <button onClick={()=>handleTogglePaymentOptimistic(t)} className={`px-2 py-1 rounded text-[10px] font-black border transition-colors ${t.payment_status==='PAID'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-red-50 text-red-800 border-red-200'}`}>{t.payment_status==='PAID'?'LUNAS':'BELUM'}</button> : '-'}</td>
                           <td className="p-4 font-mono font-bold">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</td>
                           <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-black ${t.status==='VERIFIED'||t.status==='ACTIVE'?'bg-emerald-100':'bg-amber-100'}`}>{t.status==='VERIFIED'||t.status==='ACTIVE'?'✅ Sah':'⏳ Menunggu'}</span></td>
                           <td className="p-4 text-right space-x-2">
                             {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg">Tagih</button>}
                             <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="px-3 py-1.5 border text-xs font-bold rounded-lg">Edit</button>
-                            <button onClick={()=>handleHardDeleteTenant(t.id, t.name)} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg">Hapus</button>
+                            <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-lg">Hapus</button>
                           </td>
                         </tr>
                       ))}
@@ -276,7 +345,7 @@ export default function OwnerDashboard() {
                    {expenses.map(e => (
                      <div key={e.id} className="p-4 border rounded-xl flex justify-between items-center bg-slate-50">
                        <div><p className="text-[10px] font-black text-slate-400 uppercase">{e.expense_date} • {e.category}</p><h4 className="font-black text-base">{e.title}</h4></div>
-                       <div className="text-right flex flex-col items-end"><p className="font-mono font-black text-red-600">-Rp {Number(e.amount).toLocaleString()}</p><button onClick={()=>handleDeleteExpense(e.id, e.title)} className="text-[10px] text-red-500 font-bold mt-2 uppercase">Hapus</button></div>
+                       <div className="text-right flex flex-col items-end"><p className="font-mono font-black text-red-600">-Rp {Number(e.amount).toLocaleString()}</p><button onClick={()=>setExpenseToDelete(e)} className="text-[10px] text-red-500 font-bold mt-2 uppercase">Hapus</button></div>
                      </div>
                    ))}
                  </div>
@@ -306,7 +375,8 @@ export default function OwnerDashboard() {
         </main>
       )}
 
-      {/* 1. Modal Form Properti (FIX NAMA OWNER & PENGELOLA) */}
+      {/* MODALS */}
+      {/* Modal Form Properti */}
       {showAddPropModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-50 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border">
@@ -322,7 +392,6 @@ export default function OwnerDashboard() {
               <input type="number" required placeholder="10" value={propTotalRooms} onChange={e=>setPropTotalRooms(parseInt(e.target.value,10)||1)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl font-bold bg-white outline-none" />
               <input type="text" placeholder="Alamat Kos Lengkap" value={propAddress} onChange={e=>setPropAddress(e.target.value)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl bg-white outline-none" />
               
-              {/* Kotak Akses WA */}
               <div className="p-3 border-2 border-slate-800 rounded-xl space-y-2 bg-white">
                 <p className="text-[10px] font-black text-slate-800">Akses No WA:</p>
                 <input type="text" placeholder="Nama Owner (Cth: Sari)" value={propOwnerName} onChange={e=>setPropOwnerName(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg outline-none" />
@@ -331,7 +400,6 @@ export default function OwnerDashboard() {
                 <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setPropManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
               </div>
 
-              {/* Kotak PIN */}
               <div className="pt-1">
                 <input type="text" maxLength={4} required placeholder="Buat PIN 4 Digit" value={propPin} onChange={e=>setPropPin(e.target.value.replace(/\D/g,''))} className="w-full p-3 border-2 border-slate-400 rounded-full font-mono text-center tracking-[0.8em] font-black text-xl bg-white text-slate-400 focus:text-slate-900 focus:border-slate-800 outline-none" />
               </div>
@@ -344,7 +412,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 2. Modal Edit Penyewa */}
+      {/* Modal Edit Penyewa */}
       {editingTenant && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
@@ -362,7 +430,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 3. Modal Tambah Pengeluaran */}
+      {/* Modal Tambah Pengeluaran */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border">
@@ -383,7 +451,7 @@ export default function OwnerDashboard() {
         </div>
       )}
 
-      {/* 4. Modal Tata Tertib */}
+      {/* Modal Tata Tertib */}
       {editingRulesProp && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg border overflow-hidden shadow-2xl">
@@ -394,6 +462,51 @@ export default function OwnerDashboard() {
         </div>
       )}
 
+      {/* AUDIT ITEM 14: Kustom Modal Konfirmasi Hapus Destruktif */}
+      {tenantToDelete && (
+         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
+           <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 border-2 border-red-500 shadow-2xl">
+             <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center text-3xl mx-auto">⚠️</div>
+             <div className="text-center">
+               <h3 className="text-xl font-black text-slate-900">Hapus Data Penyewa?</h3>
+               <p className="text-sm text-slate-600 mt-2">Data <b>{tenantToDelete.name}</b> (Kamar {tenantToDelete.room_number}) akan dihapus permanen beserta histori tagihannya.</p>
+             </div>
+             <div className="bg-red-50 p-4 rounded-xl border border-red-200 mt-4">
+               <label className="text-[10px] font-black text-red-800 uppercase tracking-widest block mb-2 text-center">Ketik "HAPUS" untuk konfirmasi</label>
+               <input type="text" placeholder="HAPUS" value={deleteConfirmText} onChange={e=>setDeleteConfirmText(e.target.value)} className="w-full p-3 border border-red-300 rounded-lg text-center font-bold font-mono uppercase focus:outline-none focus:border-red-600" />
+             </div>
+             <div className="flex gap-2 pt-2">
+               <button onClick={()=>{setTenantToDelete(null); setDeleteConfirmText('');}} className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl">Batal</button>
+               <button onClick={executeDeleteTenant} disabled={deleteConfirmText !== 'HAPUS'} className="w-1/2 py-3 bg-red-600 text-white font-black rounded-xl disabled:bg-slate-300">Hapus Data</button>
+             </div>
+           </div>
+         </div>
+      )}
+
+      {expenseToDelete && (
+         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 animate-fade-in">
+           <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+             <div className="text-center">
+               <h3 className="text-lg font-black text-slate-900">Hapus Pengeluaran?</h3>
+               <p className="text-sm text-slate-600 mt-2">Catatan kas <b>{expenseToDelete.title}</b> (Rp {expenseToDelete.amount.toLocaleString()}) akan dihapus dari buku.</p>
+             </div>
+             <div className="flex gap-2 pt-4">
+               <button onClick={()=>setExpenseToDelete(null)} className="w-1/2 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl">Batal</button>
+               <button onClick={executeDeleteExpense} className="w-1/2 py-3 bg-red-600 text-white font-black rounded-xl">Ya, Hapus</button>
+             </div>
+           </div>
+         </div>
+      )}
+
+      {/* TOAST NOTIFICATION (Optimistic UI & WA Link Fallback) */}
+      {toastMessage && (
+        <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] px-5 py-3 rounded-2xl shadow-xl flex items-center gap-4 animate-slide-up border ${toastMessage.type === 'payment' ? 'bg-slate-900 text-white border-slate-700' : toastMessage.type === 'success' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' : 'bg-white text-slate-800 border-slate-200'}`}>
+          <span className="text-sm font-bold">{toastMessage.text}</span>
+          {toastMessage.onUndo && (
+             <button onClick={toastMessage.onUndo} className="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-black uppercase tracking-wider transition-colors">Urungkan</button>
+          )}
+        </div>
+      )}
     </>
   );
 }
