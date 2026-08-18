@@ -20,17 +20,12 @@ export default function OwnerDashboard() {
   // Modals
   const [showAddPropModal, setShowAddPropModal] = useState(false); const [editingProperty, setEditingProperty] = useState<any>(null);
   
-  // FIX UI Form Daftar Kos: Tambah State untuk Nama Owner & Pengelola
+  // State untuk form Properti
   const [propName, setPropName] = useState(''); 
   const [propType, setPropType] = useState<'kos'|'kontrakan'>('kos'); 
   const [propTotalRooms, setPropTotalRooms] = useState(10); 
-  const [propOwnerName, setPropOwnerName] = useState(''); 
   const [propOwnerPhone, setPropOwnerPhone] = useState(''); 
-  const [propManagerName, setPropManagerName] = useState(''); 
   const [propManagerPhone, setPropManagerPhone] = useState(''); 
-  const [propBankName, setPropBankName] = useState('BCA'); 
-  const [propBankAcc, setPropBankAcc] = useState(''); 
-  const [propBankHolder, setPropBankHolder] = useState(''); 
   const [propAddress, setPropAddress] = useState(''); 
   const [propPin, setPropPin] = useState(''); 
   const [submittingProp, setSubmittingProp] = useState(false);
@@ -70,10 +65,10 @@ export default function OwnerDashboard() {
   const handlePropFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setSubmittingProp(true);
     if (editingProperty) {
-      await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_name: propOwnerName, owner_phone: propOwnerPhone, manager_name: propManagerName, manager_phone: propManagerPhone, bank_name: propBankName, bank_account_number: propBankAcc, bank_account_holder: propBankHolder, address: propAddress, pin_code: propPin });
+      await updateProperty(editingProperty.id, { name: propName, type: propType, total_rooms: propTotalRooms, owner_phone: propOwnerPhone, manager_phone: propManagerPhone, owner_name: propOwnerPhone, manager_name: propManagerPhone, address: propAddress, pin_code: propPin });
       setShowAddPropModal(false); alert('Disimpan.'); window.location.reload();
     } else {
-      await createProperty(propName, propType, propAddress, '', propPin, propOwnerName||loginPhone, propOwnerPhone||loginPhone, propManagerName, propManagerPhone, propTotalRooms, propBankName, propBankAcc, propBankHolder);
+      await createProperty(propName, propType, propAddress, '', propPin, propOwnerPhone||loginPhone, propOwnerPhone||loginPhone, propManagerPhone, propManagerPhone, propTotalRooms, '', '', '');
       setShowAddPropModal(false); alert('Berhasil daftar!'); window.location.reload();
     }
   };
@@ -114,6 +109,14 @@ export default function OwnerDashboard() {
     window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
   };
 
+  // FUNGSI SHARE WA BARU
+  const handleShareWA = (prop: any) => {
+    if (!prop) return;
+    const checkinUrl = (typeof window !== 'undefined' ? window.location.origin : '') + '/checkin/' + prop.slug;
+    const message = `Halo calon penghuni *${prop.name || prop.property_name}*,\n\nMohon lengkapi data lapor diri RT Anda secara digital melalui tautan resmi ini:\n\n👉 ${checkinUrl}\n\nTerima kasih.`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
   const isOwner = isPhoneMatch(loginPhone, activeProperty?.owner_phone);
   const activeLoginName = isOwner ? (activeProperty?.owner_name || 'Owner') : (activeProperty?.manager_name || 'Pengelola');
   const totalRooms = activeProperty?.total_rooms || 10;
@@ -137,7 +140,7 @@ export default function OwnerDashboard() {
               <input type="password" required maxLength={4} placeholder="PIN" value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,''))} className="w-full p-3.5 border rounded-xl text-center text-xl tracking-[0.5em] font-black bg-slate-50" />
               <button type="submit" disabled={loginLoading} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl">Buka Dasbor</button>
             </form>
-            <div className="pt-4 border-t text-center"><button type="button" onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerName(''); setPropManagerName(''); setShowAddPropModal(true);}} className="text-xs font-bold text-slate-600 hover:text-emerald-700">➕ Daftarkan Kos Baru</button></div>
+            <div className="pt-4 border-t text-center"><button type="button" onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerPhone(''); setPropManagerPhone(''); setShowAddPropModal(true);}} className="text-xs font-bold text-slate-600 hover:text-emerald-700">➕ Daftarkan Kos Baru</button></div>
           </div>
         </main>
       ) : (
@@ -158,11 +161,12 @@ export default function OwnerDashboard() {
               <div className="flex flex-wrap gap-2">
                 {isOwner && (
                   <>
-                    <button onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerName(''); setPropManagerName(''); setShowAddPropModal(true);}} className="px-3 py-2 bg-emerald-700 text-white text-xs font-bold rounded-lg">➕ Tambah Kos</button>
-                    <button onClick={()=>{setEditingProperty(activeProperty); setPropName(activeProperty.name); setPropTotalRooms(activeProperty.total_rooms||10); setPropAddress(activeProperty.address||''); setPropOwnerName(activeProperty.owner_name||''); setPropOwnerPhone(activeProperty.owner_phone||''); setPropManagerName(activeProperty.manager_name||''); setPropManagerPhone(activeProperty.manager_phone||''); setPropBankName(activeProperty.bank_name||''); setPropBankAcc(activeProperty.bank_account_number||''); setPropPin(activeProperty.pin_code||''); setShowAddPropModal(true);}} className="px-3 py-2 bg-white border text-slate-800 text-xs font-bold rounded-lg">✏️ Edit Kos</button>
+                    <button onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerPhone(''); setPropManagerPhone(''); setShowAddPropModal(true);}} className="px-3 py-2 bg-emerald-700 text-white text-xs font-bold rounded-lg">➕ Tambah Kos</button>
+                    <button onClick={()=>{setEditingProperty(activeProperty); setPropName(activeProperty.name); setPropTotalRooms(activeProperty.total_rooms||10); setPropAddress(activeProperty.address||''); setPropOwnerPhone(activeProperty.owner_phone||''); setPropManagerPhone(activeProperty.manager_phone||''); setPropPin(activeProperty.pin_code||''); setShowAddPropModal(true);}} className="px-3 py-2 bg-white border text-slate-800 text-xs font-bold rounded-lg">✏️ Edit Kos</button>
                     <button onClick={()=>{setEditingRulesProp(activeProperty); setRulesText(activeProperty.house_rules||'');}} className="px-3 py-2 bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-lg">📜 Tata Tertib</button>
                   </>
                 )}
+                {/* FIX: KLIK KELUAR KE HOME */}
                 <button onClick={()=>{window.location.href='/';}} className="px-3 py-2 bg-red-50 text-red-700 text-xs font-bold rounded-lg">🔒 Keluar</button>
               </div>
             </header>
@@ -185,10 +189,13 @@ export default function OwnerDashboard() {
             {/* TAB PENYEWA */}
             {activeTab === 'penyewa' && (
                <div className="bg-white p-5 rounded-b-3xl rounded-tr-3xl border -mt-1 space-y-4">
-                 <div className="flex justify-between items-center border-b pb-3">
+                 
+                 {/* FIX: HEADER DENGAN TOMBOL WA LINK YANG SELALU MUNCUL DI MOBILE & DESKTOP */}
+                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b pb-3 gap-3">
                    <h3 className="font-black text-lg">Daftar Penghuni</h3>
-                   <div className="flex gap-2">
-                     {isOwner&&<button onClick={handleExportOwner} className="px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hidden md:block">📥 Export CSV</button>}
+                   <div className="flex gap-2 w-full md:w-auto">
+                     <button onClick={()=>handleShareWA(activeProperty)} className="flex-1 md:flex-none px-4 py-2 bg-emerald-100 text-emerald-900 border border-emerald-300 text-xs font-bold rounded-lg cursor-pointer">💬 Link Check-In WA</button>
+                     {isOwner && <button onClick={handleExportOwner} className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg cursor-pointer">📥 Export CSV</button>}
                    </div>
                  </div>
                  
@@ -213,6 +220,7 @@ export default function OwnerDashboard() {
                        </div>
                      </div>
                    ))}
+                   {tenants.length === 0 && <p className="text-center text-slate-400 font-bold py-6">Belum ada penyewa.</p>}
                  </div>
 
                  {/* Table Desktop */}
@@ -301,26 +309,35 @@ export default function OwnerDashboard() {
 
       {/* 1. Modal Form Properti (FIX NAMA OWNER & PENGELOLA) */}
       {showAddPropModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border">
-            <div className="p-5 bg-slate-900 text-white flex justify-between sticky top-0 z-10"><h3 className="font-black">{editingProperty ? 'Edit Properti' : 'Pendaftaran Kos Baru'}</h3><button onClick={()=>{setShowAddPropModal(false);setEditingProperty(null);}} className="font-bold text-xl hover:text-red-400">✕</button></div>
-            <form onSubmit={handlePropFormSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
-              <input type="text" required placeholder="Nama Kos / Properti" value={propName} onChange={e=>setPropName(e.target.value)} className="w-full p-3 border rounded-xl font-bold bg-white" />
-              <input type="number" required placeholder="Total Kamar" value={propTotalRooms} onChange={e=>setPropTotalRooms(parseInt(e.target.value,10)||1)} className="w-full p-3 border rounded-xl font-bold bg-white" />
-              <input type="text" placeholder="Alamat Kos Lengkap" value={propAddress} onChange={e=>setPropAddress(e.target.value)} className="w-full p-3 border rounded-xl bg-white" />
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-50 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border">
+            {/* Header Modal */}
+            <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
+              <h3 className="font-black text-sm">{editingProperty ? 'Edit Properti' : 'Pendaftaran Kos Baru'}</h3>
+              <button onClick={()=>{setShowAddPropModal(false);setEditingProperty(null);}} className="font-bold text-lg leading-none hover:text-red-400">✕</button>
+            </div>
+            
+            {/* Form Body */}
+            <form onSubmit={handlePropFormSubmit} className="p-4 space-y-3 text-sm">
+              <input type="text" required placeholder="Nama Kos / Properti" value={propName} onChange={e=>setPropName(e.target.value)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl font-bold bg-white outline-none" />
+              <input type="number" required placeholder="10" value={propTotalRooms} onChange={e=>setPropTotalRooms(parseInt(e.target.value,10)||1)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl font-bold bg-white outline-none" />
+              <input type="text" placeholder="Alamat Kos Lengkap" value={propAddress} onChange={e=>setPropAddress(e.target.value)} className="w-full p-2.5 border-2 border-slate-800 rounded-xl bg-white outline-none" />
               
-              <div className="p-4 border rounded-xl space-y-3 bg-white">
-                <p className="text-xs font-bold text-slate-700 uppercase tracking-widest border-b pb-1">Akses & Manajemen:</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="text" placeholder="Nama Owner" value={propOwnerName} onChange={e=>setPropOwnerName(e.target.value)} className="w-full p-2 border rounded" />
-                  <input type="tel" placeholder="WA Owner" value={propOwnerPhone} onChange={e=>setPropOwnerPhone(e.target.value)} className="w-full p-2 border rounded font-mono" />
-                  <input type="text" placeholder="Nama Pengelola" value={propManagerName} onChange={e=>setPropManagerName(e.target.value)} className="w-full p-2 border rounded mt-1" />
-                  <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setPropManagerPhone(e.target.value)} className="w-full p-2 border rounded font-mono mt-1" />
-                </div>
+              {/* Kotak Akses WA (Persis Seperti Screenshot) */}
+              <div className="p-3 border-2 border-slate-800 rounded-xl space-y-2 bg-white">
+                <p className="text-[10px] font-black text-slate-800">Akses No WA:</p>
+                <input type="tel" placeholder="WA Owner" value={propOwnerPhone} onChange={e=>setPropOwnerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
+                <input type="tel" placeholder="WA Pengelola" value={propManagerPhone} onChange={e=>setManagerPhone(e.target.value)} className="w-full p-2 border-2 border-slate-800 rounded-lg font-mono outline-none" />
               </div>
 
-              <input type="text" maxLength={4} required placeholder="Buat PIN 4 Digit" value={propPin} onChange={e=>setPropPin(e.target.value.replace(/\D/g,''))} className="w-full p-4 border border-emerald-400 rounded-2xl font-mono text-center tracking-[0.8em] font-black text-2xl bg-white focus:border-emerald-600 outline-none" />
-              <button type="submit" disabled={submittingProp} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl">Simpan Data</button>
+              {/* Kotak PIN (Persis Seperti Screenshot) */}
+              <div className="pt-1">
+                <input type="text" maxLength={4} required placeholder="Buat PIN 4 Digit" value={propPin} onChange={e=>setPropPin(e.target.value.replace(/\D/g,''))} className="w-full p-3 border-2 border-slate-400 rounded-full font-mono text-center tracking-[0.8em] font-black text-xl bg-white text-slate-400 focus:text-slate-900 focus:border-slate-800 outline-none" />
+              </div>
+              
+              <div className="pt-2">
+                <button type="submit" disabled={submittingProp} className="w-full py-3 bg-slate-900 text-white font-black rounded-xl">Simpan Data</button>
+              </div>
             </form>
           </div>
         </div>
