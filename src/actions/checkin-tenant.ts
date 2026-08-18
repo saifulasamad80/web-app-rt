@@ -5,7 +5,17 @@ import { revalidatePath } from 'next/cache';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey, { auth: { persistSession: false } });
+
+// ============================================================================
+// FIX MUTLAK: MEMATIKAN CACHE NEXT.JS AGAR DATA REAL-TIME 100% AKURAT
+// ============================================================================
+const supabase = createClient(supabaseUrl, supabaseServiceKey, { 
+  auth: { persistSession: false },
+  global: {
+    // Memaksa setiap query ke database tidak boleh menggunakan cache memori lama
+    fetch: (url, options) => fetch(url, { ...options, cache: 'no-store' })
+  }
+});
 
 function cleanDigits(phone?: string): string { return phone ? phone.replace(/\D/g, '') : ''; }
 
@@ -200,21 +210,21 @@ export async function addMemberSusulan(formData: FormData) {
   } catch (err: any) { return { success: false, error: err.message }; }
 }
 
-
-// ============================================================================
-// FIX SUPER KETAT: PENGECEKAN KAMAR ANTI-ERROR TIPE DATA
-// ============================================================================
+// Mengecek ketersediaan dengan bypass cache mutlak di parameter agar selalu fresh
 export async function checkRoomAvailability(propertyId: string, roomNumber: string) {
   if (!propertyId || !roomNumber) return { available: true };
   
-  // Tarik semua kamar di properti ini beserta statusnya (Tanpa filter 'in' dari database agar aman)
-  const { data, error } = await supabase.from('tenants').select('room_number, status').eq('property_id', propertyId);
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('room_number, status')
+    .eq('property_id', propertyId)
+    .neq('id', `cache-bypass-${Date.now()}`); // Force URL unik agar Next.js tidak pakai memori
+    
   if (error || !data) return { available: true }; 
   
   const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
   const targetRoom = String(roomNumber).toLowerCase().trim();
 
-  // Cocokkan manual di JavaScript (Ubah jadi teks dulu biar nggak crash kalau ketemu Integer)
   const isTaken = data.some(t => {
     const tStatus = String(t.status || '').toUpperCase().trim();
     if (!activeStatuses.includes(tStatus)) return false;
@@ -232,11 +242,14 @@ export async function submitMultiTenantsStrict(formData: FormData) {
     const room_number = (formData.get('room_number') as string) || ''; 
     const entry_date = (formData.get('entry_date') as string) || new Date().toISOString().slice(0, 10);
     
-    // ============================================================================
-    // FIX SUPER KETAT: VALIDASI LAPIS KEDUA SEBELUM INSERT
-    // ============================================================================
+    // LAPIS KEDUA PENGAMAN (Jika masih diterobos juga, akan diblok sebelum di-save ke DB)
     if (room_number) {
-        const { data: exist } = await supabase.from('tenants').select('room_number, status').eq('property_id', property_id);
+        const { data: exist } = await supabase
+           .from('tenants')
+           .select('room_number, status')
+           .eq('property_id', property_id)
+           .neq('id', `cache-bypass-${Date.now()}`); // Force URL unik
+           
         if (exist) {
             const targetRoom = String(room_number).toLowerCase().trim();
             const activeStatuses = ['PENDING', 'VERIFIED', 'ACTIVE'];
@@ -244,13 +257,11 @@ export async function submitMultiTenantsStrict(formData: FormData) {
             const isTaken = exist.some(t => {
                 const tStatus = String(t.status || '').toUpperCase().trim();
                 if (!activeStatuses.includes(tStatus)) return false;
-                
                 const tRoom = String(t.room_number || '').toLowerCase().trim();
                 return tRoom === targetRoom;
             });
 
             if (isTaken) {
-                // Tendang kembali ke frontend kalau kamar udah ada yang punya!
                 return { success: false, data: [], error: `Pendaftaran Ditolak: Kamar / Posisi "${room_number}" saat ini sudah terisi atau sedang dalam antrean pendaftaran. Hubungi pengelola.` };
             }
         }
