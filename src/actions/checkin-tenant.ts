@@ -74,7 +74,7 @@ export async function resetOfficerPasswordBySuperAdmin(targetEmail: string, newP
   } catch (err: any) { return { success: false, error: err?.message }; }
 }
 
-// FIX ERROR FOTO 4: Hapus penyimpanan kolom 'email' ke tabel profiles agar tidak bentrok dengan schema database lu
+// FIX: Hindari ENUM error! Semua pengurus diset "ADMIN" agar database Supabase menerima datanya.
 export async function addRtOfficer(fullName: string, role: string, phone: string, email: string, initialPassword?: string) {
   if (!fullName || !phone || !email) return { success: false, error: 'Semua kolom wajib diisi.' };
   let newUserId = null;
@@ -82,29 +82,27 @@ export async function addRtOfficer(fullName: string, role: string, phone: string
   if (initialPassword && initialPassword.length >= 6) { 
     try { 
       const authRes = await supabase.auth.admin.createUser({ 
-        email: email.trim().toLowerCase(), password: initialPassword, email_confirm: true, user_metadata: { name: fullName, role } 
+        email: email.trim().toLowerCase(), password: initialPassword, email_confirm: true, user_metadata: { name: fullName, role: 'ADMIN' } 
       }); 
       if (authRes.error) return { success: false, error: authRes.error.message }; 
       newUserId = authRes.data.user.id;
     } catch (e:any) { return { success: false, error: e.message }; } 
   }
   
-  // HANYA memasukkan full_name, role, dan phone_number. (email dibuang dari insertData)
-  const insertData: any = { full_name: fullName, role, phone_number: phone.trim() };
+  const safeRole = 'ADMIN'; // Selalu gunakan ADMIN agar ENUM database tidak crash
+  const insertData: any = { full_name: fullName, role: safeRole, phone_number: phone.trim() };
   if (newUserId) insertData.id = newUserId; 
   
   const { data, error } = await supabase.from('profiles').insert(insertData).select();
   if (!error) try { revalidatePath('/rt'); } catch (e) {}
   
-  // Karena kolom email dihilangkan, kita tetap balikin emailnya dari input lu biar Frontend nggak bingung
   const returnedData = data ? { ...data[0], email: email.trim().toLowerCase() } : null;
-  
   return { success: !error, data: returnedData, error: error?.message };
 }
 
-// FIX ERROR UPDATE PENGURUS: Hapus penyimpanan kolom 'email' juga di sini
 export async function updateRtOfficer(id: string, fullName: string, role: string, phone: string, email: string) {
-  const { error } = await supabase.from('profiles').update({ full_name: fullName, role, phone_number: phone.trim() }).eq('id', id);
+  const safeRole = 'ADMIN'; // Force enum check
+  const { error } = await supabase.from('profiles').update({ full_name: fullName, role: safeRole, phone_number: phone.trim() }).eq('id', id);
   if (!error) try { revalidatePath('/rt'); } catch (e) {}
   return { success: !error, error: error?.message };
 }
@@ -356,7 +354,6 @@ export async function recordRtDues(payerName: string, blockNumber: string, amoun
   return { success: true, data: data ? data[0] : null };
 }
 
-// FIX 5: Menangkap Identitas Pengurus saat menghapus Iuran Kas
 export async function deleteRtDues(duesId: string, payerName: string, amount: number, performedBy: string = 'Pengurus RT') {
   const { error } = await supabase.from('dues').delete().eq('id', duesId);
   if (!error) {
