@@ -28,77 +28,85 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 font-sans pb-24 relative overflow-hidden">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans pb-24 relative overflow-hidden flex items-center justify-center">
+      {/* Background Ornaments untuk kesan modern */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
+      <div className="absolute top-[20%] right-[-10%] w-96 h-96 bg-emerald-100 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
 
-        {/* HEADER CLEAN & MINIMALIS */}
-        <header className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <span className="text-[0.75rem] font-bold px-3 py-1 bg-slate-100 text-slate-600 rounded-full uppercase tracking-wider">
-              Sistem Kependudukan & Lingkungan RT
-            </span>
-            <h1 className="text-[1.5rem] md:text-[2rem] font-black text-slate-900 mt-3">
-              Portal Digital Warga & RT
-            </h1>
-            <p className="text-[0.9rem] text-slate-500 mt-1 font-medium">
-              Pelaporan Warga Pendatang, Manajemen Kos, & Iuran Kas Terpadu
-            </p>
-          </div>
+      <div className="max-w-5xl w-full space-y-8 relative z-10">
+
+        {/* HEADER MODERN & TERPUSAT */}
+        <header className="text-center pt-8 pb-4">
+          <span className="text-[0.65rem] md:text-[0.75rem] font-black px-4 py-1.5 bg-slate-900 text-white rounded-full uppercase tracking-widest shadow-sm">
+            Sistem Kependudukan & Lingkungan RT
+          </span>
+          <h1 className="text-3xl md:text-5xl font-black text-slate-900 mt-6 tracking-tight">
+            Portal Digital <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-emerald-600">Warga & RT</span>
+          </h1>
+          <p className="text-sm md:text-base text-slate-500 mt-4 font-medium max-w-2xl mx-auto leading-relaxed px-4">
+            Platform terpadu untuk pelaporan pendatang, manajemen properti kos/kontrakan, dan pencatatan kas lingkungan secara transparan.
+          </p>
         </header>
 
         {showInstallBanner && (
-          <div className="bg-slate-900 text-white p-5 rounded-3xl shadow-md flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">📲</span>
+          <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 rounded-3xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 transform transition-all hover:scale-[1.01]">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-2xl backdrop-blur-sm">📲</div>
               <div>
-                <h3 className="font-black text-[1rem]">Pasang Aplikasi (PWA)</h3>
-                <p className="text-[0.8rem] text-slate-300">Akses portal lebih cepat layaknya aplikasi native.</p>
+                <h3 className="font-black text-[1.05rem]">Pasang Aplikasi (PWA)</h3>
+                <p className="text-[0.8rem] text-slate-300 font-medium">Akses portal lebih cepat layaknya aplikasi native di HP Anda.</p>
               </div>
             </div>
-            <button onClick={handleInstallClick} className="px-5 py-2.5 bg-white text-slate-900 font-black text-[0.85rem] rounded-xl shadow w-full md:w-auto hover:bg-slate-200 transition-colors">
+            <button onClick={handleInstallClick} className="px-6 py-3 bg-white text-slate-900 font-black text-[0.85rem] rounded-xl shadow-lg w-full md:w-auto hover:bg-slate-100 transition-colors">
               Install Sekarang
             </button>
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* CARD 1: WARGA */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-slate-100 group-hover:bg-blue-50 text-slate-700 group-hover:text-blue-600 rounded-xl flex items-center justify-center text-xl transition-colors">👤</div>
-              <h2 className="text-[1.1rem] font-black text-slate-900">Portal Warga</h2>
-              <p className="text-[0.85rem] text-slate-500 leading-relaxed">Cek status kependudukan RT, data kamar, tagihan sewa, dan anggota sekamar.</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* CARD 1: WARGA (THEME: BLUE) */}
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group">
+            <div className="space-y-4">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-300">👤</div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Portal Warga</h2>
+                <p className="text-sm text-slate-500 leading-relaxed mt-2 font-medium">Cek status kependudukan, lengkapi dokumen, dan pantau histori tagihan sewa bulanan Anda.</p>
+              </div>
             </div>
-            <Link href="/portal-warga" className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-center rounded-xl text-[0.85rem] transition-colors">Buka Portal Warga</Link>
+            <Link href="/portal-warga" className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-center rounded-xl text-sm shadow-md shadow-blue-600/20 transition-colors">Buka Portal Warga</Link>
           </div>
 
-          {/* CARD 2: OWNER */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-slate-100 group-hover:bg-amber-50 text-slate-700 group-hover:text-amber-600 rounded-xl flex items-center justify-center text-xl transition-colors">🏢</div>
-              <h2 className="text-[1.1rem] font-black text-slate-900">Dasbor Pemilik Kos</h2>
-              <p className="text-[0.85rem] text-slate-500 leading-relaxed">Kelola unit kos, pantau laba bersih, okupansi, dan catat pengeluaran operasional.</p>
+          {/* CARD 2: OWNER (THEME: AMBER) */}
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group">
+            <div className="space-y-4">
+              <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-300">🏢</div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Pemilik Kos</h2>
+                <p className="text-sm text-slate-500 leading-relaxed mt-2 font-medium">Kelola kamar, pantau tingkat okupansi, pencatatan lunas/belum, dan buku kas operasional.</p>
+              </div>
             </div>
-            <Link href="/owner" className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-center rounded-xl text-[0.85rem] transition-colors">Masuk Dasbor Pemilik</Link>
+            {/* JANJI DITEPATI: Warna Dirubah Jadi Kuning/Amber */}
+            <Link href="/owner" className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-amber-950 font-black text-center rounded-xl text-sm shadow-md shadow-amber-500/20 transition-colors">Masuk Dasbor Pemilik</Link>
           </div>
 
-          {/* CARD 3: RT */}
-          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-5 group">
-            <div className="space-y-3">
-              <div className="w-12 h-12 bg-slate-100 group-hover:bg-emerald-50 text-slate-700 group-hover:text-emerald-600 rounded-xl flex items-center justify-center text-xl transition-colors">🏛️</div>
-              <h2 className="text-[1.1rem] font-black text-slate-900">Portal Pengurus RT</h2>
-              <p className="text-[0.85rem] text-slate-500 leading-relaxed">Buku register warga, verifikasi dokumen UU PDP, kelola pengurus, & kas RT.</p>
+          {/* CARD 3: RT (THEME: EMERALD) */}
+          <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between space-y-6 group">
+            <div className="space-y-4">
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl group-hover:scale-110 transition-transform duration-300">🏛️</div>
+              <div>
+                <h2 className="text-xl font-black text-slate-900">Pengurus RT</h2>
+                <p className="text-sm text-slate-500 leading-relaxed mt-2 font-medium">Validasi warga baru, manajemen pengurus, keamanan data audit, dan rekapitulasi kas lingkungan.</p>
+              </div>
             </div>
-            {/* FIX BUG LOGIN HANTU: Tombol langsung diarahkan ke /rt */}
-            <Link href="/rt" className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-center rounded-xl text-[0.85rem] transition-colors">Masuk Dasbor RT</Link>
+            <Link href="/rt" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-center rounded-xl text-sm shadow-md shadow-emerald-600/20 transition-colors">Masuk Dasbor RT</Link>
           </div>
         </div>
       </div>
 
-      {/* FLOATING ACTION BUTTON (FAB) PANIC BUTTON - Solusi UI/UX Feedback */}
+      {/* FLOATING ACTION BUTTON (FAB) PANIC BUTTON */}
       <button 
         onClick={() => setShowPanicModal(true)}
-        className="fixed bottom-6 right-6 z-40 w-16 h-16 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-2xl flex items-center justify-center text-3xl transition-transform hover:scale-110 border-4 border-white shadow-red-600/30 cursor-pointer"
+        className="fixed bottom-6 right-6 z-40 w-16 h-16 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-2xl flex items-center justify-center text-3xl transition-transform hover:scale-110 border-4 border-white shadow-red-600/40 cursor-pointer"
         title="Pusat Panggilan Darurat"
       >
         🚨
