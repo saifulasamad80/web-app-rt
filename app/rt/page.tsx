@@ -159,7 +159,8 @@ export default function RtDashboard() {
         </nav>
         <div className="p-4 border-t border-slate-800">
           <div className="mb-4 hidden md:block"><p className="text-[10px] text-slate-500 uppercase font-black">Login Aktif</p><p className="text-xs text-white font-bold truncate">{activeUser?.email}</p></div>
-          <button onClick={()=>{window.location.reload();}} className="w-full py-3 bg-slate-800 hover:bg-red-900 hover:text-red-100 text-slate-400 font-bold text-xs rounded-xl transition-colors">🚪 Keluar Sistem</button>
+          {/* PERBAIKAN: Fungsi Logout diubah menjadi pelemparan ke halaman root (Beranda) */}
+          <button onClick={()=>{window.location.href='/';}} className="w-full py-3 bg-slate-800 hover:bg-red-900 hover:text-red-100 text-slate-400 font-bold text-xs rounded-xl transition-colors">🚪 Keluar Sistem</button>
         </div>
       </aside>
 
@@ -300,7 +301,7 @@ export default function RtDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {officers.map(o => {
                 const isAjipsas = o.email === 'ajipsas@gmail.com';
-                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : 'Pengurus RT';
+                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : o.role === 'SUPER_ADMIN' ? 'Ketua RT' : 'Admin / Staff';
                 
                 return (
                   <div key={o.id} className="bg-white p-6 rounded-3xl border shadow-sm relative overflow-hidden group">
@@ -384,7 +385,6 @@ export default function RtDashboard() {
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center"><h3 className="font-black text-sm">💰 Catat Iuran Warga</h3><button onClick={()=>setShowDuesModal(false)} className="text-xl font-bold hover:text-emerald-200">✕</button></div>
             <form onSubmit={handleAddKas} className="p-6 space-y-4 text-sm bg-slate-50">
               
-              {/* FIX: Dropdown Pengelola & Warga sesuai Skenario Lapangan */}
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
                 <label className="text-[10px] font-black text-emerald-800 uppercase block">Pilih Entitas Penyetor Auto-Fill (Opsional)</label>
                 <select value={selectedTenantKas} onChange={e => {
@@ -395,7 +395,6 @@ export default function RtDashboard() {
                     if (val.startsWith('prop-')) {
                         const p = properties.find(x => x.id === val.replace('prop-', ''));
                         if (p) {
-                            // PRIORITASKAN NAMA PENGELOLA!
                             setDuesPayer(p.manager_name || p.owner_name || `Owner ${p.name}`);
                             setDuesBlock(`Kolektif - ${p.name}`);
                         }
@@ -409,7 +408,6 @@ export default function RtDashboard() {
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
                    <option value="">-- Ketik Manual Atau Pilih Entitas --</option>
                    
-                   {/* Kelompok Pengelola / Pemilik Kos */}
                    <optgroup label="Pengelola Kos (Iuran Kolektif)">
                        {properties.filter(p => p.type === 'kos').map(p => {
                            const repName = p.manager_name ? `${p.manager_name} (Pengelola)` : `${p.owner_name || 'Pemilik'} (Pemilik)`;
@@ -417,7 +415,6 @@ export default function RtDashboard() {
                        })}
                    </optgroup>
                    
-                   {/* Kelompok Penyewa Kontrakan */}
                    <optgroup label="Warga Kontrakan (Iuran Langsung)">
                        {tenants.filter(t => t.is_head && t.properties?.type === 'kontrakan').map(t => (
                            <option key={`ten-${t.id}`} value={`ten-${t.id}`}>{t.name} ({t.properties?.name} - {t.room_number})</option>
@@ -439,7 +436,6 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PENGURUS */}
       {showOfficerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
@@ -453,7 +449,6 @@ export default function RtDashboard() {
                   <input type="text" required placeholder="Cth: Budi Santoso" value={offName} onChange={e=>setOffName(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500" />
                 </div>
                 
-                {/* FIX: Form Hak Akses Digembok Biar Pasti Sukses & Gak Bentrok */}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Peran / Hak Akses</label>
                   <input type="text" disabled value="Pengurus RT (Standar)" className="w-full p-3 border rounded-xl bg-slate-200 font-bold text-slate-500 outline-none" />
