@@ -23,7 +23,6 @@ export default function RtDashboard() {
   const [selectedTenantKas, setSelectedTenantKas] = useState('');
   const [duesPayer, setDuesPayer] = useState(''); const [duesBlock, setDuesBlock] = useState(''); const [duesAmount, setDuesAmount] = useState('50000'); const [duesMonth, setDuesMonth] = useState('Januari'); const [duesYear, setDuesYear] = useState('2026');
 
-  // FIX: Ubah state jadi nyimpen Jabatan, bukan role baku
   const [showOfficerModal, setShowOfficerModal] = useState(false); const [editOfficer, setEditOfficer] = useState<any>(null); const [offName, setOffName] = useState(''); const [offRole, setOffRole] = useState('Ketua RT'); const [offPhone, setOffPhone] = useState(''); const [offEmail, setOffEmail] = useState(''); const [offPass, setOffPass] = useState('');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
@@ -125,9 +124,8 @@ export default function RtDashboard() {
   });
 
   const totalKas = dues.reduce((sum, d) => sum + (Number(d.amount)||0), 0);
-  
-  // FIX: Pembatasan Hak Akses Super Admin hanya untuk lu
-  const isSuperAdmin = activeUser?.email === 'ajipsas@gmail.com';
+  const currentUserProfile = officers.find(o => o.email === activeUser?.email);
+  const isSuperAdmin = currentUserProfile?.role === 'SUPER_ADMIN' || activeUser?.email === 'ajipsas@gmail.com';
 
   if(!isLoggedIn) return (
     <main className="min-h-screen bg-slate-900 font-sans flex items-center justify-center p-4">
@@ -387,6 +385,7 @@ export default function RtDashboard() {
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center"><h3 className="font-black text-sm">💰 Catat Iuran Warga</h3><button onClick={()=>setShowDuesModal(false)} className="text-xl font-bold hover:text-emerald-200">✕</button></div>
             <form onSubmit={handleAddKas} className="p-6 space-y-4 text-sm bg-slate-50">
               
+              {/* FIX: Memecah Dropdown menjadi 3 Kategori (Pemilik, Pengelola, Kontrakan) */}
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
                 <label className="text-[10px] font-black text-emerald-800 uppercase block">Pilih Entitas Penyetor Auto-Fill (Opsional)</label>
                 <select value={selectedTenantKas} onChange={e => {
@@ -394,11 +393,16 @@ export default function RtDashboard() {
                     setSelectedTenantKas(val);
                     if (!val) { setDuesPayer(''); setDuesBlock(''); return; }
 
-                    if (val.startsWith('prop-')) {
-                        const p = properties.find(x => x.id === val.replace('prop-', ''));
+                    if (val.startsWith('owner-')) {
+                        const p = properties.find(x => x.id === val.replace('owner-', ''));
                         if (p) {
-                            // PRIORITASKAN NAMA PENGELOLA!
-                            setDuesPayer(p.manager_name || p.owner_name || `Owner ${p.name}`);
+                            setDuesPayer(p.owner_name || `Pemilik ${p.name}`);
+                            setDuesBlock(`Kolektif - ${p.name}`);
+                        }
+                    } else if (val.startsWith('manager-')) {
+                        const p = properties.find(x => x.id === val.replace('manager-', ''));
+                        if (p) {
+                            setDuesPayer(p.manager_name || `Pengelola ${p.name}`);
                             setDuesBlock(`Kolektif - ${p.name}`);
                         }
                     } else if (val.startsWith('ten-')) {
@@ -411,11 +415,16 @@ export default function RtDashboard() {
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
                    <option value="">-- Ketik Manual Atau Pilih Entitas --</option>
                    
-                   <optgroup label="Pengelola / Pemilik Kos (Iuran Kolektif)">
-                       {properties.filter(p => p.type === 'kos').map(p => {
-                           const repName = p.manager_name ? `${p.manager_name} (Pengelola)` : `${p.owner_name || 'Pemilik'} (Pemilik)`;
-                           return <option key={`prop-${p.id}`} value={`prop-${p.id}`}>{repName} - {p.name}</option>;
-                       })}
+                   <optgroup label="Pemilik Kos (Iuran Kolektif)">
+                       {properties.filter(p => p.type === 'kos').map(p => (
+                           <option key={`owner-${p.id}`} value={`owner-${p.id}`}>{p.owner_name || 'Pemilik'} - {p.name}</option>
+                       ))}
+                   </optgroup>
+
+                   <optgroup label="Pengelola Kos (Iuran Kolektif)">
+                       {properties.filter(p => p.type === 'kos' && p.manager_name && p.manager_name.trim() !== '').map(p => (
+                           <option key={`manager-${p.id}`} value={`manager-${p.id}`}>{p.manager_name} - {p.name}</option>
+                       ))}
                    </optgroup>
                    
                    <optgroup label="Warga Kontrakan (Iuran Langsung)">
@@ -439,7 +448,6 @@ export default function RtDashboard() {
         </div>
       )}
 
-      {/* MODAL TAMBAH PENGURUS */}
       {showOfficerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
@@ -453,7 +461,6 @@ export default function RtDashboard() {
                   <input type="text" required placeholder="Cth: Budi Santoso" value={offName} onChange={e=>setOffName(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500" />
                 </div>
                 
-                {/* FIX: Memasukkan Jabatan Bebas dari Dropdown */}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Jabatan Kepengurusan</label>
                   <select value={offRole} onChange={e=>setOffRole(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500">
