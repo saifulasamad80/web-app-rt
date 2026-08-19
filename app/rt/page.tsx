@@ -79,7 +79,6 @@ export default function RtDashboard() {
     }
   };
 
-  // FIX FOTO 5: Ngirim nama user ke backend biar Audit Log-nya nyatet nama adminnya!
   const handleDeleteKas = async (d: any) => {
     if(confirm(`Hapus pencatatan Rp ${d.amount} dari ${d.payer_name}?`)){ 
       await deleteRtDues(d.id, d.payer_name, d.amount, activeUser?.email || 'Admin RT'); 
@@ -91,11 +90,12 @@ export default function RtDashboard() {
   const handleOfficerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(editOfficer){ 
-      const res=await updateRtOfficer(editOfficer.id, offName, offRole, offPhone, offEmail); 
-      if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:offRole, phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } 
+      // Selalu kirim 'ADMIN' ke Supabase, menghindari error enum SUPER_ADMIN
+      const res=await updateRtOfficer(editOfficer.id, offName, 'ADMIN', offPhone, offEmail); 
+      if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:'ADMIN', phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } 
       else { alert(res.error || 'Gagal mengubah data pengurus.'); }
     } else { 
-      const res=await addRtOfficer(offName, offRole, offPhone, offEmail, offPass); 
+      const res=await addRtOfficer(offName, 'ADMIN', offPhone, offEmail, offPass); 
       if(res.success && res.data){ setOfficers([...officers, res.data]); setShowOfficerModal(false); } 
       else { alert(`Gagal menambah pengurus!\nAlasan: ${res.error || 'Terjadi kesalahan sistem.'}`); }
     }
@@ -125,8 +125,9 @@ export default function RtDashboard() {
   });
 
   const totalKas = dues.reduce((sum, d) => sum + (Number(d.amount)||0), 0);
-  const currentUserProfile = officers.find(o => o.email === activeUser?.email);
-  const isSuperAdmin = currentUserProfile?.role === 'SUPER_ADMIN' || activeUser?.email === 'ajipsas@gmail.com';
+  
+  // FIX: Validasi Hak Akses Khusus untuk Lu (ajipsas@gmail.com) sebagai Super Admin Tunggal
+  const isSuperAdmin = activeUser?.email === 'ajipsas@gmail.com';
 
   if(!isLoggedIn) return (
     <main className="min-h-screen bg-slate-900 font-sans flex items-center justify-center p-4">
@@ -251,16 +252,17 @@ export default function RtDashboard() {
                     <div className="flex justify-between text-xs"><span className="text-slate-400 font-bold">Kapasitas:</span><span className="font-black text-slate-700">{p.total_rooms} Kamar</span></div>
                   </div>
                   
-                  <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-3xl">
-                    <div>
-                      {isSuperAdmin && <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>}
-                    </div>
-                    {isSuperAdmin && (
+                  {isSuperAdmin && (
+                    <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center bg-slate-50 -mx-6 -mb-6 p-4 rounded-b-3xl">
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-bold uppercase block">PIN AKSES SAAT INI</span>
+                        <span className="font-mono text-slate-800 text-base font-black tracking-widest">****</span>
+                      </div>
                       <button onClick={() => handleResetPropPin(p.id, p.pin_code, p.name)} className="text-[10px] bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold px-3 py-1.5 rounded-lg border border-amber-300">
                         Ubah PIN
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -296,23 +298,25 @@ export default function RtDashboard() {
           <div className="space-y-4 animate-fade-in">
             <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border">
               <div><h2 className="text-xl font-black text-slate-900">Manajemen Pengurus RT</h2><p className="text-xs text-slate-500 font-medium mt-1">Daftar pengguna yang memiliki akses dasbor ini.</p></div>
-              <button onClick={()=>{setEditOfficer(null); setOffName(''); setOffPhone(''); setOffEmail(''); setOffRole('ADMIN'); setShowOfficerModal(true);}} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">➕ Tambah Akun</button>
+              {isSuperAdmin && (
+                <button onClick={()=>{setEditOfficer(null); setOffName(''); setOffPhone(''); setOffEmail(''); setOffRole('ADMIN'); setShowOfficerModal(true);}} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">➕ Tambah Akun</button>
+              )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {officers.map(o => {
                 const isAjipsas = o.email === 'ajipsas@gmail.com';
-                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : o.role === 'SUPER_ADMIN' ? 'Ketua RT' : 'Admin / Staff';
+                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : 'Pengurus RT';
                 
                 return (
                   <div key={o.id} className="bg-white p-6 rounded-3xl border shadow-sm relative overflow-hidden group">
-                    <div className={`absolute top-0 left-0 w-1.5 h-full ${o.role==='SUPER_ADMIN'?'bg-purple-500':'bg-blue-500'}`}></div>
+                    <div className={`absolute top-0 left-0 w-1.5 h-full ${isAjipsas?'bg-purple-500':'bg-blue-500'}`}></div>
                     <div className="pl-3">
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${o.role==='SUPER_ADMIN'?'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{roleLabel}</span>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${isAjipsas?'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{roleLabel}</span>
                       <h3 className="font-black text-lg text-slate-900 mt-2">{o.full_name}</h3>
                       <p className="text-xs text-slate-500 font-mono mt-1">{o.email}</p>
                       <p className="text-xs text-slate-500 font-mono">{o.phone_number}</p>
                       
-                      {activeUser?.email === 'ajipsas@gmail.com' && !isAjipsas && (
+                      {isSuperAdmin && !isAjipsas && (
                         <div className="mt-4 pt-4 border-t flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <button onClick={()=>{setEditOfficer(o); setOffName(o.full_name); setOffPhone(o.phone_number); setOffEmail(o.email); setOffRole(o.role); setShowOfficerModal(true);}} className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md hover:bg-slate-200">Edit</button>
                           <button onClick={()=>handleResetAdminPass(o.email)} className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md hover:bg-amber-100">Reset Sandi</button>
@@ -385,6 +389,7 @@ export default function RtDashboard() {
             <div className="p-5 bg-emerald-600 text-white flex justify-between items-center"><h3 className="font-black text-sm">💰 Catat Iuran Warga</h3><button onClick={()=>setShowDuesModal(false)} className="text-xl font-bold hover:text-emerald-200">✕</button></div>
             <form onSubmit={handleAddKas} className="p-6 space-y-4 text-sm bg-slate-50">
               
+              {/* FIX: DROPDOWN IURAN (Auto-fill Pemilik, Pengelola, & Kontrakan) */}
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
                 <label className="text-[10px] font-black text-emerald-800 uppercase block">Pilih Entitas Penyetor Auto-Fill (Opsional)</label>
                 <select value={selectedTenantKas} onChange={e => {
@@ -392,26 +397,32 @@ export default function RtDashboard() {
                     setSelectedTenantKas(val);
                     if (!val) { setDuesPayer(''); setDuesBlock(''); return; }
 
-                    if (val.startsWith('prop-')) {
+                    if (val.startsWith('prop-mgr-')) {
+                        const p = properties.find(x => x.id === val.replace('prop-mgr-', ''));
+                        if (p) { setDuesPayer(p.manager_name || `Pengelola ${p.name}`); setDuesBlock(`Kolektif - ${p.name}`); }
+                    } else if (val.startsWith('prop-own-')) {
+                        const p = properties.find(x => x.id === val.replace('prop-own-', ''));
+                        if (p) { setDuesPayer(p.owner_name || `Owner ${p.name}`); setDuesBlock(`Kolektif - ${p.name}`); }
+                    } else if (val.startsWith('prop-')) {
                         const p = properties.find(x => x.id === val.replace('prop-', ''));
-                        if (p) {
-                            setDuesPayer(p.owner_name || p.manager_name || `Owner ${p.name}`);
-                            setDuesBlock(`Kolektif - ${p.name}`);
-                        }
+                        if (p) { setDuesPayer(p.owner_name || p.manager_name || `Owner ${p.name}`); setDuesBlock(`Kolektif - ${p.name}`); }
                     } else if (val.startsWith('ten-')) {
                         const t = tenants.find(x => x.id === val.replace('ten-', ''));
-                        if (t) {
-                            setDuesPayer(t.name);
-                            setDuesBlock(`${t.properties?.name || 'Kontrakan'} - Kamar ${t.room_number}`);
-                        }
+                        if (t) { setDuesPayer(t.name); setDuesBlock(`${t.properties?.name || 'Kontrakan'} - Kamar ${t.room_number}`); }
                     }
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
                    <option value="">-- Ketik Manual Atau Pilih Entitas --</option>
-                   <optgroup label="Pemilik Kos (Iuran Kolektif)">
-                       {properties.filter(p => p.type === 'kos').map(p => (
-                           <option key={`prop-${p.id}`} value={`prop-${p.id}`}>{p.owner_name || p.manager_name || 'Owner'} ({p.name})</option>
-                       ))}
+                   
+                   <optgroup label="Pengelola / Pemilik Kos (Kolektif)">
+                       {properties.filter(p => p.type === 'kos').flatMap(p => {
+                           const opts = [];
+                           if (p.manager_name) opts.push(<option key={`prop-mgr-${p.id}`} value={`prop-mgr-${p.id}`}>{p.manager_name} (Pengelola {p.name})</option>);
+                           if (p.owner_name) opts.push(<option key={`prop-own-${p.id}`} value={`prop-own-${p.id}`}>{p.owner_name} (Pemilik {p.name})</option>);
+                           if (!p.manager_name && !p.owner_name) opts.push(<option key={`prop-${p.id}`} value={`prop-${p.id}`}>Owner ({p.name})</option>);
+                           return opts;
+                       })}
                    </optgroup>
+                   
                    <optgroup label="Warga Kontrakan (Iuran Langsung)">
                        {tenants.filter(t => t.is_head && t.properties?.type === 'kontrakan').map(t => (
                            <option key={`ten-${t.id}`} value={`ten-${t.id}`}>{t.name} ({t.properties?.name} - {t.room_number})</option>
@@ -445,10 +456,13 @@ export default function RtDashboard() {
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Nama Lengkap</label>
                   <input type="text" required placeholder="Cth: Budi Santoso" value={offName} onChange={e=>setOffName(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500" />
                 </div>
+                
+                {/* FIX: Form Jabatan di-kunci jadi 'Pengurus RT' buat hindari error DB */}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Peran / Jabatan</label>
-                  <select value={offRole} onChange={e=>setOffRole(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500"><option value="ADMIN">Admin / Staff</option><option value="SUPER_ADMIN">Ketua RT (Akses Penuh)</option></select>
+                  <input type="text" disabled value="Pengurus RT" className="w-full p-3 border rounded-xl bg-slate-200 font-bold text-slate-600 outline-none" />
                 </div>
+                
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">No. WhatsApp</label>
                   <input type="tel" required placeholder="08xxxxxxxx" value={offPhone} onChange={e=>setOffPhone(e.target.value.replace(/\D/g,''))} className="w-full p-3 border rounded-xl bg-slate-50 font-mono outline-none focus:border-blue-500" />
