@@ -23,7 +23,8 @@ export default function RtDashboard() {
   const [selectedTenantKas, setSelectedTenantKas] = useState('');
   const [duesPayer, setDuesPayer] = useState(''); const [duesBlock, setDuesBlock] = useState(''); const [duesAmount, setDuesAmount] = useState('50000'); const [duesMonth, setDuesMonth] = useState('Januari'); const [duesYear, setDuesYear] = useState('2026');
 
-  const [showOfficerModal, setShowOfficerModal] = useState(false); const [editOfficer, setEditOfficer] = useState<any>(null); const [offName, setOffName] = useState(''); const [offRole, setOffRole] = useState('ADMIN'); const [offPhone, setOffPhone] = useState(''); const [offEmail, setOffEmail] = useState(''); const [offPass, setOffPass] = useState('');
+  // FIX: Ubah state jadi nyimpen Jabatan, bukan role baku
+  const [showOfficerModal, setShowOfficerModal] = useState(false); const [editOfficer, setEditOfficer] = useState<any>(null); const [offName, setOffName] = useState(''); const [offRole, setOffRole] = useState('Ketua RT'); const [offPhone, setOffPhone] = useState(''); const [offEmail, setOffEmail] = useState(''); const [offPass, setOffPass] = useState('');
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoginLoading(true); setLoginError('');
@@ -91,12 +92,12 @@ export default function RtDashboard() {
     e.preventDefault();
     if(editOfficer){ 
       const res=await updateRtOfficer(editOfficer.id, offName, offRole, offPhone, offEmail); 
-      if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:'ADMIN', phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } 
+      if(res.success){ setOfficers(officers.map(o=>o.id===editOfficer.id?{...o, full_name:offName, role:offRole, phone_number:offPhone, email:offEmail}:o)); setShowOfficerModal(false); } 
       else { alert(res.error || 'Gagal mengubah data pengurus.'); }
     } else { 
       const res=await addRtOfficer(offName, offRole, offPhone, offEmail, offPass); 
       if(res.success && res.data){ setOfficers([...officers, res.data]); setShowOfficerModal(false); } 
-      else { alert(`Gagal menambah pengurus!\nAlasan: ${res.error || 'Terjadi kesalahan sistem.'}`); }
+      else { alert(`Gagal menambah pengurus!\nAlasan: Email mungkin sudah terdaftar, atau Tipe Kolom "role" di Supabase belum diubah jadi "text".`); }
     }
   };
 
@@ -124,8 +125,9 @@ export default function RtDashboard() {
   });
 
   const totalKas = dues.reduce((sum, d) => sum + (Number(d.amount)||0), 0);
-  const currentUserProfile = officers.find(o => o.email === activeUser?.email);
-  const isSuperAdmin = currentUserProfile?.role === 'SUPER_ADMIN' || activeUser?.email === 'ajipsas@gmail.com';
+  
+  // FIX: Pembatasan Hak Akses Super Admin hanya untuk lu
+  const isSuperAdmin = activeUser?.email === 'ajipsas@gmail.com';
 
   if(!isLoggedIn) return (
     <main className="min-h-screen bg-slate-900 font-sans flex items-center justify-center p-4">
@@ -159,7 +161,6 @@ export default function RtDashboard() {
         </nav>
         <div className="p-4 border-t border-slate-800">
           <div className="mb-4 hidden md:block"><p className="text-[10px] text-slate-500 uppercase font-black">Login Aktif</p><p className="text-xs text-white font-bold truncate">{activeUser?.email}</p></div>
-          {/* PERBAIKAN: Fungsi Logout diubah menjadi pelemparan ke halaman root (Beranda) */}
           <button onClick={()=>{window.location.href='/';}} className="w-full py-3 bg-slate-800 hover:bg-red-900 hover:text-red-100 text-slate-400 font-bold text-xs rounded-xl transition-colors">🚪 Keluar Sistem</button>
         </div>
       </aside>
@@ -296,25 +297,26 @@ export default function RtDashboard() {
           <div className="space-y-4 animate-fade-in">
             <div className="flex justify-between items-center bg-white p-5 rounded-3xl shadow-sm border">
               <div><h2 className="text-xl font-black text-slate-900">Manajemen Pengurus RT</h2><p className="text-xs text-slate-500 font-medium mt-1">Daftar pengguna yang memiliki akses dasbor ini.</p></div>
-              <button onClick={()=>{setEditOfficer(null); setOffName(''); setOffPhone(''); setOffEmail(''); setOffRole('ADMIN'); setShowOfficerModal(true);}} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">➕ Tambah Akun</button>
+              <button onClick={()=>{setEditOfficer(null); setOffName(''); setOffPhone(''); setOffEmail(''); setOffRole('Ketua RT'); setShowOfficerModal(true);}} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-colors">➕ Tambah Akun</button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {officers.map(o => {
                 const isAjipsas = o.email === 'ajipsas@gmail.com';
-                const roleLabel = isAjipsas ? 'Super Admin / Web Dev' : o.role === 'SUPER_ADMIN' ? 'Ketua RT' : 'Admin / Staff';
+                const hakAksesLabel = isAjipsas ? 'SUPER ADMIN' : 'ADMIN';
+                const jabatanLabel = isAjipsas ? 'Web Developer' : o.role || 'Pengurus';
                 
                 return (
                   <div key={o.id} className="bg-white p-6 rounded-3xl border shadow-sm relative overflow-hidden group">
                     <div className={`absolute top-0 left-0 w-1.5 h-full ${isAjipsas ? 'bg-purple-500':'bg-blue-500'}`}></div>
                     <div className="pl-3">
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${isAjipsas ? 'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{roleLabel}</span>
-                      <h3 className="font-black text-lg text-slate-900 mt-2">{o.full_name}</h3>
-                      <p className="text-xs text-slate-500 font-mono mt-1">{o.email}</p>
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${isAjipsas ? 'bg-purple-100 text-purple-800':'bg-blue-100 text-blue-800'}`}>{hakAksesLabel}</span>
+                      <h3 className="font-black text-lg text-slate-900 mt-2">{o.full_name} <span className="text-[11px] font-semibold text-slate-500 block">({jabatanLabel})</span></h3>
+                      <p className="text-xs text-slate-500 font-mono mt-2">{o.email}</p>
                       <p className="text-xs text-slate-500 font-mono">{o.phone_number}</p>
                       
-                      {activeUser?.email === 'ajipsas@gmail.com' && !isAjipsas && (
+                      {isSuperAdmin && !isAjipsas && (
                         <div className="mt-4 pt-4 border-t flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                          <button onClick={()=>{setEditOfficer(o); setOffName(o.full_name); setOffPhone(o.phone_number); setOffEmail(o.email); setOffRole(o.role); setShowOfficerModal(true);}} className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md hover:bg-slate-200">Edit</button>
+                          <button onClick={()=>{setEditOfficer(o); setOffName(o.full_name); setOffPhone(o.phone_number); setOffEmail(o.email); setOffRole(o.role || 'Ketua RT'); setShowOfficerModal(true);}} className="px-3 py-1.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded-md hover:bg-slate-200">Edit</button>
                           <button onClick={()=>handleResetAdminPass(o.email)} className="px-3 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded-md hover:bg-amber-100">Reset Sandi</button>
                           <button onClick={async ()=>{if(confirm('Hapus admin ini?')){await deleteRtOfficer(o.id); setOfficers(officers.filter(x=>x.id!==o.id));}}} className="px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded-md hover:bg-red-100">Hapus</button>
                         </div>
@@ -395,6 +397,7 @@ export default function RtDashboard() {
                     if (val.startsWith('prop-')) {
                         const p = properties.find(x => x.id === val.replace('prop-', ''));
                         if (p) {
+                            // PRIORITASKAN NAMA PENGELOLA!
                             setDuesPayer(p.manager_name || p.owner_name || `Owner ${p.name}`);
                             setDuesBlock(`Kolektif - ${p.name}`);
                         }
@@ -408,7 +411,7 @@ export default function RtDashboard() {
                 }} className="w-full p-2 border border-emerald-300 rounded-lg bg-white font-bold text-xs text-emerald-900 outline-none focus:border-emerald-600">
                    <option value="">-- Ketik Manual Atau Pilih Entitas --</option>
                    
-                   <optgroup label="Pengelola Kos (Iuran Kolektif)">
+                   <optgroup label="Pengelola / Pemilik Kos (Iuran Kolektif)">
                        {properties.filter(p => p.type === 'kos').map(p => {
                            const repName = p.manager_name ? `${p.manager_name} (Pengelola)` : `${p.owner_name || 'Pemilik'} (Pemilik)`;
                            return <option key={`prop-${p.id}`} value={`prop-${p.id}`}>{repName} - {p.name}</option>;
@@ -436,6 +439,7 @@ export default function RtDashboard() {
         </div>
       )}
 
+      {/* MODAL TAMBAH PENGURUS */}
       {showOfficerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm border shadow-2xl overflow-hidden animate-slide-up">
@@ -443,16 +447,30 @@ export default function RtDashboard() {
             
             <form onSubmit={handleOfficerSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
               <fieldset className="space-y-4 border p-4 rounded-2xl bg-white border-slate-200">
-                <legend className="px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Kredensial Admin</legend>
+                <legend className="px-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">Kredensial Pengurus</legend>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Nama Lengkap</label>
                   <input type="text" required placeholder="Cth: Budi Santoso" value={offName} onChange={e=>setOffName(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500" />
                 </div>
                 
+                {/* FIX: Memasukkan Jabatan Bebas dari Dropdown */}
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Peran / Hak Akses</label>
-                  <input type="text" disabled value="Pengurus RT (Standar)" className="w-full p-3 border rounded-xl bg-slate-200 font-bold text-slate-500 outline-none" />
-                  <p className="text-[10px] text-slate-400 mt-1">Akses penuh (Super Admin) hanya dimiliki oleh Web Developer.</p>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 uppercase">Jabatan Kepengurusan</label>
+                  <select value={offRole} onChange={e=>setOffRole(e.target.value)} className="w-full p-3 border rounded-xl bg-slate-50 font-bold outline-none focus:border-blue-500">
+                    <option value="Ketua RT">Ketua RT</option>
+                    <option value="Wakil Ketua RT">Wakil Ketua RT</option>
+                    <option value="Sekretaris">Sekretaris</option>
+                    <option value="Bendahara">Bendahara</option>
+                    <option value="Seksi Keamanan">Seksi Keamanan</option>
+                    <option value="Seksi Humas">Seksi Humas</option>
+                    <option value="Pengurus Lainnya">Lainnya...</option>
+                  </select>
+                </div>
+
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl space-y-1">
+                  <p className="text-[10px] font-black text-blue-900 uppercase">ℹ️ Info Hak Akses Sistem</p>
+                  <p className="text-xs text-blue-800 font-medium">Mendapatkan hak akses <b>Standar (Admin)</b>: Bisa membaca data warga, memvalidasi, dan mencatat iuran kas.</p>
+                  <p className="text-[10px] text-blue-700 italic">*Akses Super Admin (Ubah PIN, Hapus Data) dikunci hanya untuk Web Developer.</p>
                 </div>
 
                 <div>
