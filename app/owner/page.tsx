@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { loginOwnerDashboard, getOwnerPropertyDetails, createProperty, updateProperty, updateTenantData, deleteTenant, updateHouseRules, updateTenantPaymentStatus, addPropertyExpense, deletePropertyExpense, getOwnerAuditLogs } from '../../src/actions/checkin-tenant';
+import Link from 'next/link';
 
 function cleanDigits(p?: string) { return p ? p.replace(/\D/g, '') : ''; }
 function isPhoneMatch(a?: string, b?: string) { const x=cleanDigits(a); const y=cleanDigits(b); if(!x||!y) return false; return (x.length>=8?x.slice(-9):x) === (y.length>=8?y.slice(-9):y); }
@@ -48,7 +49,7 @@ export default function OwnerDashboard() {
     if(res.success && res.properties && res.properties.length > 0) { 
       setMyProperties(res.properties); setIsLoggedIn(true); setActiveProperty(res.initialDetails?.property); setTenants(res.initialDetails?.tenants||[]); setExpenses(res.initialDetails?.expenses||[]); 
       const al = await getOwnerAuditLogs(); setAuditLogs(al.logs||[]); 
-    } else { setLoginError('Login gagal. Nomor belum terdaftar atau PIN salah.'); }
+    } else { setLoginError('Nomor belum terdaftar atau PIN akses salah.'); }
   };
 
   const handleSelectProperty = async (prop: any) => { setActiveProperty(prop); const d = await getOwnerPropertyDetails(prop.id); if (d.success) { setTenants(d.tenants||[]); setExpenses(d.expenses||[]); } };
@@ -185,19 +186,46 @@ export default function OwnerDashboard() {
   return (
     <>
       {!isLoggedIn ? (
-        <main className="min-h-screen bg-slate-50 p-4 font-sans flex items-center justify-center">
-          <div className="bg-white p-8 rounded-3xl shadow-sm border max-w-sm w-full space-y-6">
-            <div className="w-16 h-16 bg-slate-100 text-slate-700 rounded-full flex items-center justify-center text-3xl mx-auto border">🏢</div>
-            <h2 className="text-xl font-black text-center">Masuk Dasbor Pemilik</h2>
-            {loginError && <div className="text-xs text-red-700 bg-red-50 p-3 rounded-xl border-red-200 font-bold">{loginError}</div>}
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
-              <input type="tel" required placeholder="No WA Terdaftar" value={loginPhone} onChange={e=>setLoginPhone(e.target.value)} className="w-full p-3.5 border rounded-xl font-mono text-sm font-bold bg-slate-50" />
-              <input type="password" required maxLength={4} placeholder="PIN" value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,''))} className="w-full p-3.5 border rounded-xl text-center text-xl tracking-[0.5em] font-black bg-slate-50" />
-              <button type="submit" disabled={loginLoading} className="w-full py-4 bg-slate-900 text-white font-black rounded-xl">Buka Dasbor</button>
+        /* PEROMBAKAN ESTETIKA: Form Login Pemilik Kos (Tema Amber) */
+        <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans flex flex-col justify-center items-center relative overflow-hidden">
+          <div className="max-w-md w-full space-y-6 relative z-10">
+            <header className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex justify-between items-center">
+              <div><h1 className="text-lg font-black text-slate-900">Portal Pemilik Kos</h1></div>
+              <Link href="/" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">🚪 Beranda</Link>
+            </header>
+
+            <form onSubmit={handleLoginSubmit} className="bg-white p-8 rounded-[2rem] shadow-lg shadow-slate-200/50 border border-slate-100 text-center space-y-8 animate-fade-in">
+              <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">🏢</div>
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Akses Dasbor</h2>
+                <p className="text-sm text-slate-500 mt-2 leading-relaxed">Kelola properti dan pantau arus kas secara *real-time*.</p>
+              </div>
+              
+              {loginError && <div className="p-3 text-red-700 bg-red-50 rounded-xl text-sm font-bold border border-red-200 animate-slide-up">{loginError}</div>}
+              
+              <div className="space-y-5 text-left">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-2 uppercase tracking-widest">1. Nomor WA Terdaftar</label>
+                  <input type="tel" required placeholder="08xxxxxxxx" value={loginPhone} onChange={e=>setLoginPhone(e.target.value.replace(/\D/g,''))} className="w-full p-4 border-2 border-slate-100 rounded-2xl font-mono text-sm font-bold focus:border-amber-400 outline-none transition-colors" />
+                </div>
+                <div>
+                  <label className="flex items-center justify-between text-xs font-black text-slate-700 mb-2 uppercase tracking-widest">
+                    <span>2. PIN Akses Properti</span>
+                  </label>
+                  <input type="password" required maxLength={4} placeholder="•••" value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,''))} className="w-full p-4 border-2 border-slate-100 rounded-2xl text-center text-2xl tracking-[0.5em] font-black bg-slate-50 focus:border-amber-400 focus:bg-white outline-none transition-colors" />
+                </div>
+              </div>
+              
+              <div className="pt-2">
+                <button type="submit" disabled={loginLoading} className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-amber-950 font-black text-base rounded-2xl shadow-lg shadow-amber-500/30 cursor-pointer transition-colors disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none">
+                  {loginLoading ? 'Memverifikasi...' : 'Buka Dasbor Owner'}
+                </button>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100">
+                <button type="button" onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerName(''); setPropOwnerPhone(''); setPropManagerName(''); setPropManagerPhone(''); setPropBankName('BCA'); setPropBankAcc(''); setPropBankHolder(''); setShowAddPropModal(true);}} className="text-xs font-bold text-amber-600 hover:text-amber-800 transition-colors uppercase tracking-widest">➕ Daftarkan Kos Baru</button>
+              </div>
             </form>
-            <div className="pt-4 border-t text-center">
-              <button type="button" onClick={()=>{setEditingProperty(null); setPropName(''); setPropOwnerName(''); setPropOwnerPhone(''); setPropManagerName(''); setPropManagerPhone(''); setPropBankName('BCA'); setPropBankAcc(''); setPropBankHolder(''); setShowAddPropModal(true);}} className="text-xs font-bold text-slate-600 hover:text-emerald-700">➕ Daftarkan Kos Baru</button>
-            </div>
           </div>
         </main>
       ) : (
@@ -275,7 +303,6 @@ export default function OwnerDashboard() {
                        <div className="flex justify-between items-center pt-3 border-t">
                          <span className="font-mono font-black text-sm">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</span>
                          <div className="flex gap-2">
-                           {/* FIX: Lepas Gembok Tombol Tagih WA untuk Pengelola */}
                            {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="text-xs font-bold text-white bg-emerald-600 px-3 py-1.5 rounded-lg hover:bg-emerald-700">Tagih</button>}
                            <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="text-xs font-bold bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200">Edit</button>
                            <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1.5 rounded-lg hover:bg-red-100">Hapus</button>
@@ -297,7 +324,6 @@ export default function OwnerDashboard() {
                           <td className="p-4 font-mono font-bold">{t.is_head ? `Rp ${Number(t.rent_price).toLocaleString()}` : '-'}</td>
                           <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-black ${t.status==='VERIFIED'||t.status==='ACTIVE'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800'}`}>{t.status==='VERIFIED'||t.status==='ACTIVE'?'✅ Sah':'⏳ Menunggu'}</span></td>
                           <td className="p-4 text-right space-x-2">
-                            {/* FIX: Lepas Gembok Tombol Tagih WA untuk Pengelola */}
                             {t.is_head && t.payment_status !== 'PAID' && <button onClick={()=>handleSendReminderWA(t)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors">Tagih</button>}
                             <button onClick={()=>{setEditingTenant(t);setTenantName(t.name);setTenantRoom(t.room_number||'');setTenantRentPrice(String(t.rent_price||0));}} className="px-3 py-1.5 border text-xs font-bold rounded-lg hover:bg-slate-50 transition-colors">Edit</button>
                             <button onClick={()=>{setTenantToDelete(t); setDeleteConfirmText('');}} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg transition-colors">Hapus</button>
