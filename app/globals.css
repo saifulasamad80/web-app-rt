@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+/* KUNCI PERMANEN: Paksa browser dan OS untuk hanya menggunakan Light Mode */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  color-scheme: light only;
+}
+
+/* BLOKIR PERMANEN: Matikan fitur inversi warna paksaan dari Xiaomi/Oppo/Android */
+html {
+  forced-color-adjust: none;
 }
 
 @theme inline {
@@ -12,12 +19,11 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* 
+  CATATAN: 
+  Blok @media (prefers-color-scheme: dark) sudah dihapus total 
+  agar sistem tidak otomatis mengubah background menjadi hitam.
+*/
 
 body {
   background: var(--background);
