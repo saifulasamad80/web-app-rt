@@ -1,340 +1,250 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { getTenantPortalData, uploadPendingDocument, addMemberSusulan, deleteTenant } from '../../src/actions/checkin-tenant';
+import { loginTenantPortal, getDocumentSignedUrl } from '../../src/actions/checkin-tenant';
 
-function calculateAge(birthDateString: string): number {
-  if (!birthDateString) return 0;
-  const today = new Date(); const birthDate = new Date(birthDateString);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const m = today.getMonth() - birthDate.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) { age--; }
-  return isNaN(age) ? 0 : age;
-}
-
-function getThreeMonthHistory(paymentStatus: string, entryDateStr: string) {
-  const today = new Date();
-  const entryDate = entryDateStr ? new Date(entryDateStr) : today;
-  const entryYearMonth = entryDate.getFullYear() * 12 + entryDate.getMonth();
-  const currentYearMonth = today.getFullYear() * 12 + today.getMonth();
-  const MONTH_NAMES_LONG = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-  const history = [];
-  const isPaidCurrent = (paymentStatus || '').toUpperCase() === 'PAID';
-
-  for (let i = 2; i >= 0; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const dYearMonth = d.getFullYear() * 12 + d.getMonth();
-    let status = 'PAID';
-    if (dYearMonth < entryYearMonth) { status = 'N/A'; } 
-    else if (dYearMonth === currentYearMonth) { status = isPaidCurrent ? 'PAID' : 'UNPAID'; } 
-    else { status = 'PAID'; }
-    history.push({ labelLong: `${MONTH_NAMES_LONG[d.getMonth()]} ${d.getFullYear()}`, status: status });
-  }
-  return history;
-}
-
-export default function TenantPortalPage() {
-  const [phoneInput, setPhoneInput] = useState('');
-  const [authFactorInput, setAuthFactorInput] = useState(''); 
-  const [loading, setLoading] = useState(false);
+export default function PortalWarga() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPin, setLoginPin] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  
   const [tenantData, setTenantData] = useState<any>(null);
-  const [household, setHousehold] = useState<any[]>([]);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [duesHistory, setDuesHistory] = useState<any[]>([]);
+  const [viewDocUrl, setViewDocUrl] = useState<string|null>(null);
+  const [docModalTitle, setDocModalTitle] = useState('');
+  const [showRules, setShowRules] = useState(false);
   
-  // FIX UX 5: Animasi Tombol Salin Rekening
-  const [copiedBank, setCopiedBank] = useState(false);
-
-  const [uploadingDoc, setUploadingDoc] = useState(false);
-  const [docFile, setDocFile] = useState<File | null>(null);
-  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
-  const [showEmergencyModal, setShowEmergencyModal] = useState(false);
-  const [showRulesAccordion, setShowRulesAccordion] = useState(false);
-
-  const [memberName, setMemberName] = useState(''); const [memberPhone, setMemberPhone] = useState('');
-  const [memberBirth, setMemberBirth] = useState(''); const [memberRelation, setMemberRelation] = useState('Istri');
-  const [memberKtpFile, setMemberKtpFile] = useState<File | null>(null); const [savingMember, setSavingMember] = useState(false);
-
-  // FIX UX 4: Panic Button Hold-to-call (Tekan Tahan 2 Detik)
-  const holdTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const [isHoldingPanic, setIsHoldingPanic] = useState(false);
-  
-  const handlePanicDown = () => {
-    setIsHoldingPanic(true);
-    holdTimeoutRef.current = setTimeout(() => {
-      setShowEmergencyModal(true);
-      setIsHoldingPanic(false);
-    }, 2000); 
-  };
-  const handlePanicUp = () => {
-    if (holdTimeoutRef.current) clearTimeout(holdTimeoutRef.current);
-    setIsHoldingPanic(false);
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!phoneInput || !authFactorInput) return;
-    setLoading(true); setErrorMsg('');
+  const handleLoginSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginLoading(true); setLoginError('');
+    const res = await loginTenantPortal(loginPhone, loginPin);
+    setLoginLoading(false);
     
-    const res = await getTenantPortalData(phoneInput);
-    setLoading(false);
-    
-    if (res.success && res.tenant) { 
-      const realBirthYear = res.tenant.birth_date ? res.tenant.birth_date.substring(0,4) : '';
-      if (realBirthYear && authFactorInput !== realBirthYear) {
-        setErrorMsg('Otorisasi Gagal: Tahun Lahir (PIN) tidak sesuai dengan data terdaftar KTP.');
-        return;
-      }
-      setTenantData(res.tenant); setHousehold(res.household || []); 
-    } 
-    else { 
-      setErrorMsg(res.error || 'Nomor WhatsApp tidak terdaftar di sistem warga.'); 
+    if(res.success && res.tenant) {
+      setIsLoggedIn(true);
+      setTenantData(res.tenant);
+      setDuesHistory(res.dues || []);
+    } else {
+      setLoginError(res.error || 'Nomor WA atau PIN Tahun Lahir salah.');
     }
   };
 
-  const handleUploadDoc = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!docFile || !tenantData) return;
-    setUploadingDoc(true); const formData = new FormData(); formData.append('file', docFile);
-    const res = await uploadPendingDocument(tenantData.id, 'marriage', formData);
-    setUploadingDoc(false);
-    if (res.success) { alert('Berhasil diunggah!'); setDocFile(null); setTenantData({ ...tenantData, marriage_doc_url: res.path }); } 
+  const openDocument = async (path: string, title: string) => {
+    if(!path) return;
+    const res = await getDocumentSignedUrl(path);
+    if(res.success && res.url) {
+      setViewDocUrl(res.url); setDocModalTitle(title);
+    } else {
+      alert('Gagal memuat dokumen.');
+    }
   };
 
-  const handleAddMemberSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!tenantData) return; setSavingMember(true);
-    const formData = new FormData(); formData.append('household_id', tenantData.household_id || `HH-${Date.now()}`); formData.append('property_id', tenantData.property_id); formData.append('room_number', tenantData.room_number || ''); formData.append('name', memberName); formData.append('phone', memberPhone); formData.append('birth_date', memberBirth); formData.append('relation', memberRelation); if (memberKtpFile) formData.append('ktp', memberKtpFile);
-    const res = await addMemberSusulan(formData); setSavingMember(false);
-    if (res.success && res.data) { setHousehold([...household, res.data]); setShowAddMemberModal(false); } 
+  // FUNGSI BARU: LAPOR PAK RT
+  const handleLaporRT = () => {
+    // TODO: Ganti nomor di bawah dengan nomor WA asli pengurus RT (gunakan format 62...)
+    const nomorWA_RT = "6281234567890"; 
+    
+    const namaWarga = tenantData?.name || "Warga";
+    const namaProperti = tenantData?.properties?.name || "Lingkungan RT";
+    const noKamar = tenantData?.room_number ? `(Kamar ${tenantData.room_number})` : '';
+    
+    const pesan = `Halo Pak RT, saya *${namaWarga}* dari properti *${namaProperti}* ${noKamar}.%0A%0AIngin melaporkan / menginformasikan terkait:%0A%0A_[Tulis laporan/komplain Anda di sini...]_`;
+    
+    window.open(`https://wa.me/${nomorWA_RT}?text=${pesan}`, '_blank');
   };
 
-  const handleDeleteMember = async (memberId: string, name: string) => {
-    if (confirm(`Hapus anggota "${name}" dari catatan hunian Anda?`)) { setHousehold(household.filter((m) => m.id !== memberId)); await deleteTenant(memberId); }
+  const handleCopyRekening = () => {
+    const rek = tenantData?.properties?.bank_account_number;
+    const bank = tenantData?.properties?.bank_name;
+    if(rek) {
+      navigator.clipboard.writeText(rek);
+      alert(`Nomor Rekening ${bank} berhasil disalin!`);
+    }
   };
 
-  // UX Fix 5: Feedback Animasi Tombol
-  const handleCopyBank = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedBank(true);
-    setTimeout(() => setCopiedBank(false), 3000);
-  };
+  if(!isLoggedIn) {
+    return (
+      <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans flex flex-col justify-center items-center relative overflow-hidden">
+        <div className="max-w-md w-full space-y-6 relative z-10">
+          <header className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex justify-between items-center">
+            <div><h1 className="text-lg font-black text-slate-900">Portal Dasbor Warga</h1></div>
+            <Link href="/" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">🚪 Beranda</Link>
+          </header>
 
-  const isVerified = (tenantData?.status || '').toUpperCase() === 'VERIFIED';
-  const property = tenantData?.properties;
-  const isPaid = (tenantData?.payment_status || '').toUpperCase() === 'PAID';
-  const paymentHistory = tenantData ? getThreeMonthHistory(tenantData.payment_status || '', tenantData.entry_date) : [];
-  const isMarried = (tenantData?.marital_status || '').toLowerCase().includes('nikah');
-  const hasMarriageDoc = !!(tenantData?.marriage_doc_url || tenantData?.kk_doc_url);
-
-  return (
-    <main className="min-h-screen bg-slate-50 p-4 md:p-8 text-slate-900 font-sans pb-20">
-      <div className="max-w-xl mx-auto space-y-5">
-        <header className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 flex justify-between items-center">
-          <div><h1 className="text-lg font-black text-slate-900">Portal Dasbor Warga</h1></div>
-          <Link href="/" className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-colors">🚪 Beranda</Link>
-        </header>
-
-        {!tenantData ? (
-          <form onSubmit={handleLogin} className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center space-y-6">
-            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-3xl mx-auto shadow-inner">🛡️</div>
+          <form onSubmit={handleLoginSubmit} className="bg-white p-8 rounded-[2rem] shadow-lg shadow-slate-200/50 border border-slate-100 text-center space-y-8 animate-fade-in">
+            <div className="w-20 h-20 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center text-4xl mx-auto shadow-inner">🛡️</div>
             <div>
-              <h2 className="text-xl font-black text-slate-900">Akses Ruang Privat</h2>
-              <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">Sistem dilengkapi autentikasi ganda (2FA) untuk menjaga privasi data Anda.</p>
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">Akses Ruang Privat</h2>
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">Sistem dilengkapi autentikasi ganda (2FA) untuk menjaga privasi data Anda.</p>
             </div>
-            {errorMsg && <div className="p-3 text-red-700 bg-red-50 rounded-xl text-sm font-bold border border-red-200">{errorMsg}</div>}
             
-            <div className="space-y-4 text-left">
+            {loginError && <div className="p-3 text-red-700 bg-red-50 rounded-xl text-sm font-bold border border-red-200 animate-slide-up">{loginError}</div>}
+            
+            <div className="space-y-5 text-left">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">1. Nomor WhatsApp Anda</label>
-                <input type="tel" required placeholder="08xxxxxxxx" value={phoneInput} onChange={e => setPhoneInput(e.target.value.replace(/\D/g, ''))} className="w-full p-4 border rounded-2xl font-mono text-sm font-bold focus:border-blue-500 outline-none transition-colors" />
+                <label className="block text-xs font-black text-slate-700 mb-2 uppercase tracking-widest">1. NOMOR WHATSAPP ANDA</label>
+                <input type="tel" required placeholder="08xxxxxxxx" value={loginPhone} onChange={e=>setLoginPhone(e.target.value.replace(/\D/g,''))} className="w-full p-4 border-2 border-slate-100 rounded-2xl font-mono text-sm font-bold focus:border-blue-500 outline-none transition-colors" />
               </div>
-              <div className="pt-2">
-                {/* FIX UX 6: Edukasi Tooltip Fisik KTP */}
-                <label className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
-                  <span>2. Tahun Lahir Anda (PIN)</span>
-                  <span className="text-[10px] text-blue-600 font-black bg-blue-50 px-2 py-0.5 rounded cursor-help shadow-sm border border-blue-100" title="Lihat 4 angka terakhir di kolom Tanggal Lahir pada KTP fisik Anda">ℹ️ Petunjuk</span>
+              <div>
+                <label className="flex items-center justify-between text-xs font-black text-slate-700 mb-2 uppercase tracking-widest">
+                  <span>2. TAHUN LAHIR ANDA (PIN)</span>
+                  <span className="text-[9px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-black">ℹ️ PETUNJUK</span>
                 </label>
-                <input type="password" maxLength={4} required placeholder="Cth: 1990" value={authFactorInput} onChange={e => setAuthFactorInput(e.target.value.replace(/\D/g, ''))} className="w-full p-4 border rounded-2xl font-mono text-center tracking-[0.5em] text-xl font-black focus:border-blue-500 outline-none transition-colors bg-slate-50" />
-                <p className="text-[10px] text-slate-400 mt-1.5 text-center">4 Digit Tahun Lahir sesuai data KTP.</p>
+                <input type="password" required maxLength={4} placeholder="C t h :  1 9 9 0" value={loginPin} onChange={e=>setLoginPin(e.target.value.replace(/\D/g,''))} className="w-full p-4 border-2 border-slate-100 rounded-2xl text-center text-2xl tracking-[0.5em] font-black bg-slate-50 focus:border-blue-500 focus:bg-white outline-none transition-colors" />
+                <p className="text-[10px] text-slate-400 text-center mt-2 font-medium">4 Digit Tahun Lahir sesuai data KTP.</p>
               </div>
             </div>
+            
             <div className="pt-2">
-              <button type="submit" disabled={loading} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-base rounded-2xl shadow-lg cursor-pointer transition-colors disabled:bg-slate-400">{loading ? 'Memverifikasi...' : 'Buka Dasbor Saya'}</button>
-            </div>
-          </form>
-        ) : (
-          <div className="space-y-5 animate-fade-in">
-            {/* FIX UX 1: Full-width alert Status Kependudukan RT */}
-            <div className={`p-4 shadow-sm rounded-2xl border-2 flex justify-between items-center ${isVerified ? 'bg-emerald-50 border-emerald-300' : 'bg-amber-50 border-amber-300'}`}>
-              <div>
-                <h3 className={`text-sm font-black uppercase tracking-wider ${isVerified ? 'text-emerald-900' : 'text-amber-900'}`}>{isVerified ? '✅ Status Sah' : '⏳ Menunggu Verifikasi'}</h3>
-                <p className={`text-xs mt-0.5 font-semibold ${isVerified ? 'text-emerald-800' : 'text-amber-800'}`}>{isVerified ? 'Data Anda telah disetujui RT.' : 'Sedang ditinjau pengurus RT.'}</p>
-              </div>
-            </div>
-
-            {/* DOKUMEN NIKAH */}
-            {isMarried && (
-              <div className={`p-5 rounded-3xl border-2 space-y-3 ${hasMarriageDoc ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-300'}`}>
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{hasMarriageDoc ? '✅' : '📎'}</span>
-                    <h3 className="font-black text-sm text-slate-900 uppercase">Dokumen Nikah / KK</h3>
-                  </div>
-                  {/* FIX UX 3: Kontras Warna Kuning (Buta Warna) - Teks Hitam Legam */}
-                  <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${hasMarriageDoc ? 'bg-emerald-200 text-emerald-900 border-emerald-300' : 'bg-amber-300 text-slate-900 border-amber-400 shadow-sm'}`}>{hasMarriageDoc ? 'TERLAMPIR' : 'BELUM DIUNGGAH'}</span>
-                </div>
-                {!hasMarriageDoc ? (
-                  <form onSubmit={handleUploadDoc} className="space-y-3 pt-1">
-                    <p className="text-xs text-amber-900 font-medium">Sesuai aturan ketertiban RT, mohon segera melampirkan foto Buku Nikah / Kartu Keluarga.</p>
-                    <input type="file" required accept="image/*,.pdf" onChange={(e) => setDocFile(e.target.files ? e.target.files[0] : null)} className="w-full p-2.5 border border-amber-300 rounded-xl bg-white text-xs" />
-                    <button type="submit" disabled={uploadingDoc || !docFile} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-amber-100 font-black rounded-xl shadow cursor-pointer transition-colors">{uploadingDoc ? 'Mengunggah...' : '📤 Unggah Dokumen'}</button>
-                  </form>
-                ) : (<p className="text-xs text-emerald-800 font-bold">✓ Berkas pernikahan telah tersimpan aman.</p>)}
-              </div>
-            )}
-
-            {/* TAGIHAN SEWA & RIWAYAT */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-               <div className="flex justify-between items-center border-b pb-3">
-                <h3 className="font-black text-slate-900 text-sm">💳 TAGIHAN SEWA KAMAR</h3>
-                <span className={`px-3 py-1 rounded-md font-black text-[10px] uppercase tracking-wider ${isPaid ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{isPaid ? 'Lunas' : 'Belum Dibayar'}</span>
-              </div>
-              <div className="flex justify-between items-baseline">
-                <span className="text-slate-500 text-sm font-bold">Bulan Ini:</span>
-                <span className="text-2xl font-black text-slate-900">Rp {Number(tenantData.rent_price || 0).toLocaleString('id-ID')}</span>
-              </div>
-
-              {property?.bank_account_number && (
-                <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 space-y-2 mt-2">
-                  <span className="text-[10px] font-extrabold text-blue-800 uppercase block tracking-wider">Rekening Resmi Pembayaran:</span>
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-black text-slate-900 text-sm">{property.bank_name} - {property.bank_account_number}</p>
-                      <p className="text-xs text-slate-600 font-semibold">a.n. {property.bank_account_holder}</p>
-                    </div>
-                    {/* FIX UX 5: Animasi Tombol Salin */}
-                    <button onClick={() => handleCopyBank(property.bank_account_number)} className={`px-3 py-2 text-white rounded-lg font-bold text-xs shadow-sm cursor-pointer transition-colors ${copiedBank ? 'bg-emerald-600' : 'bg-blue-600 hover:bg-blue-700'}`}>
-                      {copiedBank ? '✅ Tersalin!' : '📋 Salin'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-5 border-t space-y-3">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Riwayat 3 Bulan Terakhir</span>
-                {/* FIX UX 2: Riwayat Vertikal yang Lega dan Bold yang disesuaikan */}
-                <div className="flex flex-col gap-3">
-                  {paymentHistory.map((item, idx) => (
-                    <div key={idx} className={`flex justify-between items-center p-4 rounded-xl border shadow-sm ${item.status === 'N/A' ? 'bg-slate-50 border-slate-200' : item.status === 'PAID' ? 'bg-white border-emerald-200' : 'bg-white border-red-200'}`}>
-                      <span className={`text-sm ${item.status === 'N/A' ? 'text-slate-500 font-medium' : 'text-slate-600 font-semibold'}`}>{item.labelLong}</span>
-                      <span className={`text-[10px] font-black px-2.5 py-1.5 rounded-md uppercase tracking-wider border ${item.status === 'N/A' ? 'text-slate-500 bg-slate-200 border-slate-300' : item.status === 'PAID' ? 'text-emerald-800 bg-emerald-50 border-emerald-300' : 'text-red-800 bg-red-50 border-red-300'}`}>
-                        {item.status === 'N/A' ? 'Belum Masuk' : item.status === 'PAID' ? '✓ Lunas' : '✗ Belum Bayar'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* INFO HUNIAN & ANGGOTA */}
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-200 space-y-4">
-              <div className="flex justify-between items-center border-b pb-3">
-                <div>
-                  <h3 className="font-black text-slate-900 text-sm uppercase">🏠 Info Hunian & Kamar</h3>
-                  <p className="text-xs text-slate-500 mt-1">P. Jawab: <b className="text-slate-900">{tenantData.name}</b></p>
-                </div>
-                <button onClick={() => setShowAddMemberModal(true)} className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer transition-colors">➕ Tambah</button>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-slate-800 text-sm bg-slate-50 p-4 rounded-2xl border">
-                <div><span className="text-[10px] text-slate-400 font-bold block mb-0.5">PROPERTI</span><span className="font-black">{property?.name}</span></div>
-                <div><span className="text-[10px] text-slate-400 font-bold block mb-0.5">KAMAR</span><span className="font-black text-emerald-700">{tenantData.room_number || '-'}</span></div>
-                <div><span className="text-[10px] text-slate-400 font-bold block mb-0.5">TGL MASUK</span><span className="font-mono font-bold">{tenantData.entry_date}</span></div>
-                <div><span className="text-[10px] text-slate-400 font-bold block mb-0.5">STATUS NIKAH</span><span className="font-bold">{tenantData.marital_status || '-'}</span></div>
-              </div>
-              <div className="pt-3 space-y-2.5">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-widest">Daftar Anggota Kamar:</span>
-                {household.map((m, idx) => (
-                  <div key={idx} className="p-3.5 bg-white rounded-xl border border-slate-200 flex justify-between items-center text-sm shadow-sm">
-                    <div>
-                      <span className="font-bold text-slate-900">{m.name}</span>
-                      <div className="text-[10px] text-slate-500 font-medium mt-1">Hubungan: {m.relation}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${m.is_head ? 'bg-blue-50 text-blue-800 border-blue-200' : 'bg-slate-50 text-slate-600'}`}>{m.is_head ? 'PJ' : 'Anggota'}</span>
-                      {!m.is_head && <button onClick={() => handleDeleteMember(m.id, m.name)} className="text-red-600 hover:text-red-800 font-bold text-xs cursor-pointer px-2">Hapus</button>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* TOMBOL TATA TERTIB & DARURAT */}
-            <div className="grid grid-cols-2 gap-4 select-none">
-              <button onClick={() => setShowRulesAccordion(!showRulesAccordion)} className="p-5 bg-white hover:bg-slate-50 border border-slate-200 rounded-3xl shadow-sm font-bold text-sm flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors"><span className="text-3xl">📜</span><span>Tata Tertib</span></button>
-              
-              {/* FIX UX 4: Panic Button (Tekan Tahan 2 Detik) */}
-              <button 
-                onMouseDown={handlePanicDown} onMouseUp={handlePanicUp} onMouseLeave={handlePanicUp}
-                onTouchStart={handlePanicDown} onTouchEnd={handlePanicUp}
-                className={`p-5 text-white rounded-3xl font-bold text-sm flex flex-col items-center justify-center gap-3 cursor-pointer transition-all ${isHoldingPanic ? 'bg-red-800 scale-95 shadow-inner' : 'bg-red-600 shadow-lg shadow-red-600/30'}`}
-              >
-                <span className={`text-3xl ${!isHoldingPanic && 'animate-pulse'}`}>🚨</span>
-                <span>{isHoldingPanic ? 'Menahan...' : 'Tahan: Darurat'}</span>
+              <button type="submit" disabled={loginLoading} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-base rounded-2xl shadow-lg shadow-blue-600/30 cursor-pointer transition-colors disabled:bg-slate-300 disabled:shadow-none">
+                {loginLoading ? 'Memverifikasi...' : 'Buka Dasbor Saya'}
               </button>
             </div>
-            
-            {/* CHAT PENGELOLA */}
-            {property?.manager_phone && (
-              <a href={`https://wa.me/${property.manager_phone.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="p-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-center block shadow-md text-sm transition-colors">
-                💬 Chat WA Pengelola Kos
-              </a>
-            )}
+          </form>
+        </div>
+      </main>
+    );
+  }
 
-            {showRulesAccordion && (
-              <div className="p-6 bg-white border border-slate-200 rounded-3xl shadow-sm font-mono text-xs leading-relaxed text-slate-700 whitespace-pre-line animate-fade-in">
-                <span className="block font-black text-slate-900 mb-3 text-sm font-sans uppercase">Aturan Tertulis Properti</span>
-                {property?.house_rules || `1. Wajib lapor diri ke RT 1x24 jam.\n2. Wajib menjaga kebersihan dan ketertiban.\n3. Dilarang membawa barang terlarang / ilegal.\n4. Batas jam bertamu maksimal 22.00 WIB.`}
-              </div>
-            )}
+  return (
+    <main className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans pb-20">
+      <div className="max-w-3xl mx-auto space-y-6 animate-fade-in">
+        
+        {/* Header Profil */}
+        <header className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative overflow-hidden">
+           <div className={`absolute top-0 left-0 w-2 h-full ${tenantData?.status==='PENDING'?'bg-amber-400':tenantData?.status==='VERIFIED'?'bg-emerald-500':'bg-slate-300'}`}></div>
+           <div className="pl-2">
+             <h1 className="text-2xl font-black text-slate-900">{tenantData?.name}</h1>
+             <p className="text-sm text-slate-500 font-medium mt-1">{tenantData?.properties?.name} • {tenantData?.properties?.type==='kos'?'Kamar':'Blok/Rumah'} {tenantData?.room_number}</p>
+             <div className="flex gap-2 mt-3">
+               <span className={`text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider border ${tenantData?.status==='PENDING'?'bg-amber-50 text-amber-800 border-amber-200':tenantData?.status==='VERIFIED'?'bg-emerald-50 text-emerald-800 border-emerald-200':'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                  RT: {tenantData?.status==='PENDING'?'⏳ MENUNGGU SAH':tenantData?.status==='VERIFIED'?'✅ SAH TERDAFTAR':tenantData?.status}
+               </span>
+               <span className="text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                  {tenantData?.is_head ? '👑 Penanggung Jawab' : '👤 Anggota'}
+               </span>
+             </div>
+           </div>
+           <button onClick={()=>window.location.reload()} className="px-5 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-black rounded-xl transition-colors border border-red-100 w-full md:w-auto">🔒 Keluar</button>
+        </header>
 
-            <div className="text-center pt-8 pb-4"><button onClick={() => {setTenantData(null); setPhoneInput(''); setAuthFactorInput('');}} className="text-xs text-slate-500 font-bold hover:text-slate-900 cursor-pointer transition-colors">Ganti Nomor WhatsApp (Keluar)</button></div>
+        {/* UI BARU: TOMBOL LAPOR PAK RT */}
+        <div className="p-6 bg-emerald-50 border border-emerald-200 rounded-[2rem] flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+          <div>
+            <h4 className="font-black text-emerald-900 text-lg">Pusat Bantuan Lingkungan</h4>
+            <p className="text-sm text-emerald-700 mt-1 font-medium">Ada masalah keamanan, keluhan tetangga, atau fasilitas RT? Hubungi pengurus.</p>
           </div>
-        )}
+          <button onClick={handleLaporRT} className="w-full md:w-auto whitespace-nowrap px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl shadow-md shadow-emerald-600/20 transition-colors flex items-center justify-center gap-2">
+            <span className="text-xl">💬</span> Lapor Pak RT
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           {/* Kartu Tagihan */}
+           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-5">
+             <div className="flex items-center gap-3">
+               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl">💳</div>
+               <h3 className="font-black text-lg text-slate-900">Info Tagihan Sewa</h3>
+             </div>
+             
+             {tenantData?.is_head ? (
+               <>
+                 <div className="p-4 bg-slate-50 rounded-2xl border">
+                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Status Bulan Ini</p>
+                    <div className="flex items-end gap-3">
+                      <h4 className="text-2xl font-black text-slate-900">Rp {Number(tenantData?.rent_price || 0).toLocaleString('id-ID')}</h4>
+                      <span className={`text-[10px] font-black px-2 py-1 rounded-md mb-1 border ${tenantData?.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-red-100 text-red-800 border-red-200'}`}>
+                        {tenantData?.payment_status === 'PAID' ? 'LUNAS' : 'BELUM DIBAYAR'}
+                      </span>
+                    </div>
+                 </div>
+                 <div className="space-y-3 pt-2">
+                   <p className="text-xs font-bold text-slate-700">Rekening Tujuan Pembayaran:</p>
+                   <div className="flex justify-between items-center p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                     <div>
+                       <p className="font-black text-blue-900">{tenantData?.properties?.bank_name}</p>
+                       <p className="font-mono text-sm text-blue-800 mt-0.5">{tenantData?.properties?.bank_account_number}</p>
+                       <p className="text-[10px] text-blue-600 font-bold uppercase mt-1">A/N: {tenantData?.properties?.bank_account_holder}</p>
+                     </div>
+                     <button onClick={handleCopyRekening} className="px-3 py-2 bg-white text-blue-700 text-[10px] font-black rounded-lg border border-blue-200 shadow-sm hover:bg-blue-100">SALIN</button>
+                   </div>
+                 </div>
+               </>
+             ) : (
+               <div className="p-4 bg-slate-50 rounded-2xl border text-center text-sm text-slate-500 font-medium">
+                 Anda terdaftar sebagai anggota. Info tagihan hanya ditampilkan di dasbor Penanggung Jawab.
+               </div>
+             )}
+           </div>
+
+           {/* Kartu Informasi & Aturan */}
+           <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-5 flex flex-col">
+             <div className="flex items-center gap-3">
+               <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center text-xl">📜</div>
+               <h3 className="font-black text-lg text-slate-900">Informasi Properti</h3>
+             </div>
+             
+             <div className="flex-1 space-y-3">
+                <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
+                   <div><p className="text-[10px] font-black text-slate-500 uppercase">Kontak Owner</p><p className="font-bold text-sm text-slate-900 mt-1">{tenantData?.properties?.owner_name}</p></div>
+                   <a href={`https://wa.me/${(tenantData?.properties?.owner_phone||'').replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 bg-amber-100 text-amber-800 font-bold rounded-lg hover:bg-amber-200">Chat WA</a>
+                </div>
+                {tenantData?.properties?.manager_name && (
+                  <div className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
+                     <div><p className="text-[10px] font-black text-slate-500 uppercase">Pengelola / Penjaga</p><p className="font-bold text-sm text-slate-900 mt-1">{tenantData?.properties?.manager_name}</p></div>
+                     <a href={`https://wa.me/${(tenantData?.properties?.manager_phone||'').replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="text-xs px-3 py-1.5 bg-amber-100 text-amber-800 font-bold rounded-lg hover:bg-amber-200">Chat WA</a>
+                  </div>
+                )}
+             </div>
+
+             <button onClick={()=>setShowRules(true)} className="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-black rounded-xl text-sm transition-colors">Lihat Tata Tertib</button>
+           </div>
+        </div>
+
+        {/* Riwayat Kas RT untuk warga */}
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+           <div className="flex items-center gap-3 mb-4">
+             <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl">🧾</div>
+             <h3 className="font-black text-lg text-slate-900">Riwayat Pembayaran Kas Lingkungan</h3>
+           </div>
+           
+           <div className="space-y-3">
+             {duesHistory.length > 0 ? (
+               duesHistory.map(d => (
+                 <div key={d.id} className="p-4 bg-slate-50 rounded-2xl border flex justify-between items-center">
+                   <div>
+                     <p className="font-black text-sm text-slate-900">Periode: {d.period}</p>
+                     <p className="text-[10px] text-slate-500 font-bold mt-1">Dicatat pada: {new Date(d.created_at).toLocaleDateString('id-ID')}</p>
+                   </div>
+                   <span className="font-mono font-black text-emerald-600">Rp {Number(d.amount).toLocaleString('id-ID')}</span>
+                 </div>
+               ))
+             ) : (
+               <p className="text-center text-sm text-slate-500 font-medium py-4 bg-slate-50 rounded-2xl border">Belum ada riwayat pembayaran kas RT yang tercatat atas nama Anda.</p>
+             )}
+           </div>
+        </div>
+        
       </div>
 
-      {/* MODAL TAMBAH ANGGOTA */}
-      {showAddMemberModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-sm border border-slate-200 shadow-2xl overflow-hidden animate-slide-up">
-            <div className="p-5 bg-slate-900 text-white flex justify-between items-center"><h3 className="font-black text-sm">➕ Tambah Anggota Kamar</h3><button onClick={() => setShowAddMemberModal(false)} className="cursor-pointer font-bold text-xl hover:text-red-400">✕</button></div>
-            <form onSubmit={handleAddMemberSubmit} className="p-6 space-y-4 text-sm bg-slate-50">
-              <div><label className="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap Sesuai KTP</label><input type="text" required value={memberName} onChange={(e) => setMemberName(e.target.value)} className="w-full p-3.5 border rounded-xl bg-white font-bold outline-none focus:border-blue-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-700 mb-1">Tanggal Lahir</label><input type="date" required value={memberBirth} onChange={(e) => setMemberBirth(e.target.value)} className="w-full p-3.5 border rounded-xl bg-white outline-none focus:border-blue-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-700 mb-1">Hubungan</label>
-                <select value={memberRelation} onChange={(e) => setMemberRelation(e.target.value)} className="w-full p-3.5 border rounded-xl bg-white font-bold outline-none focus:border-blue-500">
-                  <option value="Istri">Istri</option><option value="Suami">Suami</option><option value="Anak">Anak</option><option value="Saudara">Saudara</option><option value="Rekan">Teman / Rekan</option>
-                </select>
-              </div>
-              <div><label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp (Opsional)</label><input type="tel" value={memberPhone} onChange={(e) => setMemberPhone(e.target.value.replace(/\D/g, ''))} className="w-full p-3.5 border rounded-xl bg-white font-mono outline-none focus:border-blue-500" /></div>
-              <div className="pt-2">
-                <button type="submit" disabled={savingMember} className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md cursor-pointer transition-colors disabled:bg-slate-400">Simpan Anggota</button>
-              </div>
-            </form>
+      {/* Modal Tata Tertib */}
+      {showRules && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border">
+            <div className="p-5 bg-amber-100 text-amber-900 flex justify-between items-center"><h3 className="font-black">📜 Tata Tertib Properti</h3><button onClick={() => setShowRules(false)} className="text-xl font-bold hover:text-red-500">✕</button></div>
+            <div className="p-6 bg-slate-50 max-h-[60vh] overflow-y-auto">
+               <div className="whitespace-pre-wrap font-mono text-xs text-slate-700 leading-relaxed bg-white p-4 rounded-xl border">
+                 {tenantData?.properties?.house_rules || "Belum ada tata tertib yang diatur oleh pemilik."}
+               </div>
+            </div>
+            <div className="p-4 bg-white border-t flex justify-end"><button onClick={()=>setShowRules(false)} className="px-6 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-colors">Tutup</button></div>
           </div>
         </div>
       )}
 
-      {/* MODAL DARURAT */}
-      {showEmergencyModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end md:items-center justify-center z-50 p-4 pb-10 animate-fade-in">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden animate-slide-up border border-slate-200 shadow-2xl">
-            <div className="p-5 bg-red-600 text-white flex justify-between items-center"><div className="flex items-center gap-2"><span className="text-2xl animate-pulse">🆘</span><h3 className="font-black text-lg">Panggilan Darurat</h3></div><button onClick={()=>setShowEmergencyModal(false)} className="cursor-pointer text-2xl font-bold hover:text-red-200 leading-none">✕</button></div>
-            <div className="p-5 space-y-3">
-              <a href="tel:113" className="flex justify-between items-center p-4 bg-slate-50 hover:bg-red-50 border rounded-2xl transition-colors cursor-pointer group"><div><h4 className="font-black text-slate-900">Damkar</h4><p className="text-xs text-slate-500">Pemadam Kebakaran</p></div><span className="px-4 py-2 bg-red-600 group-hover:bg-red-700 text-white font-black text-base rounded-xl shadow-sm transition-colors">113</span></a>
-              <a href="tel:110" className="flex justify-between items-center p-4 bg-slate-50 hover:bg-blue-50 border rounded-2xl transition-colors cursor-pointer group"><div><h4 className="font-black text-slate-900">Polisi</h4><p className="text-xs text-slate-500">Keamanan & Kriminal</p></div><span className="px-4 py-2 bg-blue-600 group-hover:bg-blue-700 text-white font-black text-base rounded-xl shadow-sm transition-colors">110</span></a>
-              <a href="tel:119" className="flex justify-between items-center p-4 bg-slate-50 hover:bg-emerald-50 border rounded-2xl transition-colors cursor-pointer group"><div><h4 className="font-black text-slate-900">Ambulans</h4><p className="text-xs text-slate-500">Gawat Darurat Medis</p></div><span className="px-4 py-2 bg-emerald-600 group-hover:bg-emerald-700 text-white font-black text-base rounded-xl shadow-sm transition-colors">119</span></a>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   );
 }
